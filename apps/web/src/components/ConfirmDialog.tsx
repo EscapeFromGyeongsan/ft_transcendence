@@ -4,12 +4,14 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "계속 두기",
   onConfirm,
   onClose,
 }: {
   title: string;
   description: string;
   confirmLabel: string;
+  cancelLabel?: string;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -31,7 +33,7 @@ export function ConfirmDialog({
       <p>{description}</p>
       <div className="dialog-actions">
         <button className="button secondary" autoFocus onClick={onClose}>
-          계속 두기
+          {cancelLabel}
         </button>
         <button className="button primary" onClick={onConfirm}>
           {confirmLabel}

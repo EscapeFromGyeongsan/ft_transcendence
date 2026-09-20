@@ -7,7 +7,9 @@ const indices = Array.from({ length: BOARD_SIZE }, (_, i) => i);
 export function Board({
   game,
   onPlace,
+  helpId,
 }: {
+  helpId: string;
   game: OmokState;
   onPlace: (x: number, y: number) => void;
 }) {
@@ -50,7 +52,7 @@ export function Board({
         className={`board turn-${game.currentTurn}`}
         role="group"
         aria-label="15 곱하기 15 오목판"
-        aria-describedby="board-help"
+        aria-describedby={helpId}
       >
         <svg className="board-lines" viewBox="0 0 450 450" aria-hidden="true">
           {indices.map((i) => (

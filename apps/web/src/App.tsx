@@ -1,49 +1,51 @@
 import { useEffect, useState } from "react";
-import { games } from "./games/registry";
 import { useLocalOmok } from "./games/omok/useLocalOmok";
 import { OmokRoom } from "./games/omok/OmokRoom";
+import { Lounge } from "./Lounge";
+import { RoomLobby } from "./rooms/RoomLobby";
+import { WaitingRoom } from "./rooms/WaitingRoom";
+import { CreateRoomDialog } from "./rooms/CreateRoomDialog";
+import { LocalRoomGame } from "./rooms/LocalRoomGame";
+import { useLocalRooms } from "./rooms/useLocalRooms";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 
-function MiniBoard({ large = false }: { large?: boolean }) {
-  return (
-    <div className={`mini-board ${large ? "large" : ""}`} aria-hidden="true">
-      <div className="mini-grid" />
-      {[
-        [3, 3, "black"],
-        [4, 3, "white"],
-        [4, 4, "black"],
-        [5, 4, "white"],
-        [5, 5, "black"],
-        [3, 5, "white"],
-        [6, 6, "black"],
-      ].map(([x, y, stone], i) => (
-        <i
-          key={i}
-          className={`decor-stone ${stone}`}
-          style={{ left: `${Number(x) * 10}%`, top: `${Number(y) * 10}%` }}
-        />
-      ))}
-    </div>
-  );
-}
 export function App() {
-  const [page, setPage] = useState(() =>
-    window.location.hash === "#/omok" ? "omok" : "lobby",
+  const [route, setRoute] = useState(
+    () => window.location.hash.slice(1) || "/",
   );
+  const [creating, setCreating] = useState(false);
+  const [closing, setClosing] = useState<string | null>(null);
   const session = useLocalOmok();
+  const service = useLocalRooms();
+  const isQuickGame = route === "/omok";
+  const isLobby = route === "/rooms";
+  const roomId = route.startsWith("/rooms/")
+    ? route.slice("/rooms/".length)
+    : null;
+  const activeRoom = service.rooms.find((room) => room.id === roomId);
+  const missing = route !== "/" && !isQuickGame && !isLobby && !activeRoom;
   useEffect(() => {
     const change = () => {
-      setPage(window.location.hash === "#/omok" ? "omok" : "lobby");
+      setRoute(window.location.hash.slice(1) || "/");
       window.scrollTo(0, 0);
     };
     window.addEventListener("hashchange", change);
     return () => window.removeEventListener("hashchange", change);
   }, []);
   useEffect(() => {
-    document.title = `${page === "omok" ? "로컬 오목" : "사이버 보드게임 카페"} · 사이보드`;
-  }, [page]);
+    document.title = `${activeRoom?.title ?? (isLobby ? "게임 로비" : isQuickGame ? "로컬 오목" : "사이버 보드게임 카페")} · 사이보드`;
+  }, [activeRoom?.title, isLobby, isQuickGame]);
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#main">
+      <a
+        className="skip-link"
+        href="#main"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main")?.focus();
+          document.getElementById("main")?.scrollIntoView();
+        }}
+      >
         본문으로 이동
       </a>
       <header className="site-header">
@@ -57,10 +59,13 @@ export function App() {
           </span>
         </a>
         <nav aria-label="주 메뉴">
-          <a className={page === "lobby" ? "selected" : ""} href="#/">
+          <a className={route === "/" ? "selected" : ""} href="#/">
             게임 라운지
           </a>
-          {page === "omok" && (
+          <a className={isLobby || roomId ? "selected" : ""} href="#/rooms">
+            게임 로비
+          </a>
+          {isQuickGame && (
             <a className="selected" href="#/omok">
               오목 테이블
             </a>
@@ -71,113 +76,55 @@ export function App() {
         </span>
       </header>
       <main id="main" tabIndex={-1}>
-        {page === "lobby" ? (
-          <>
-            <section className="hero">
-              <div className="hero-copy">
-                <div className="eyebrow">
-                  <span /> THE TABLE IS YOURS
-                </div>
-                <h1>
-                  잠깐 쉬어가요.
-                  <br />한 판의 여유와 함께.
-                </h1>
-                <p>
-                  화면 너머의 카페, 오늘은 바로 옆의 친구와.
-                  <br />
-                  좋아하는 자리에 앉아 첫 수를 놓아보세요.
-                </p>
-                <a className="button primary" href="#/omok">
-                  {session.game.moves.length || session.game.result
-                    ? "오목 테이블로 돌아가기"
-                    : "오목 한 판 시작하기"}{" "}
-                  <span>↗</span>
-                </a>
-                <div className="hero-footnote">
-                  <span>회원가입 없이</span>
-                  <i />
-                  <span>한 화면에서 둘이</span>
-                </div>
-              </div>
-              <div className="hero-art">
-                <div className="orbit orbit-one" />
-                <div className="orbit orbit-two" />
-                <span className="art-label top">
-                  A LITTLE BREAK.
-                  <br />A GOOD GAME.
-                </span>
-                <MiniBoard large />
-                <span className="table-sticker">
-                  TABLE <strong>01</strong>
-                  <small>두 사람을 위한 자리</small>
-                </span>
-                <span className="art-label bottom">
-                  BLACK GOES FIRST — MAKE YOUR MOVE
-                </span>
-              </div>
-            </section>
-            <section className="lounge" aria-labelledby="lounge-title">
-              <div className="lounge-heading">
-                <div>
-                  <div className="eyebrow">PICK YOUR NEXT GAME</div>
-                  <h2 id="lounge-title">
-                    오늘의 게임 테이블<span>01</span>
-                  </h2>
-                </div>
-                <span className="available">
-                  <i /> 지금 플레이 가능
-                </span>
-              </div>
-              <div className="game-shelf">
-                {games.map((game) => (
-                  <a className="game-card" href={`#/${game.id}`} key={game.id}>
-                    <div className="card-art">
-                      <span className="card-tag">CLASSIC STRATEGY</span>
-                      <MiniBoard />
-                      <span className="card-number">01</span>
-                    </div>
-                    <div className="card-copy">
-                      <div className="game-title">
-                        <h3>{game.title}</h3>
-                        <span className="circle-arrow">↗</span>
-                      </div>
-                      <p>{game.subtitle}</p>
-                      <div className="game-meta">
-                        <span>♙ {game.players}</span>
-                        <span>◷ {game.duration}</span>
-                        <span>{game.mode}</span>
-                      </div>
-                    </div>
-                  </a>
-                ))}
-                <div className="cafe-note">
-                  <span className="note-icon">✳</span>
-                  <div className="eyebrow">OUR LITTLE HOUSE RULES</div>
-                  <h3>
-                    승부는 진지하게,
-                    <br />
-                    시간은 느긋하게.
-                  </h3>
-                  <p>
-                    흑돌과 백돌을 나누고, 번갈아 한 수씩.
-                    <br />잘 둔 수에는 감탄을, 끝난 판에는 인사를.
-                    <br />
-                    여기는 함께 즐기는 보드게임 카페니까요.
-                  </p>
-                  <div className="note-bottom">
-                    좋은 한 판 되세요 <span>↗</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </>
-        ) : (
+        {route === "/" && (
+          <Lounge
+            hasGame={Boolean(session.game.moves.length || session.game.result)}
+          />
+        )}
+        {isLobby && (
+          <RoomLobby rooms={service.rooms} onCreate={() => setCreating(true)} />
+        )}
+        {isQuickGame && (
           <>
             <a className="back-link" href="#/">
               ← 게임 라운지
             </a>
             <OmokRoom session={session} />
           </>
+        )}
+        {service.rooms.map((room) => (
+          <div hidden={room.id !== roomId} key={room.id}>
+            <div className="room-breadcrumb">
+              <a className="back-link" href="#/rooms">
+                ← 게임 로비
+              </a>
+              <button
+                className="text-button"
+                onClick={() => setClosing(room.id)}
+              >
+                방 닫기
+              </button>
+            </div>
+            {room.status === "waiting" ? (
+              <WaitingRoom room={room} service={service} />
+            ) : (
+              <LocalRoomGame room={room} onStatus={service.updateGameStatus} />
+            )}
+          </div>
+        ))}
+        {missing && (
+          <div className="empty-rooms">
+            <span className="empty-room-symbol">⊞</span>
+            <h1>테이블을 찾을 수 없어요</h1>
+            <p>
+              방이 닫혔거나 새로고침으로 초기화되었어요.
+              <br />
+              로컬 방은 만든 탭 안에서만 유지돼요.
+            </p>
+            <a className="button primary" href="#/rooms">
+              게임 로비로 돌아가기
+            </a>
+          </div>
         )}
       </main>
       <footer className="site-footer">
@@ -189,6 +136,32 @@ export function App() {
           LOCAL EDITION <i /> 2026
         </span>
       </footer>
+      {creating && (
+        <CreateRoomDialog
+          onClose={() => setCreating(false)}
+          onCreate={(input) => {
+            const id = service.createRoom(input);
+            if (id) {
+              setCreating(false);
+              window.location.hash = `/rooms/${id}`;
+            }
+          }}
+        />
+      )}
+      {closing && (
+        <ConfirmDialog
+          title="이 방을 닫을까요?"
+          description="방과 진행 중인 대국, 착수 기록이 함께 사라져요. 로비로만 이동하면 그대로 유지할 수 있어요."
+          confirmLabel="방 닫기"
+          cancelLabel="방 유지하기"
+          onClose={() => setClosing(null)}
+          onConfirm={() => {
+            service.close(closing);
+            setClosing(null);
+            window.location.hash = "/rooms";
+          }}
+        />
+      )}
     </div>
   );
 }

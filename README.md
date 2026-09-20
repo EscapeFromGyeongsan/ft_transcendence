@@ -1,6 +1,6 @@
 # Saiboard — Cyber Board Café
 
-A local, two-player Omok experience and the first playable slice of our board-game café. Open the lounge, choose Omok, and take turns on the same device.
+A local, two-player Omok experience and the first playable slice of our board-game café. Play immediately from the lounge, or open the game lobby, create a room, and prepare two seats before playing on the same device.
 
 ## Run locally
 
@@ -35,11 +35,28 @@ On Linux, Playwright may require OS libraries (`npx playwright install-deps chro
 - Use arrow keys on the board, then Enter or Space to place a stone. Home/End moves within a row; Ctrl+Home/End moves to a board corner.
 - Returning to the lounge preserves the current game in the same tab. **Reloading or closing the tab clears it.**
 
+## Local rooms
+
+Open **게임 로비** in the navigation (or `/#/rooms`), then **방 만들기**.
+
+1. Enter a room title (up to 40 characters) and host name (up to 16).
+2. In the waiting room, add the second player's name. Names within a room must be distinct, ignoring case.
+3. Press each player's ready button, then **대국 시작하기**. Both occupied seats must be ready. Changing the second player clears readiness.
+4. Return to the lobby to search by room/host name, filter by status, or resume a match. Each room has its own independent board.
+5. **방 닫기** removes the room and its game after confirmation. Returning to the lobby alone keeps them.
+
+Rooms are held in this tab's memory. They are **not shared with other tabs or devices** and disappear on reload. The two seats are local player assignments, not authenticated online users. Old room URLs show a recovery link to the lobby after reload. No sample rooms or simulated online players are added.
+
 ## Structure and extension points
 
 ```text
 apps/web/src/
   App.tsx                         Café shell and hash navigation
+  Lounge.tsx                      Original café landing page
+  rooms/                          Room lobby, creation dialog, waiting room
+    types.ts                      Room metadata and player seat contracts
+    useLocalRooms.ts              In-memory room lifecycle and readiness
+    LocalRoomGame.tsx             Independent Omok session for each room
   components/ConfirmDialog.tsx    Shared confirmation dialog
   games/registry.ts               Game catalog metadata
   games/omok/
@@ -49,11 +66,14 @@ apps/web/src/
 packages/games/omok/src/
   index.ts                        Pure, versioned Omok rules
   omok.test.ts                    Rule and boundary tests
-tests/local-omok.spec.ts          Browser acceptance tests
+tests/local-omok.spec.ts          Original game acceptance tests
+tests/local-rooms.spec.ts         Room lifecycle and isolation tests
 Document/local-omok.md           Handoff and roadmap mapping
 ```
 
 The `@cafe/omok` workspace exports TypeScript source consumed by Vite and tests. It imports no browser, React, network, clock, or database APIs. A future TypeScript server can reuse it with its build pipeline. State includes `gameType`, `rulesVersion`, and `stateVersion`, and is JSON-serializable.
+
+The local room service owns participants, readiness, and lifecycle; the engine owns the board and game rules. `LocalRoomGame` maintains each started room's session while navigating. Replace the local room service with a server-backed adapter when online support is introduced.
 
 The engine exposes `createInitialState()` and `applyAction(state, actor, action)`. Successful actions return a new state; errors leave the input unchanged. Session integration, game UI, and catalog metadata remain outside the engine. See [the integration notes](Document/local-omok.md) before connecting a server.
 

@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Board, coordinate } from "./Board";
 import type { LocalOmokSession } from "./useLocalOmok";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
-export function OmokRoom({ session }: { session: LocalOmokSession }) {
+export function OmokRoom({
+  session,
+  roomTitle,
+  playerNames,
+}: {
+  session: LocalOmokSession;
+  roomTitle?: string;
+  playerNames?: readonly string[];
+}) {
   const { game, error, place, reset, resign } = session;
+  const helpId = useId();
   const [confirm, setConfirm] = useState<"reset" | "resign" | null>(null);
   const history = useRef<HTMLDivElement>(null);
   const result = game.result;
@@ -24,7 +33,7 @@ export function OmokRoom({ session }: { session: LocalOmokSession }) {
         <div>
           <div className="eyebrow">LOCAL TABLE / 01</div>
           <h1>
-            오목 <span className="tag">로컬 대전</span>
+            {roomTitle ?? "오목"} <span className="tag">로컬 대전</span>
           </h1>
           <p>마주 앉은 두 사람, 다섯 개의 돌로 이어지는 승부.</p>
         </div>
@@ -57,12 +66,12 @@ export function OmokRoom({ session }: { session: LocalOmokSession }) {
               <button onClick={reset}>한 판 더 ↗</button>
             </div>
           )}
-          <Board game={game} onPlace={place} />
+          <Board game={game} onPlace={place} helpId={helpId} />
           <div className="board-caption">
             <span>
               <i className="last-key" /> 마지막 수
             </span>
-            <span id="board-help">방향키로 이동 · Enter / Space로 착수</span>
+            <span id={helpId}>방향키로 이동 · Enter / Space로 착수</span>
           </div>
           <p className="input-error" role="alert">
             {error}
@@ -82,7 +91,7 @@ export function OmokRoom({ session }: { session: LocalOmokSession }) {
                   <i className={`mini-stone ${stone}`} />
                 </span>
                 <div>
-                  <strong>플레이어 {i + 1}</strong>
+                  <strong>{playerNames?.[i] ?? `플레이어 ${i + 1}`}</strong>
                   <small>
                     {i === 0 ? "흑돌 · 먼저 두기" : "백돌 · 다음 두기"}
                   </small>

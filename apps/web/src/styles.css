@@ -1377,3 +1377,674 @@ main:focus {
     scroll-behavior: auto !important;
   }
 }
+
+/* Local room lobby and waiting rooms */
+[hidden] {
+  display: none !important;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.lounge-room-link {
+  display: block;
+  width: fit-content;
+  color: var(--lime);
+  font-size: 12px;
+  margin-top: 16px;
+}
+.lounge-room-link:hover,
+.text-button:hover {
+  text-decoration: underline;
+}
+.room-lobby {
+  padding: 8px 0 35px;
+}
+.lobby-heading,
+.waiting-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin: 0 0 24px;
+}
+.lobby-heading h1,
+.waiting-heading h1 {
+  font-size: 34px;
+  line-height: 1.4;
+  letter-spacing: -1.2px;
+  margin: 12px 0 8px;
+  overflow-wrap: anywhere;
+}
+.lobby-heading h1 .tag {
+  margin-left: 14px;
+  vertical-align: middle;
+}
+.lobby-heading p,
+.waiting-heading p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+.lobby-heading > .button {
+  white-space: nowrap;
+}
+.lobby-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid #3b4d3d;
+  background: #243027;
+  border-radius: 9px;
+  margin-bottom: 30px;
+}
+.lobby-notice p {
+  font-size: 12px;
+  color: #b5c4ac;
+  margin: 0;
+}
+.notice-mark {
+  border: 1px solid #8aab65;
+  color: var(--lime);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  text-align: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  line-height: 16px;
+}
+.lobby-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+.room-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.room-filters button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.room-filters button[aria-pressed="true"] {
+  color: var(--lime);
+  background: #2b3829;
+  border-color: #465a3b;
+}
+.room-filters button span {
+  margin-left: 8px;
+  font-size: 10px;
+  opacity: 0.8;
+}
+.room-search input,
+.field input,
+.field select,
+.guest-form input {
+  width: 100%;
+  min-width: 0;
+  color: #eef2e9;
+  background: #131c17;
+  border: 1px solid #45533e;
+  border-radius: 7px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 13px;
+}
+.room-search input {
+  width: 255px;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+input::placeholder {
+  color: #94a38a;
+}
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+.empty-rooms {
+  min-height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 45px 20px;
+  border: 1px dashed #3c493d;
+  border-radius: 12px;
+  background: #1a231e88;
+  margin-bottom: 30px;
+}
+.empty-room-symbol {
+  font-size: 48px;
+  color: #91ad74;
+  line-height: 1.2;
+}
+.empty-rooms h1,
+.empty-rooms h2 {
+  font-size: 23px;
+  font-weight: 550;
+  letter-spacing: -0.6px;
+  margin: 19px 0 7px;
+}
+.empty-rooms p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+.room-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.room-list-card {
+  padding: 23px;
+  background: #1d2722;
+  border: 1px solid #3b493a;
+  border-radius: 12px;
+}
+.room-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.room-game-icon {
+  background: #35412e;
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.room-game-icon .mini-stone + .mini-stone {
+  margin-left: -6px;
+  margin-top: 10px;
+}
+.room-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #c0dbaa;
+  font-size: 10px;
+  border: 1px solid #566b43;
+  border-radius: 20px;
+  padding: 4px 9px;
+  white-space: nowrap;
+}
+.room-state i {
+  background: currentColor;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.room-state.playing {
+  color: #e6c79b;
+  border-color: #786749;
+}
+.room-state.finished {
+  color: #bbc5bf;
+  border-color: #5a665e;
+}
+.room-list-card h2 {
+  font-size: 20px;
+  line-height: 1.5;
+  font-weight: 550;
+  margin: 18px 0 6px;
+  overflow-wrap: anywhere;
+}
+.room-list-card > p {
+  font-size: 11px;
+  color: #a2b198;
+  margin: 0 0 22px;
+}
+.room-list-card > p span {
+  margin: 0 7px;
+}
+.room-card-host {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  border-top: 1px solid #3c4735;
+  padding-top: 15px;
+  margin-bottom: 18px;
+}
+.room-card-host > span {
+  color: #a1b091;
+  flex-shrink: 0;
+}
+.room-card-host strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.room-occupancy {
+  margin-left: auto;
+}
+.room-list-card > .button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 12px;
+}
+.room-lobby-footer {
+  text-align: center;
+  color: #92a18a;
+  margin: 28px 0 10px;
+  font-size: 11px;
+}
+.room-lobby-footer span {
+  margin: 0 12px;
+}
+.create-room-dialog {
+  width: min(490px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+}
+.dialog-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #495741;
+  border-radius: 6px;
+  color: #cad6bf;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+}
+.field {
+  display: block;
+  font-size: 12px;
+  color: #d9e4ce;
+  margin: 20px 0;
+}
+.field > span {
+  float: right;
+  font-size: 10px;
+  color: #a2b290;
+}
+.field input,
+.field select {
+  display: block;
+  margin-top: 8px;
+}
+.room-form-note {
+  font-size: 11px;
+  padding: 12px;
+  border-radius: 6px;
+  background: #2a3825;
+  color: #becea9;
+}
+.room-form-note i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lime);
+  display: inline-block;
+  margin-right: 6px;
+}
+.form-error {
+  color: #f0bd9d !important;
+  font-size: 11px !important;
+  min-height: 0;
+}
+.form-error:empty {
+  display: none;
+}
+.room-breadcrumb {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+}
+.text-button {
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+  color: #b2bea7;
+  font-size: 11px;
+}
+.waiting-room {
+  padding-bottom: 45px;
+}
+.waiting-heading {
+  margin-bottom: 30px;
+}
+.waiting-heading > div {
+  min-width: 0;
+}
+.waiting-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 285px;
+  gap: 24px;
+  align-items: start;
+}
+.seating-panel {
+  border: 1px solid #3a4736;
+  background: #1c2620;
+  padding: 26px;
+  border-radius: 13px;
+}
+.player-seats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.seat {
+  text-align: center;
+  padding: 20px;
+  border: 1px solid #47543e;
+  border-radius: 9px;
+  background: #202c23;
+  min-width: 0;
+}
+.seat.ready {
+  border-color: #9dbf70;
+  background: #2b3a26;
+}
+.seat-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #a9b99a;
+  font-size: 9px;
+}
+.seat-avatar {
+  width: 75px;
+  height: 75px;
+  margin: 28px auto 20px;
+  border-radius: 50%;
+  background: #35452e;
+  display: grid;
+  place-items: center;
+  color: #b8cba4;
+  font-size: 30px;
+}
+.seat-avatar .mini-stone {
+  width: 42px;
+  height: 42px;
+}
+.seat h2 {
+  font-size: 18px;
+  font-weight: 550;
+  margin: 0 0 7px;
+  overflow-wrap: anywhere;
+}
+.seat p {
+  font-size: 11px;
+  color: #acba9f;
+  margin: 0 0 24px;
+}
+.seat > .button {
+  width: 100%;
+}
+.seat-remove {
+  border: none;
+  background: transparent;
+  font-size: 10px;
+  color: #b1c19f;
+  text-decoration: underline;
+  padding: 12px 0 0;
+}
+.guest-form .button {
+  width: 100%;
+  margin-top: 10px;
+}
+.guest-form .form-error {
+  margin: 10px 0 0;
+}
+.waiting-tip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+  font-size: 10px;
+}
+.waiting-tip span {
+  color: var(--lime);
+  font-size: 9px;
+}
+.waiting-tip p {
+  color: #b4c3a5;
+  margin: 0 14px 0 0;
+}
+.waiting-details .side-panel h2 {
+  font-size: 28px;
+  margin: 0 0 20px;
+}
+.waiting-details dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  margin: 12px 0;
+}
+.waiting-details dt {
+  color: #a5b698;
+}
+.waiting-details dd {
+  margin: 0;
+}
+.waiting-details .side-panel > p {
+  font-size: 12px;
+  color: #acbba2;
+  border-top: 1px solid #3b4a34;
+  padding-top: 17px;
+  margin-top: 20px;
+}
+.start-panel {
+  margin-top: 20px;
+}
+.start-panel > p {
+  font-size: 12px;
+  color: #c1d4ac;
+  text-align: center;
+}
+.start-panel .button {
+  width: 100%;
+}
+.start-panel small {
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  color: #a3b393;
+  margin-top: 13px;
+}
+.room-heading > div {
+  min-width: 0;
+}
+.room-heading h1 {
+  overflow-wrap: anywhere;
+  flex-wrap: wrap;
+}
+.player strong {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1050px) {
+  .room-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .waiting-layout {
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 18px;
+  }
+  .seating-panel {
+    padding: 18px;
+  }
+  .player-seats {
+    gap: 12px;
+  }
+  .seat {
+    padding: 15px;
+  }
+}
+@media (max-width: 800px) {
+  .waiting-layout {
+    grid-template-columns: 1fr;
+  }
+  .waiting-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 20px;
+  }
+  .start-panel {
+    margin-top: 0;
+  }
+  .waiting-details .side-panel {
+    padding: 20px;
+  }
+}
+@media (max-width: 600px) {
+  .site-header {
+    height: auto;
+    padding-top: 18px;
+    flex-wrap: wrap;
+    gap: 0 15px;
+  }
+  .site-header nav {
+    order: 3;
+    flex-basis: 100%;
+    height: 43px;
+    margin-top: 9px;
+    gap: 24px;
+  }
+  .site-header nav a {
+    font-size: 11px;
+  }
+  .local-pill {
+    font-size: 8px;
+    padding: 5px 9px;
+  }
+  .lobby-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .lobby-heading h1,
+  .waiting-heading h1 {
+    font-size: 27px;
+  }
+  .lobby-heading p,
+  .waiting-heading p {
+    font-size: 12px;
+  }
+  .lobby-heading > .button {
+    width: 100%;
+  }
+  .lobby-notice {
+    align-items: flex-start;
+    padding: 12px;
+  }
+  .lobby-notice p {
+    font-size: 11px;
+  }
+  .notice-mark {
+    margin-top: 2px;
+  }
+  .lobby-toolbar {
+    gap: 14px;
+  }
+  .room-search,
+  .room-search input {
+    width: 100%;
+  }
+  .room-filters {
+    gap: 3px;
+  }
+  .room-filters button {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .room-filters button span {
+    margin-left: 5px;
+  }
+  .room-list {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  .empty-rooms {
+    min-height: 310px;
+    padding: 35px 18px;
+  }
+  .empty-rooms h2 {
+    font-size: 20px;
+  }
+  .empty-rooms p {
+    font-size: 12px;
+  }
+  .create-room-dialog {
+    padding: 22px;
+  }
+  .create-room-dialog h2 {
+    font-size: 22px;
+  }
+  .create-room-dialog input,
+  .create-room-dialog select,
+  .guest-form input {
+    font-size: 16px;
+  }
+  .waiting-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .waiting-heading > .room-state {
+    margin-top: 30px;
+    font-size: 9px;
+  }
+  .seating-panel {
+    padding: 15px;
+  }
+  .player-seats {
+    grid-template-columns: 1fr;
+  }
+  .seat {
+    padding: 18px;
+  }
+  .seat-avatar {
+    width: 60px;
+    height: 60px;
+    margin: 15px auto;
+  }
+  .seat-avatar .mini-stone {
+    width: 34px;
+    height: 34px;
+  }
+  .seat p {
+    margin-bottom: 18px;
+  }
+  .waiting-details {
+    grid-template-columns: 1fr;
+  }
+  .waiting-tip {
+    gap: 5px;
+    font-size: 9px;
+  }
+  .waiting-tip p {
+    margin-right: 6px;
+  }
+}
