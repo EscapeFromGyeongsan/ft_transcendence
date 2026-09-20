@@ -1,0 +1,32 @@
+{
+  "name": "cyber-board-cafe",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/games/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @cafe/web -- --host 0.0.0.0",
+    "build": "tsc --noEmit && npm run build --workspace @cafe/web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "preview": "npm run preview --workspace @cafe/web -- --host 0.0.0.0",
+    "format": "prettier --write apps packages tests *.json *.ts README.md Document/local-omok.md"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "prettier": "^3.9.8",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
+}
