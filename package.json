@@ -8,7 +8,8 @@
     "packages/games/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @cafe/web -- --host 0.0.0.0",
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "node --experimental-strip-types apps/server/src/index.ts",
     "build": "tsc --noEmit && npm run build --workspace @cafe/web",
     "test": "vitest run",
     "test:watch": "vitest",

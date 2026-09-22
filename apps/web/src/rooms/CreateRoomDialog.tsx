@@ -8,9 +8,11 @@ import {
 export function CreateRoomDialog({
   onCreate,
   onClose,
+  mode = "local",
 }: {
-  onCreate: (input: CreateRoomInput) => void;
+  onCreate: (input: CreateRoomInput) => void | Promise<void>;
   onClose: () => void;
+  mode?: "local" | "online";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState("");
@@ -86,9 +88,14 @@ export function CreateRoomDialog({
           </select>
         </label>
         <div className="room-form-note">
-          <i /> 같은 화면에서 두는 로컬 테이블이에요.
+          <i />{" "}
+          {mode === "local"
+            ? "같은 화면에서 두는 로컬 테이블이에요."
+            : "링크를 공유해 서로 다른 브라우저에서 대국해요."}
           <br />
-          방과 대국은 새로고침하면 초기화돼요.
+          {mode === "local"
+            ? "방과 대국은 새로고침하면 초기화돼요."
+            : "서버가 실행되는 동안 방과 대국이 유지돼요."}
         </div>
         <p className="form-error" role="alert">
           {error}

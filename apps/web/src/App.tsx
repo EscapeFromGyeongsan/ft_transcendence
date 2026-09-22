@@ -8,6 +8,8 @@ import { CreateRoomDialog } from "./rooms/CreateRoomDialog";
 import { LocalRoomGame } from "./rooms/LocalRoomGame";
 import { useLocalRooms } from "./rooms/useLocalRooms";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { OnlineLobby } from "./online/OnlineLobby";
+import { OnlineRoom } from "./online/OnlineRoom";
 
 export function App() {
   const [route, setRoute] = useState(
@@ -19,11 +21,21 @@ export function App() {
   const service = useLocalRooms();
   const isQuickGame = route === "/omok";
   const isLobby = route === "/rooms";
+  const isOnlineLobby = route === "/online";
+  const onlineId = route.startsWith("/online/")
+    ? route.slice("/online/".length)
+    : null;
   const roomId = route.startsWith("/rooms/")
     ? route.slice("/rooms/".length)
     : null;
   const activeRoom = service.rooms.find((room) => room.id === roomId);
-  const missing = route !== "/" && !isQuickGame && !isLobby && !activeRoom;
+  const missing =
+    route !== "/" &&
+    !isQuickGame &&
+    !isLobby &&
+    !isOnlineLobby &&
+    !onlineId &&
+    !activeRoom;
   useEffect(() => {
     const change = () => {
       setRoute(window.location.hash.slice(1) || "/");
@@ -33,8 +45,8 @@ export function App() {
     return () => window.removeEventListener("hashchange", change);
   }, []);
   useEffect(() => {
-    document.title = `${activeRoom?.title ?? (isLobby ? "게임 로비" : isQuickGame ? "로컬 오목" : "사이버 보드게임 카페")} · 사이보드`;
-  }, [activeRoom?.title, isLobby, isQuickGame]);
+    document.title = `${activeRoom?.title ?? (isOnlineLobby || onlineId ? "온라인 오목" : isLobby ? "게임 로비" : isQuickGame ? "로컬 오목" : "사이버 보드게임 카페")} · 사이보드`;
+  }, [activeRoom?.title, isLobby, isQuickGame, isOnlineLobby, onlineId]);
   return (
     <div className="app-shell">
       <a
@@ -65,6 +77,12 @@ export function App() {
           <a className={isLobby || roomId ? "selected" : ""} href="#/rooms">
             게임 로비
           </a>
+          <a
+            className={isOnlineLobby || onlineId ? "selected" : ""}
+            href="#/online"
+          >
+            온라인 오목
+          </a>
           {isQuickGame && (
             <a className="selected" href="#/omok">
               오목 테이블
@@ -72,7 +90,7 @@ export function App() {
           )}
         </nav>
         <span className="local-pill">
-          <i /> LOCAL PLAY
+          <i /> {isOnlineLobby || onlineId ? "ONLINE PLAY" : "LOCAL PLAY"}
         </span>
       </header>
       <main id="main" tabIndex={-1}>
@@ -84,6 +102,8 @@ export function App() {
         {isLobby && (
           <RoomLobby rooms={service.rooms} onCreate={() => setCreating(true)} />
         )}
+        {isOnlineLobby && <OnlineLobby />}
+        {onlineId && <OnlineRoom key={onlineId} id={onlineId} />}
         {isQuickGame && (
           <>
             <a className="back-link" href="#/">
@@ -133,7 +153,7 @@ export function App() {
           우리들의 보드게임 카페
         </span>
         <span>
-          LOCAL EDITION <i /> 2026
+          BOARD CAFÉ <i /> 2026
         </span>
       </footer>
       {creating && (
