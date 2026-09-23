@@ -9,6 +9,7 @@ import { buildApp } from "./app";
 const origin = "http://127.0.0.1:5173";
 const password = "correct horse battery staple";
 let directory: string;
+let temporaryRoot: string;
 let db: Database;
 let app: Awaited<ReturnType<typeof buildApp>>;
 const post = (
@@ -26,7 +27,8 @@ const post = (
 const sessionCookie = (response: { headers: Record<string, unknown> }) =>
   String(response.headers["set-cookie"]).split(";")[0];
 beforeAll(async () => {
-  directory = await mkdtemp(join(tmpdir(), "cafe-auth-"));
+  temporaryRoot = await mkdtemp(join(tmpdir(), "cafe-auth-"));
+  directory = join(temporaryRoot, "nested", "accounts");
   db = await openDatabase({ directory });
   app = await buildApp(undefined, {
     database: db,
@@ -37,7 +39,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close();
   await db?.close();
-  if (directory) await rm(directory, { recursive: true, force: true });
+  if (temporaryRoot) await rm(temporaryRoot, { recursive: true, force: true });
 });
 
 describe("persisted accounts and sessions", () => {

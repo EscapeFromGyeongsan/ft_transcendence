@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 
 export interface Database {
   query<T extends Record<string, unknown>>(
@@ -22,6 +22,7 @@ export async function openDatabase(
       close: () => pool.end(),
     };
   } else {
+    if (options.directory) await mkdir(options.directory, { recursive: true });
     const engine = new PGlite(options.directory);
     db = {
       query: (sql, parameters) => engine.query(sql, parameters),
