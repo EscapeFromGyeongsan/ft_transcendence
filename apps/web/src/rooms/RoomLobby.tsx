@@ -23,7 +23,7 @@ export function RoomLobby({
         <div>
           <div className="eyebrow">FIND YOUR TABLE</div>
           <h1 id="rooms-title">
-            우리들의 게임 로비<span className="tag">로컬</span>
+            한 화면 대전 로비<span className="tag">로컬</span>
           </h1>
           <p>자리를 만들고, 이름을 나누고, 한 판을 시작해요.</p>
         </div>
@@ -126,7 +126,7 @@ export function RoomLobby({
                   {room.players.length} / {room.capacity}명
                 </span>
               </div>
-              <a className="button secondary" href={`#/rooms/${room.id}`}>
+              <a className="button secondary" href={`#/local-rooms/${room.id}`}>
                 {room.status === "waiting"
                   ? "대기실 열기"
                   : room.status === "playing"

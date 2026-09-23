@@ -11,13 +11,13 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. `npm run dev` starts Vite and the Node API together. The API is bound to localhost and Vite forwards `/api` requests. To let a friend on the same network reach the site, use `npm run dev -- --host 0.0.0.0` and send them your computer's address and the room link. Both browsers must reach the **same running server**.
+Open http://127.0.0.1:5173. `npm run dev` starts Vite and the Fastify API together. The API is bound to localhost and Vite forwards `/api` HTTP requests and WebSocket upgrades. To let a friend on the same network reach the site, use `npm run dev -- --host 0.0.0.0` and send them your computer's address and the room link. Both browsers must reach the **same running server**.
 
 ```sh
 npm run build       # Type-check and build apps/web/dist
 npm run dev:server  # API separately (use alongside npm run preview)
 npm run preview     # Serve the production build; API must run separately
-npm test            # Engine and server room tests
+npm test            # Engine, room and Fastify/WebSocket integration tests
 npm run test:watch
 npx playwright install chromium
 npm run test:e2e     # Desktop and mobile Chromium flows; starts Vite and API automatically
@@ -38,7 +38,7 @@ On Linux, Playwright may require OS libraries (`npx playwright install-deps chro
 
 ## Local rooms
 
-Open **게임 로비** in the navigation (or `/#/rooms`), then **방 만들기**.
+Open **로컬 · 한 화면 대전** in the navigation (or `/#/local-rooms`), then **방 만들기**.
 
 1. Enter a room title (up to 40 characters) and host name (up to 16).
 2. In the waiting room, add the second player's name. Names within a room must be distinct, ignoring case.
@@ -50,7 +50,9 @@ Rooms are held in this tab's memory. They are **not shared with other tabs or de
 
 ## Online rooms
 
-Open **온라인 오목** (`/#/online`), create a room, and send its link to the second player. The guest opens it in another browser, enters a different name, and both players press **준비하기**. The host starts the match. Black moves first; the server owns the board, validates each command and its state version, and streams the current room snapshot to both browsers. Spectators can open the link but cannot play. A reload in the same tab restores the player's seat and current game while the server is running. The host may close the room or, after a result, return both players to the waiting room for a rematch.
+Open **게임 로비** (`/#/rooms`, also available at `/#/online`), create a room, and send its link to the second player. The guest opens it in another browser, enters a different name, and both players press **준비하기**. The host starts the match. Black moves first; the server owns the board, validates each command, match ID and state version, and streams the current room snapshot to both browsers. Spectators can open the link but cannot play. A reload in the same tab restores the player's seat and current game while the server is running. The host may close the room or, after a result, return both players to the waiting room for a rematch.
+
+Room creation, listing and joining use Fastify HTTP routes. Ready/start/move/resign/rematch/leave/close commands and snapshots use `/api/rooms/:id/ws` through `@fastify/websocket`. Each command carries a request ID and participant token; tokens are never placed in WebSocket URLs or public snapshots. The browser reconnects with bounded backoff and receives a fresh snapshot; uncertain commands are never automatically replayed. A monotonically increasing room revision prevents delayed HTTP responses from replacing newer snapshots. Every rematch receives a new match ID, so commands from a previous match are rejected even when the move counter resets. Server ping/pong detects dead sockets and subscriptions are removed on disconnect.
 
 The session token is kept in the browser tab's `sessionStorage` and sent with player commands. A different tab is a different participant; do not share the token. Online rooms are held **in one server process's memory**: restarting the server clears them and their tokens. This is a playable multiplayer prototype without accounts, persistence, multi-instance scaling or a production deployment configuration.
 
@@ -70,10 +72,12 @@ apps/web/src/
     Board.tsx                     Board rendering and keyboard input
     OmokRoom.tsx                  Players, history, rules, result and controls
     useLocalOmok.ts                Local session / engine integration
-  online/                         Remote lobby, room, HTTP client and live updates
+  online/                         Remote lobby, room, HTTP lobby client and WebSocket commands/updates
 apps/server/src/
   rooms.ts                        Membership, authorization and game authority
-  index.ts                        HTTP commands and server-sent snapshots
+  index.ts                        Fastify startup and graceful shutdown
+  app.ts                          HTTP routes and WebSocket transport
+  app.test.ts                     HTTP validation and real WebSocket integration tests
   rooms.test.ts                   Server boundary tests
 packages/games/omok/src/
   index.ts                        Pure, versioned Omok rules
@@ -86,16 +90,20 @@ Document/local-omok.md           Handoff and roadmap mapping
 
 The `@cafe/omok` workspace exports TypeScript source consumed by Vite, Node and tests. It imports no browser, React, network, clock, or database APIs. State includes `gameType`, `rulesVersion`, and `stateVersion`, and is JSON-serializable.
 
-The local room service owns participants, readiness, and lifecycle; the engine owns the board and game rules. `LocalRoomGame` maintains each started room's session while navigating. Online rooms use a separate server-owned lifecycle and server-sent events for snapshots. The browser sends actions but does not decide whether they are legal.
+The local room service owns participants, readiness, and lifecycle; the engine owns the board and game rules. `LocalRoomGame` maintains each started room's session while navigating. Online rooms use a separate server-owned lifecycle and WebSocket connections for commands and snapshots. The browser sends actions but does not decide whether they are legal.
 
 The engine exposes `createInitialState()` and `applyAction(state, actor, action)`. Successful actions return a new state; errors leave the input unchanged. Session integration, game UI, and catalog metadata remain outside the engine. See [the integration notes](Document/local-omok.md) before connecting a server.
 
 ## Roadmap status and limitations
 
-This is an **Omok prototype**, not an implementation of the complete submission requirements. There is no account authentication, matchmaking, chat, durable history or database. Session tokens allow reconnect in the same tab while one server stays alive. No roadmap card or module is marked as evaluated based on prototype tests. See [the team roadmap](Document/roadmap.md) and [architecture](Document/ft_transcendence_game_architecture.md).
+This is an **Omok prototype**, not an implementation of the complete submission requirements. There is no account authentication, matchmaking, chat, durable history or database. Session tokens allow reconnect in the same tab while one server stays alive. Disconnects preserve seats; automatic forfeits, host transfer and abandoned-room expiry are not implemented. No roadmap card or module is marked as evaluated based on prototype tests. See [the team roadmap](Document/roadmap.md) and [architecture](Document/ft_transcendence_game_architecture.md).
 
 The source includes a deterministic legal 225-move draw scenario in the unit tests. It is test data, not a stored or externally verified match.
 
 ## Resources and AI use
 
 The implementation follows the repository's architecture and team roadmap. Codex assisted with the local UI, pure game engine, online room server and UI, automated tests, and handoff documentation. Team review, individual contributions, submission metadata, and actual server evaluation evidence must be completed by the team as the project progresses.
+
+Fastify integration uses the [official WebSocket plugin](https://github.com/fastify/fastify-websocket).
+
+The home play button and game cards open the online lobby. Local shared-screen rooms live only under `/#/local-rooms`; they are explicitly labeled and are not shared with other tabs. In online rooms each participant chooses their own name and controls only their own readiness.

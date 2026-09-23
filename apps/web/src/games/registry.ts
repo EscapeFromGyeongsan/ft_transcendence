@@ -6,6 +6,6 @@ export const games = [
     subtitle: "단순한 한 수, 깊어지는 승부.",
     players: "2인",
     duration: "10–20분",
-    mode: "로컬 대전",
+    mode: "온라인 대전",
   },
 ] as const;

@@ -16,14 +16,38 @@ describe("server-owned online rooms", () => {
     store.ready(id, guest.token);
     store.start(id, host.token);
     expect(() =>
-      store.action(id, guest.token, { type: "PLACE_STONE", x: 7, y: 7 }, 0),
+      store.action(
+        id,
+        guest.token,
+        { type: "PLACE_STONE", x: 7, y: 7 },
+        0,
+        store.get(id).matchId,
+      ),
     ).toThrowError("WRONG_TURN");
-    store.action(id, host.token, { type: "PLACE_STONE", x: 7, y: 7 }, 0);
+    store.action(
+      id,
+      host.token,
+      { type: "PLACE_STONE", x: 7, y: 7 },
+      0,
+      store.get(id).matchId,
+    );
     expect(() =>
-      store.action(id, host.token, { type: "PLACE_STONE", x: 8, y: 7 }, 0),
+      store.action(
+        id,
+        host.token,
+        { type: "PLACE_STONE", x: 8, y: 7 },
+        0,
+        store.get(id).matchId,
+      ),
     ).toThrowError("STALE_STATE");
     expect(() =>
-      store.action(id, guest.token, { type: "PLACE_STONE", x: 7, y: 7 }, 1),
+      store.action(
+        id,
+        guest.token,
+        { type: "PLACE_STONE", x: 7, y: 7 },
+        1,
+        store.get(id).matchId,
+      ),
     ).toThrowError("OCCUPIED");
     expect(store.get(id).game.moves).toHaveLength(1);
     expect(store.get(id).game.currentTurn).toBe("white");
@@ -37,7 +61,13 @@ describe("server-owned online rooms", () => {
     store.ready(first.room.id, first.token);
     store.ready(first.room.id, guest.token);
     store.start(first.room.id, first.token);
-    store.action(first.room.id, first.token, { type: "RESIGN" }, 0);
+    store.action(
+      first.room.id,
+      first.token,
+      { type: "RESIGN" },
+      0,
+      store.get(first.room.id).matchId,
+    );
     expect(store.get(first.room.id).status).toBe("finished");
     expect(store.get(second.room.id).status).toBe("waiting");
     expect(() => store.rematch(first.room.id, guest.token)).toThrowError(

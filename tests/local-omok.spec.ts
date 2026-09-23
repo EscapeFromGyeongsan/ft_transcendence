@@ -14,7 +14,9 @@ test("lounge to finished match, return, restart and reload", async ({
   await expect(
     page.getByRole("heading", { name: "오늘의 게임 테이블01" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "오목 한 판 시작하기" }).click();
+  await page
+    .getByRole("link", { name: "한 화면에서 둘이 · 로컬 오목" })
+    .click();
   await expect(page.getByRole("status")).toHaveText("흑돌의 차례예요");
   for (let i = 0; i < 5; i++) {
     await cell(page, `${String.fromCharCode(65 + i)}1`).click();
@@ -27,7 +29,7 @@ test("lounge to finished match, return, restart and reload", async ({
     page.getByRole("button", { name: "기권하기", exact: true }),
   ).toBeDisabled();
   await page.getByRole("link", { name: "← 게임 라운지" }).click();
-  await page.getByRole("link", { name: "오목 테이블로 돌아가기" }).click();
+  await page.getByRole("link", { name: "로컬 오목 이어하기" }).click();
   await expect(page.getByRole("status")).toHaveText("흑돌의 승리!");
   await page.getByRole("button", { name: "한 판 더" }).click();
   await expect(page.locator(".intersection .stone")).toHaveCount(0);

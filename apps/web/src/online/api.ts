@@ -3,6 +3,8 @@ import type { RoomPlayer, RoomStatus } from "../rooms/types";
 
 export type OnlineRoom = {
   id: string;
+  revision: number;
+  matchId: string;
   title: string;
   gameType: "omok";
   capacity: 2;
@@ -11,7 +13,7 @@ export type OnlineRoom = {
   game: OmokState;
 };
 export type Membership = { room: OnlineRoom; token: string; playerId: string };
-const errorMessages: Record<string, string> = {
+export const errorMessages: Record<string, string> = {
   ROOM_NOT_FOUND: "방이 닫혔어요.",
   ROOM_FULL: "이미 두 명이 입장했어요.",
   DUPLICATE_NAME: "다른 플레이어 이름을 입력해 주세요.",
@@ -20,6 +22,7 @@ const errorMessages: Record<string, string> = {
   HOST_ONLY: "방장만 할 수 있어요.",
   NOT_READY: "두 명 모두 준비해야 시작할 수 있어요.",
   WRONG_TURN: "상대의 차례예요.",
+  STALE_MATCH: "이미 새로운 대국이에요. 다시 시도해 주세요.",
   STALE_STATE: "화면의 대국 상태가 바뀌었어요. 다시 시도해 주세요.",
   OCCUPIED: "이미 돌이 놓인 자리예요.",
   GAME_FINISHED: "대국이 끝났어요.",
@@ -81,4 +84,8 @@ export function membership(
 export function forgetMembership(id: string) {
   sessionStorage.removeItem(key(id));
 }
-export type ActionRequest = { action: OmokAction; expectedVersion: number };
+export type ActionRequest = {
+  action: OmokAction;
+  expectedVersion: number;
+  matchId: string;
+};

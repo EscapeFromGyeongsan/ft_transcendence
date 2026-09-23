@@ -20,13 +20,15 @@ export function App() {
   const session = useLocalOmok();
   const service = useLocalRooms();
   const isQuickGame = route === "/omok";
-  const isLobby = route === "/rooms";
-  const isOnlineLobby = route === "/online";
+  const isLobby = route === "/local-rooms";
+  const isOnlineLobby = route === "/online" || route === "/rooms";
   const onlineId = route.startsWith("/online/")
     ? route.slice("/online/".length)
-    : null;
-  const roomId = route.startsWith("/rooms/")
-    ? route.slice("/rooms/".length)
+    : route.startsWith("/rooms/")
+      ? route.slice("/rooms/".length)
+      : null;
+  const roomId = route.startsWith("/local-rooms/")
+    ? route.slice("/local-rooms/".length)
     : null;
   const activeRoom = service.rooms.find((room) => room.id === roomId);
   const missing =
@@ -45,7 +47,7 @@ export function App() {
     return () => window.removeEventListener("hashchange", change);
   }, []);
   useEffect(() => {
-    document.title = `${activeRoom?.title ?? (isOnlineLobby || onlineId ? "온라인 오목" : isLobby ? "게임 로비" : isQuickGame ? "로컬 오목" : "사이버 보드게임 카페")} · 사이보드`;
+    document.title = `${activeRoom?.title ?? (isOnlineLobby || onlineId ? "온라인 오목" : isLobby ? "로컬 로비" : isQuickGame ? "로컬 오목" : "사이버 보드게임 카페")} · 사이보드`;
   }, [activeRoom?.title, isLobby, isQuickGame, isOnlineLobby, onlineId]);
   return (
     <div className="app-shell">
@@ -74,14 +76,17 @@ export function App() {
           <a className={route === "/" ? "selected" : ""} href="#/">
             게임 라운지
           </a>
-          <a className={isLobby || roomId ? "selected" : ""} href="#/rooms">
-            게임 로비
+          <a
+            className={isLobby || roomId ? "selected" : ""}
+            href="#/local-rooms"
+          >
+            로컬 · 한 화면 대전
           </a>
           <a
             className={isOnlineLobby || onlineId ? "selected" : ""}
-            href="#/online"
+            href="#/rooms"
           >
-            온라인 오목
+            게임 로비
           </a>
           {isQuickGame && (
             <a className="selected" href="#/omok">
@@ -115,8 +120,8 @@ export function App() {
         {service.rooms.map((room) => (
           <div hidden={room.id !== roomId} key={room.id}>
             <div className="room-breadcrumb">
-              <a className="back-link" href="#/rooms">
-                ← 게임 로비
+              <a className="back-link" href="#/local-rooms">
+                ← 로컬 로비
               </a>
               <button
                 className="text-button"
@@ -141,8 +146,8 @@ export function App() {
               <br />
               로컬 방은 만든 탭 안에서만 유지돼요.
             </p>
-            <a className="button primary" href="#/rooms">
-              게임 로비로 돌아가기
+            <a className="button primary" href="#/local-rooms">
+              로컬 로비로 돌아가기
             </a>
           </div>
         )}
@@ -163,7 +168,7 @@ export function App() {
             const id = service.createRoom(input);
             if (id) {
               setCreating(false);
-              window.location.hash = `/rooms/${id}`;
+              window.location.hash = `/local-rooms/${id}`;
             }
           }}
         />
@@ -178,7 +183,7 @@ export function App() {
           onConfirm={() => {
             service.close(closing);
             setClosing(null);
-            window.location.hash = "/rooms";
+            window.location.hash = "/local-rooms";
           }}
         />
       )}

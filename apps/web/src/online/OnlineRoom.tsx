@@ -1,4 +1,5 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { connectRoom } from "./connection";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Board, coordinate } from "../games/omok/Board";
 import {
   membership,
@@ -18,39 +19,45 @@ export function OnlineRoom({ id }: { id: string }) {
   const [connected, setConnected] = useState(false);
   const [pending, setPending] = useState(false);
   const helpId = useId();
+  const connection = useRef<ReturnType<typeof connectRoom> | null>(null);
+  const acceptRoom = (value: Room) =>
+    setRoom((previous) =>
+      !previous ||
+      previous.id !== value.id ||
+      value.revision >= previous.revision
+        ? value
+        : previous,
+    );
   useEffect(() => {
     let alive = true;
     setRoom(null);
     setMember(membership(id));
     setError("");
-    void request<Room>(`/${id}`)
-      .then((value) => {
-        if (alive) setRoom(value);
-      })
-      .catch((reason: Error) => {
-        if (alive) setError(reason.message);
-      });
-    const events = new EventSource(`/api/rooms/${id}/events`);
-    events.onmessage = (event) => {
-      if (alive) {
-        setRoom(JSON.parse(event.data) as Room);
-        setConnected(true);
-        setError("");
-      }
-    };
-    events.addEventListener("closed", () => {
-      events.close();
-      if (alive) {
-        setRoom(null);
-        setError("방이 닫혔어요.");
-      }
+    setConnected(false);
+    const client = connectRoom(id, {
+      snapshot: (value) => {
+        if (alive) {
+          acceptRoom(value);
+          setError("");
+        }
+      },
+      connected: (value) => {
+        if (alive) setConnected(value);
+      },
+      closed: () => {
+        if (alive) {
+          setRoom(null);
+          setError("방이 닫혔어요.");
+          forgetMembership(id);
+          setMember(null);
+        }
+      },
     });
-    events.onerror = () => {
-      if (alive) setConnected(false);
-    };
+    connection.current = client;
     return () => {
       alive = false;
-      events.close();
+      client.dispose();
+      connection.current = null;
     };
   }, [id]);
   const self = room?.players.find((player) => player.id === member?.playerId);
@@ -70,13 +77,12 @@ export function OnlineRoom({ id }: { id: string }) {
     setPending(true);
     setError("");
     try {
-      const value = await request<T>(
-        `/${id}${suffix}`,
-        method,
-        data,
+      const value = await connection.current!.command(
+        method === "DELETE" ? "close" : suffix.slice(1),
         member.token,
+        data,
       );
-      onDone?.(value);
+      onDone?.(value as T);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -91,7 +97,7 @@ export function OnlineRoom({ id }: { id: string }) {
       const value = await request<Membership>(`/${id}/join`, "POST", { name });
       saveMembership(id, value);
       setMember({ token: value.token, playerId: value.playerId });
-      setRoom(value.room);
+      acceptRoom(value.room);
       setName("");
     } catch (reason) {
       setError((reason as Error).message);
@@ -111,8 +117,9 @@ export function OnlineRoom({ id }: { id: string }) {
       {
         action: { type: "PLACE_STONE", x, y },
         expectedVersion: room.game.stateVersion,
+        matchId: room.matchId,
       } satisfies ActionRequest,
-      setRoom,
+      acceptRoom,
     );
   }
   return (
@@ -191,7 +198,7 @@ export function OnlineRoom({ id }: { id: string }) {
                         {player && player.id === self?.id && (
                           <button
                             className="button secondary"
-                            disabled={pending}
+                            disabled={pending || !connected}
                             onClick={() => void perform("POST", "/ready")}
                           >
                             {player.ready ? "준비 취소" : "준비하기"}
@@ -212,7 +219,10 @@ export function OnlineRoom({ id }: { id: string }) {
                       onChange={(event) => setName(event.target.value)}
                       placeholder="플레이어 이름"
                     />
-                    <button className="button primary" disabled={pending}>
+                    <button
+                      className="button primary"
+                      disabled={pending || !connected}
+                    >
                       입장하기
                     </button>
                   </form>
@@ -223,7 +233,7 @@ export function OnlineRoom({ id }: { id: string }) {
                 {self?.seat === 1 && (
                   <button
                     className="button quiet"
-                    disabled={pending}
+                    disabled={pending || !connected}
                     onClick={() =>
                       void perform("POST", "/leave", undefined, () => {
                         forgetMembership(id);
@@ -237,12 +247,16 @@ export function OnlineRoom({ id }: { id: string }) {
               </div>
               <aside className="waiting-details">
                 <div className="start-panel">
-                  <p>두 사람 모두 준비하면 방장이 대국을 시작합니다.</p>
+                  <p>
+                    각자 자기 화면에서 준비해 주세요. 두 사람 모두 준비하면
+                    방장이 대국을 시작합니다.
+                  </p>
                   {host && (
                     <button
                       className="button primary"
                       disabled={
                         pending ||
+                        !connected ||
                         room.players.length !== 2 ||
                         !room.players.every((player) => player.ready)
                       }
@@ -314,14 +328,18 @@ export function OnlineRoom({ id }: { id: string }) {
                 {room.status === "playing" && self && (
                   <button
                     className="button quiet"
-                    disabled={pending}
+                    disabled={pending || !connected}
                     onClick={() => {
-                      if (myTurn && window.confirm("정말 기권할까요?"))
+                      if (!myTurn) {
+                        setError("자신의 차례에 기권할 수 있어요.");
+                        return;
+                      }
+                      if (window.confirm("정말 기권할까요?"))
                         void perform("POST", "/action", {
                           action: { type: "RESIGN" },
                           expectedVersion: room.game.stateVersion,
+                          matchId: room.matchId,
                         } satisfies ActionRequest);
-                      else setError("자신의 차례에 기권할 수 있어요.");
                     }}
                   >
                     기권하기
@@ -330,7 +348,7 @@ export function OnlineRoom({ id }: { id: string }) {
                 {room.status === "finished" && host && (
                   <button
                     className="button primary"
-                    disabled={pending}
+                    disabled={pending || !connected}
                     onClick={() => void perform("POST", "/rematch")}
                   >
                     재대국 준비하기
@@ -342,7 +360,7 @@ export function OnlineRoom({ id }: { id: string }) {
           {host && (
             <button
               className="button quiet"
-              disabled={pending}
+              disabled={pending || !connected}
               onClick={() => {
                 if (window.confirm("이 방을 닫을까요?"))
                   void perform("DELETE", "", undefined, () => {

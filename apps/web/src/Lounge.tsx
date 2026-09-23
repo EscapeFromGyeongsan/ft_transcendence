@@ -36,21 +36,23 @@ export function Lounge({ hasGame }: { hasGame: boolean }) {
             <br />한 판의 여유와 함께.
           </h1>
           <p>
-            화면 너머의 카페, 오늘은 바로 옆의 친구와.
+            각자의 화면에서, 친구와 같은 테이블에.
             <br />
             좋아하는 자리에 앉아 첫 수를 놓아보세요.
           </p>
-          <a className="button primary" href="#/omok">
-            {hasGame ? "오목 테이블로 돌아가기" : "오목 한 판 시작하기"}{" "}
-            <span>↗</span>
+          <a className="button primary" href="#/rooms">
+            온라인 오목 시작하기 <span>↗</span>
           </a>
           <a className="lounge-room-link" href="#/rooms">
             게임 로비에서 방 만들기 →
           </a>
+          <a className="lounge-room-link" href="#/omok">
+            {hasGame ? "로컬 오목 이어하기" : "한 화면에서 둘이 · 로컬 오목"} →
+          </a>
           <div className="hero-footnote">
             <span>회원가입 없이</span>
             <i />
-            <span>한 화면에서 둘이</span>
+            <span>각자 접속해 함께</span>
           </div>
         </div>
         <div className="hero-art">
@@ -84,7 +86,7 @@ export function Lounge({ hasGame }: { hasGame: boolean }) {
         </div>
         <div className="game-shelf">
           {games.map((game) => (
-            <a className="game-card" href={`#/${game.id}`} key={game.id}>
+            <a className="game-card" href="#/rooms" key={game.id}>
               <div className="card-art">
                 <span className="card-tag">CLASSIC STRATEGY</span>
                 <MiniBoard />

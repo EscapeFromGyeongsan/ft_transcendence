@@ -31,7 +31,7 @@ test("create and validate a room, prepare both seats, play and keep it in the lo
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/#/rooms");
+  await page.goto("/#/local-rooms");
   await expect(
     page.getByRole("heading", { name: "아직 비어 있는 카페예요" }),
   ).toBeVisible();
@@ -77,7 +77,7 @@ test("create and validate a room, prepare both seats, play and keep it in the lo
     "친구",
   ]);
   await boardCell(page, "H8").click();
-  await page.getByRole("link", { name: "← 게임 로비" }).click();
+  await page.getByRole("link", { name: "← 로컬 로비" }).click();
   await expect(
     page.getByRole("article").filter({ hasText: "커피 한 잔과 오목" }),
   ).toContainText("대국 중");
@@ -96,11 +96,11 @@ test("create and validate a room, prepare both seats, play and keep it in the lo
 test("rooms have independent boards, support search and filters, and close with confirmation", async ({
   page,
 }) => {
-  await page.goto("/#/rooms");
+  await page.goto("/#/local-rooms");
   await createRoom(page, "첫 번째 테이블", "가");
   await prepareRoom(page, "가", "나");
   await boardCell(page, "A1").click();
-  await page.getByRole("link", { name: "← 게임 로비" }).click();
+  await page.getByRole("link", { name: "← 로컬 로비" }).click();
   await createRoom(page, "두 번째 테이블", "다");
   await prepareRoom(page, "다", "라");
   await expect(boardCell(page, "A1")).toHaveAccessibleName("A1, 빈 자리");
@@ -110,7 +110,7 @@ test("rooms have independent boards, support search and filters, and close with 
     .getByRole("dialog")
     .getByRole("button", { name: "기권하기" })
     .click();
-  await page.getByRole("link", { name: "← 게임 로비" }).click();
+  await page.getByRole("link", { name: "← 로컬 로비" }).click();
   await page
     .getByRole("searchbox", { name: "방 이름 또는 방장 검색" })
     .fill("없는 방");
@@ -125,7 +125,7 @@ test("rooms have independent boards, support search and filters, and close with 
   await expect(page.getByRole("article")).toHaveCount(1);
   await page.getByRole("link", { name: "결과 보기" }).click();
   await page.getByRole("button", { name: "한 판 더" }).click();
-  await page.getByRole("link", { name: "← 게임 로비" }).click();
+  await page.getByRole("link", { name: "← 로컬 로비" }).click();
   await page
     .getByRole("searchbox", { name: "방 이름 또는 방장 검색" })
     .fill("가");
@@ -153,10 +153,10 @@ test("waiting rooms persist during navigation, but reload and unknown URLs show 
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "게임 로비에서 방 만들기" }).click();
+  await page.getByRole("link", { name: "로컬 · 한 화면 대전" }).click();
   await createRoom(page, "대기실", "방장");
   await page.getByRole("button", { name: "방장 준비", exact: true }).click();
-  await page.getByRole("link", { name: "← 게임 로비" }).click();
+  await page.getByRole("link", { name: "← 로컬 로비" }).click();
   await page.getByRole("link", { name: "대기실 열기" }).click();
   await expect(
     page.getByRole("button", { name: "방장 준비", exact: true }),
@@ -170,12 +170,12 @@ test("waiting rooms persist during navigation, but reload and unknown URLs show 
   await expect(
     page.getByRole("heading", { name: "테이블을 찾을 수 없어요" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "게임 로비로 돌아가기" }).click();
+  await page.getByRole("link", { name: "로컬 로비로 돌아가기" }).click();
   await expect(
     page.getByRole("heading", { name: "아직 비어 있는 카페예요" }),
   ).toBeVisible();
-  await page.goto("/#/rooms/missing");
+  await page.goto("/#/local-rooms/missing");
   await expect(
-    page.getByRole("link", { name: "게임 로비로 돌아가기" }),
+    page.getByRole("link", { name: "로컬 로비로 돌아가기" }),
   ).toBeVisible();
 });

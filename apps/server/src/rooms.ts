@@ -9,6 +9,8 @@ import {
 export type Player = { id: string; name: string; seat: number; ready: boolean };
 export type RoomSnapshot = {
   id: string;
+  revision: number;
+  matchId: string;
   title: string;
   gameType: "omok";
   capacity: 2;
@@ -45,6 +47,12 @@ export class RoomStore {
     return () => this.listeners.delete(listener);
   }
   private changed(id: string) {
+    const room = this.rooms.get(id);
+    if (room)
+      room.snapshot = {
+        ...room.snapshot,
+        revision: room.snapshot.revision + 1,
+      };
     for (const listener of this.listeners) listener(id);
   }
   list(): RoomSnapshot[] {
@@ -74,6 +82,8 @@ export class RoomStore {
       playerId = randomUUID();
     const snapshot: RoomSnapshot = {
       id,
+      revision: 0,
+      matchId: randomUUID(),
       title,
       gameType: "omok",
       capacity: 2,
@@ -83,7 +93,7 @@ export class RoomStore {
     };
     this.rooms.set(id, { snapshot, tokens: new Map([[token, playerId]]) });
     this.changed(id);
-    return { room: snapshot, token, playerId };
+    return { room: this.get(id), token, playerId };
   }
   join(id: string, nameValue: unknown) {
     const name = clean(nameValue, 16),
@@ -142,10 +152,12 @@ export class RoomStore {
     token: string,
     action: OmokAction,
     expectedVersion: unknown,
+    matchId: unknown,
   ) {
     const room = this.room(id),
       actor = this.player(room, token);
     if (room.snapshot.status !== "playing") fail(409, "NOT_PLAYING");
+    if (matchId !== room.snapshot.matchId) fail(409, "STALE_MATCH");
     if (expectedVersion !== room.snapshot.game.stateVersion)
       fail(409, "STALE_STATE");
     const result = applyAction(
@@ -171,6 +183,7 @@ export class RoomStore {
     room.snapshot = {
       ...room.snapshot,
       status: "waiting",
+      matchId: randomUUID(),
       game: createInitialState(),
       players: room.snapshot.players.map((player) => ({
         ...player,
