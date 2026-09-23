@@ -2048,3 +2048,29 @@ select:focus-visible {
     margin-right: 6px;
   }
 }
+
+.account-panel {
+  max-width: 520px;
+  margin: 36px auto;
+  padding: 28px;
+}
+.account-panel form {
+  display: grid;
+  gap: 16px;
+}
+.account-panel .field {
+  display: grid;
+  gap: 8px;
+}
+.account-panel input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.account-panel dd {
+  margin: 4px 0 18px;
+  overflow-wrap: anywhere;
+}
+.account-panel > .button {
+  margin: 12px 8px 0 0;
+}

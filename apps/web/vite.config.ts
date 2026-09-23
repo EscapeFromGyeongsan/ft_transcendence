@@ -1,6 +1,10 @@
 import { defineConfig } from "vite";
 
 const proxy = {
-  "/api": { target: "http://127.0.0.1:3001", changeOrigin: true, ws: true },
+  "/api": {
+    target: `http://127.0.0.1:${process.env.PORT ?? "3001"}`,
+    changeOrigin: true,
+    ws: true,
+  },
 };
 export default defineConfig({ server: { proxy }, preview: { proxy } });

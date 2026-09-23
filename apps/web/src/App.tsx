@@ -1,3 +1,4 @@
+import { Account } from "./auth/Account";
 import { useEffect, useState } from "react";
 import { useLocalOmok } from "./games/omok/useLocalOmok";
 import { OmokRoom } from "./games/omok/OmokRoom";
@@ -33,6 +34,7 @@ export function App() {
   const activeRoom = service.rooms.find((room) => room.id === roomId);
   const missing =
     route !== "/" &&
+    route !== "/account" &&
     !isQuickGame &&
     !isLobby &&
     !isOnlineLobby &&
@@ -47,8 +49,8 @@ export function App() {
     return () => window.removeEventListener("hashchange", change);
   }, []);
   useEffect(() => {
-    document.title = `${activeRoom?.title ?? (isOnlineLobby || onlineId ? "온라인 오목" : isLobby ? "로컬 로비" : isQuickGame ? "로컬 오목" : "사이버 보드게임 카페")} · 사이보드`;
-  }, [activeRoom?.title, isLobby, isQuickGame, isOnlineLobby, onlineId]);
+    document.title = `${activeRoom?.title ?? (route === "/account" ? "내 계정" : isOnlineLobby || onlineId ? "온라인 오목" : isLobby ? "로컬 로비" : isQuickGame ? "로컬 오목" : "사이버 보드게임 카페")} · 사이보드`;
+  }, [route, activeRoom?.title, isLobby, isQuickGame, isOnlineLobby, onlineId]);
   return (
     <div className="app-shell">
       <a
@@ -88,6 +90,12 @@ export function App() {
           >
             게임 로비
           </a>
+          <a
+            href="#/account"
+            className={route === "/account" ? "selected" : ""}
+          >
+            내 계정
+          </a>
           {isQuickGame && (
             <a className="selected" href="#/omok">
               오목 테이블
@@ -107,6 +115,7 @@ export function App() {
         {isLobby && (
           <RoomLobby rooms={service.rooms} onCreate={() => setCreating(true)} />
         )}
+        {route === "/account" && <Account />}
         {isOnlineLobby && <OnlineLobby />}
         {onlineId && <OnlineRoom key={onlineId} id={onlineId} />}
         {isQuickGame && (

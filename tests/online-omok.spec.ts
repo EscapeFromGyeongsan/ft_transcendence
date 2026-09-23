@@ -23,9 +23,9 @@ test("two browsers join, synchronize turns, reconnect and finish a match", async
   const host = await hostContext.newPage(),
     guest = await guestContext.newPage();
   try {
-    await guest.goto("http://127.0.0.1:5173/");
+    await guest.goto(new URL("/", testInfo.project.use.baseURL).href);
     await guest.getByRole("link", { name: "게임 로비", exact: true }).click();
-    await host.goto("http://127.0.0.1:5173/");
+    await host.goto(new URL("/", testInfo.project.use.baseURL).href);
     await host.getByRole("link", { name: "온라인 오목 시작하기" }).click();
     await host.getByRole("button", { name: "＋ 온라인 방 만들기" }).click();
     const dialog = host.getByRole("dialog");

@@ -54,7 +54,29 @@ Open **게임 로비** (`/#/rooms`, also available at `/#/online`), create a roo
 
 Room creation, listing and joining use Fastify HTTP routes. Ready/start/move/resign/rematch/leave/close commands and snapshots use `/api/rooms/:id/ws` through `@fastify/websocket`. Each command carries a request ID and participant token; tokens are never placed in WebSocket URLs or public snapshots. The browser reconnects with bounded backoff and receives a fresh snapshot; uncertain commands are never automatically replayed. A monotonically increasing room revision prevents delayed HTTP responses from replacing newer snapshots. Every rematch receives a new match ID, so commands from a previous match are rejected even when the move counter resets. Server ping/pong detects dead sockets and subscriptions are removed on disconnect.
 
-The session token is kept in the browser tab's `sessionStorage` and sent with player commands. A different tab is a different participant; do not share the token. Online rooms are held **in one server process's memory**: restarting the server clears them and their tokens. This is a playable multiplayer prototype without accounts, persistence, multi-instance scaling or a production deployment configuration.
+The session token is kept in the browser tab's `sessionStorage` and sent with player commands. A different tab is a different participant; do not share the token. Online rooms are held **in one server process's memory**: restarting the server clears them and their tokens. This is a playable multiplayer prototype without durable game state, account-linked seats, multi-instance scaling or a production deployment configuration. Basic accounts are available separately below.
+
+## Accounts and database
+
+Open **내 계정** (`/#/account`) to register with an email address, nickname (1–16 characters), and password (12–128 characters). Registration signs you in. Login, logout and session restoration after reload are implemented. Account sessions are shared across tabs in the same browser profile; room participation tokens remain per-tab. Accounts are not yet linked to room seats or match history. A second account for testing requires a separate browser profile or private window.
+
+Passwords use asynchronous salted scrypt (N=32768, r=8, p=3); only hashes are stored. Random 256-bit session tokens are kept in HttpOnly, SameSite=Strict cookies and stored only as SHA-256 hashes in the database. Sessions expire after seven days, rotate on login and are revoked on logout. Authentication mutation routes check the browser origin and JSON content type; registration/login requests are rate-limited. Production cookies require HTTPS.
+
+Copy `.env.example` to `.env` if configuration is needed; the server loads it at startup. With no `DATABASE_URL`, development uses **PGlite**, an embedded PostgreSQL engine, persisting users and sessions under `data/accounts/` (ignored by Git). Run only one server process against this development directory. Tests use separate temporary databases. With `DATABASE_URL`, the server connects through `pg` to an external PostgreSQL server instead. The shared initial schema is in `apps/server/src/db/001-auth.sql`: `users` have unique normalized emails, and `sessions.user_id` references `users.id`. Startup applies this idempotent initial migration. Database switching does not copy existing users; use an explicit data migration when moving from development to deployment.
+
+- `DATABASE_URL`: optional external PostgreSQL connection string; required in production.
+- `DATABASE_DIR`: development database directory (default `./data/accounts`).
+- `APP_ORIGIN`: exact browser origin (default `http://127.0.0.1:5173`). Set it to the address users actually visit, including the port.
+- `NODE_ENV=production`: requires `DATABASE_URL` and an HTTPS `APP_ORIGIN`, and enables Secure cookies. HTTPS termination is still a separate deployment task.
+- `PORT`: API port (default `3001`); the Vite proxy uses the same environment variable when set in the shell.
+
+Restart `npm run dev` after changing backend code or environment settings. The frontend updates automatically, but the API process does not currently watch source changes. Users/sessions survive server restarts; rooms and ongoing matches still do not. The external PostgreSQL adapter has been type-checked; automated persistence tests currently run against PGlite, not a standalone PostgreSQL service. Email verification, password recovery, profile editing, account-linked room authorization and result storage are follow-up work.
+
+To run browser tests without using the normal development ports:
+
+```sh
+E2E_PORT=5174 PORT=3002 DATABASE_DIR=/tmp/cafe-e2e-accounts CI=1 npm run test:e2e
+```
 
 ## Structure and extension points
 
@@ -79,6 +101,9 @@ apps/server/src/
   app.ts                          HTTP routes and WebSocket transport
   app.test.ts                     HTTP validation and real WebSocket integration tests
   rooms.test.ts                   Server boundary tests
+  auth.ts                         Registration, login, cookies and session lifecycle
+  auth.test.ts                    Persistence, invalid login, expiry and logout tests
+  db/                             PostgreSQL adapters and initial account schema
 packages/games/omok/src/
   index.ts                        Pure, versioned Omok rules
   omok.test.ts                    Rule and boundary tests
@@ -96,7 +121,7 @@ The engine exposes `createInitialState()` and `applyAction(state, actor, action)
 
 ## Roadmap status and limitations
 
-This is an **Omok prototype**, not an implementation of the complete submission requirements. There is no account authentication, matchmaking, chat, durable history or database. Session tokens allow reconnect in the same tab while one server stays alive. Disconnects preserve seats; automatic forfeits, host transfer and abandoned-room expiry are not implemented. No roadmap card or module is marked as evaluated based on prototype tests. See [the team roadmap](Document/roadmap.md) and [architecture](Document/ft_transcendence_game_architecture.md).
+This is an **Omok prototype**, not an implementation of the complete submission requirements. Email/password account authentication and a PostgreSQL-compatible account database are implemented. Account-linked gameplay, matchmaking, chat and durable match history are not implemented. Session tokens allow reconnect in the same tab while one server stays alive. Disconnects preserve seats; automatic forfeits, host transfer and abandoned-room expiry are not implemented. No roadmap card or module is marked as evaluated based on prototype tests. See [the team roadmap](Document/roadmap.md) and [architecture](Document/ft_transcendence_game_architecture.md).
 
 The source includes a deterministic legal 225-move draw scenario in the unit tests. It is test data, not a stored or externally verified match.
 

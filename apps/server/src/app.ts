@@ -1,9 +1,14 @@
+import { registerAuth } from "./auth.ts";
+import type { Database } from "./db/database.ts";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { RoomError, RoomStore } from "./rooms.ts";
 import type { OmokAction } from "@cafe/omok";
 
-export async function buildApp(store = new RoomStore()) {
+export async function buildApp(
+  store = new RoomStore(),
+  options?: { database: Database; origin: string; secureCookies: boolean },
+) {
   const app = Fastify({ bodyLimit: 4096 });
   await app.register(websocket, { options: { maxPayload: 4096 } });
   app.addHook("onSend", async (_request, reply) => {
@@ -23,6 +28,11 @@ export async function buildApp(store = new RoomStore()) {
       .code(status)
       .send({ error: status >= 500 ? "INTERNAL_ERROR" : "INVALID_REQUEST" });
   });
+  if (options)
+    await registerAuth(app, options.database, {
+      origin: options.origin,
+      secure: options.secureCookies,
+    });
   const named = (properties: Record<string, unknown>, required: string[]) => ({
     type: "object",
     properties,
