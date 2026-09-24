@@ -62,7 +62,7 @@ Open **내 계정** (`/#/account`) to register with an email address, nickname (
 
 Passwords use asynchronous salted scrypt (N=32768, r=8, p=3); only hashes are stored. Random 256-bit session tokens are kept in HttpOnly, SameSite=Strict cookies and stored only as SHA-256 hashes in the database. Sessions expire after seven days, rotate on login and are revoked on logout. Authentication mutation routes check the browser origin and JSON content type; registration/login requests are rate-limited. Production cookies require HTTPS.
 
-Copy `.env.example` to `.env` if configuration is needed; the server loads it at startup. With no `DATABASE_URL`, development uses **PGlite**, an embedded PostgreSQL engine, persisting users and sessions under `data/accounts/` (ignored by Git). Run only one server process against this development directory. Tests use separate temporary databases. With `DATABASE_URL`, the server connects through `pg` to an external PostgreSQL server instead. The shared initial schema is in `apps/server/src/db/001-auth.sql`: `users` have unique normalized emails, and `sessions.user_id` references `users.id`. Startup applies the idempotent migrations in order, including `002-matches.sql` for completed matches. Both participant columns reference `users.id`; each match has a unique primary key, start/end timestamps, nickname snapshots, outcome and move count. Database switching does not copy existing users; use an explicit data migration when moving from development to deployment.
+Copy `.env.example` to `.env` if configuration is needed; the server loads it at startup. With no `DATABASE_URL`, development uses **PGlite**, an embedded PostgreSQL engine, persisting users and sessions under `data/accounts/` (ignored by Git). Run only one server process against this development directory. Tests use separate temporary databases. With `DATABASE_URL`, the server connects through `pg` to an external PostgreSQL server instead. The shared initial schema is in `apps/server/src/db/001-auth.sql`: `users` have unique normalized emails, and `sessions.user_id` references `users.id`. Startup applies the idempotent migrations in order, including `003-game-results.sql` for game-independent results. `game_matches` stores the game type and match metadata; `game_match_players` stores account-linked seats, nickname snapshots and outcomes. Existing Omok records from `002-matches.sql` are copied idempotently, and the legacy table is retained. Database switching does not copy existing users; use an explicit data migration when moving from development to deployment.
 
 - `DATABASE_URL`: optional external PostgreSQL connection string; required in production.
 - `DATABASE_DIR`: development database directory (default `./data/accounts`).
@@ -89,14 +89,16 @@ apps/web/src/
     useLocalRooms.ts              In-memory room lifecycle and readiness
     LocalRoomGame.tsx             Independent Omok session for each room
   components/ConfirmDialog.tsx    Shared confirmation dialog
-  games/registry.ts               Game catalog metadata
+  games/registry.ts               Game presentation metadata and online renderers
   games/omok/
+    OnlineOmokGame.tsx            Online board, stone actions and Omok status
     Board.tsx                     Board rendering and keyboard input
     OmokRoom.tsx                  Players, history, rules, result and controls
     useLocalOmok.ts                Local session / engine integration
   online/                         Remote lobby, room, HTTP lobby client and WebSocket commands/updates
 apps/server/src/
-  rooms.ts                        Membership, authorization and game authority
+  rooms.ts                        Membership, authorization and game lifecycle
+  games/                          Typed adapters and static server registry
   index.ts                        Fastify startup and graceful shutdown
   app.ts                          HTTP routes and WebSocket transport
   app.test.ts                     HTTP validation and real WebSocket integration tests
@@ -104,6 +106,7 @@ apps/server/src/
   auth.ts                         Registration, login, cookies and session lifecycle
   auth.test.ts                    Persistence, invalid login, expiry and logout tests
   db/                             PostgreSQL adapters and initial account schema
+packages/game-contracts/src/       Shared room, action envelope and result types
 packages/games/omok/src/
   index.ts                        Pure, versioned Omok rules
   omok.test.ts                    Rule and boundary tests
@@ -137,4 +140,10 @@ The home play button and game cards open the online lobby. Local shared-screen r
 
 Open **내 전적** (`/#/history`) after signing in. It lists opponents, start/end times, win/loss/draw, reason (five stones, resignation or draw) and move count, with 20 records per page. Summary includes total games, wins, losses, draws and win rate (wins divided by all completed matches, including draws). `/api/me/matches` derives the user from the session, not a query-supplied user ID.
 
-All mutations for a room are serialized. The final action is validated without mutating live state, then the complete result and both participants are written in one SQL insert before committing/broadcasting the terminal state. The unique match ID and `ON CONFLICT` prevent duplicate records. If persistence fails, the game stays at the prior state and the player can retry. Rematches receive new IDs. A crash after the database commit retains the completed result, but live room recovery is not yet implemented. Tests cover five-in-a-row wins, resignation, draw result mapping, duplicate completion, database failure/retry, revoked sessions, same-account seat recovery and history persistence after reopening the database. Standalone PostgreSQL remains unverified; database tests run against PGlite.
+All mutations for a room are serialized. The final action is validated without mutating live state, then the normalized result and all participants are written atomically in one SQL statement before committing/broadcasting the terminal state. The unique match ID and `ON CONFLICT` prevent duplicate records. If persistence fails, the game stays at the prior state and the player can retry. Rematches receive new IDs. A crash after the database commit retains the completed result, but live room recovery is not yet implemented. Tests cover five-in-a-row wins, resignation, draw result mapping, duplicate completion, database failure/retry, revoked sessions, same-account seat recovery and history persistence after reopening the database. Standalone PostgreSQL remains unverified; database tests run against PGlite.
+
+## Game adapter prototype
+
+Online room lifecycle and transport depend on a static server game registry. The Omok adapter validates actions, maps authenticated seats to stones, calls the unchanged pure engine, and normalizes its result. `GET /api/games` lists registered game types and capacities; room creation accepts `gameType` and defaults to Omok for existing clients. Shared wire types live in `@cafe/game-contracts`; the frontend registry chooses the game renderer and labels. Only Omok is registered in the application.
+
+See [the responsibility analysis and extension guide](Document/game-adapters.md). A test-only three-player counter verifies that the platform does not depend on a board, stone colors, two seats, or alternating turns. New games still require their own engine, adapter, UI and tests. Hidden information, random outcomes and variable player counts are not implemented by this prototype.

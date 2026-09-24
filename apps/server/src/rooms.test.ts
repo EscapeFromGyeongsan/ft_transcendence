@@ -49,8 +49,8 @@ describe("server-owned online rooms", () => {
         store.get(id).matchId,
       ),
     ).toThrowError("OCCUPIED");
-    expect(store.get(id).game.moves).toHaveLength(1);
-    expect(store.get(id).game.currentTurn).toBe("white");
+    expect(store.get(id).game).toHaveProperty("moves.length", 1);
+    expect(store.get(id).game).toHaveProperty("currentTurn", "white");
   });
 
   it("keeps games independent and requires host for rematch and close", () => {
@@ -74,7 +74,7 @@ describe("server-owned online rooms", () => {
       "HOST_ONLY",
     );
     store.rematch(first.room.id, first.token);
-    expect(store.get(first.room.id).game.moves).toHaveLength(0);
+    expect(store.get(first.room.id).game).toHaveProperty("moves.length", 0);
     expect(
       store.get(first.room.id).players.every((player) => !player.ready),
     ).toBe(true);

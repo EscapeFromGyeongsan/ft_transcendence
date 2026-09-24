@@ -19,7 +19,7 @@ beforeAll(async () => {
   db = await openDatabase({ directory });
   const storage: Database = {
     query: (sql, values) => {
-      if (failSave && sql.startsWith("INSERT INTO matches"))
+      if (failSave && sql.includes("INSERT INTO game_matches"))
         return Promise.reject(new Error("simulated database outage"));
       return db.query(sql, values);
     },
@@ -157,7 +157,7 @@ it("binds seats to accounts, persists results once, recovers seats and rejects r
   expect(
     (
       await db.query<{ count: number }>(
-        "SELECT count(*)::int AS count FROM matches",
+        "SELECT count(*)::int AS count FROM game_matches",
       )
     ).rows[0].count,
   ).toBe(1);
@@ -209,7 +209,7 @@ it("binds seats to accounts, persists results once, recovers seats and rejects r
     ...newMatch,
     matchId: randomUUID(),
     finishedAt: new Date().toISOString(),
-    game: { ...newMatch.game, result: { kind: "draw" } },
+    result: { kind: "draw", winnerSeats: [], reason: "draw", moveCount: 0 },
   });
   const drawHistory = await history(db, bob.id);
   expect(drawHistory.summary).toEqual({

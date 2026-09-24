@@ -133,7 +133,7 @@ describe("Fastify HTTP and WebSocket boundary", () => {
       expectedVersion: 0,
       matchId: oldMatch,
     });
-    expect(room.game.moves).toHaveLength(1);
+    expect(room.game).toHaveProperty("moves.length", 1);
     await a.command(
       "action",
       host.token,

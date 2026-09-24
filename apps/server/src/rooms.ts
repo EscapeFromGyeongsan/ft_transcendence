@@ -1,25 +1,8 @@
 import { randomUUID } from "node:crypto";
-import {
-  applyAction,
-  createInitialState,
-  type OmokAction,
-  type OmokState,
-} from "@cafe/omok";
+import type { Player, RoomSnapshot } from "@cafe/game-contracts";
+import { gameRegistry, type GameRegistry } from "./games/registry.ts";
+export type { Player, RoomSnapshot } from "@cafe/game-contracts";
 
-export type Player = { id: string; name: string; seat: number; ready: boolean };
-export type RoomSnapshot = {
-  id: string;
-  revision: number;
-  matchId: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  title: string;
-  gameType: "omok";
-  capacity: 2;
-  status: "waiting" | "playing" | "finished";
-  players: Player[];
-  game: OmokState;
-};
 type StoredRoom = { snapshot: RoomSnapshot; tokens: Map<string, string> };
 export class RoomError extends Error {
   status: number;
@@ -42,6 +25,13 @@ const clean = (value: unknown, max: number): string =>
 
 /** In-memory, single-process authority. All mutations finish before notifying subscribers. */
 export class RoomStore {
+  readonly registry: GameRegistry;
+  constructor(registry: GameRegistry = gameRegistry) {
+    this.registry = registry;
+  }
+  private definition(gameType: string) {
+    return this.registry.get(gameType) ?? fail(400, "UNKNOWN_GAME");
+  }
   private rooms = new Map<string, StoredRoom>();
   private listeners = new Set<(id: string) => void>();
   subscribe(listener: (id: string) => void) {
@@ -76,7 +66,13 @@ export class RoomStore {
   identity(id: string, token: string) {
     return this.player(this.room(id), token).id;
   }
-  create(titleValue: unknown, nameValue: unknown, accountId?: string) {
+  create(
+    titleValue: unknown,
+    nameValue: unknown,
+    accountId?: string,
+    gameType = this.registry.defaultGameType,
+  ) {
+    const definition = this.definition(gameType);
     const title = clean(titleValue, 40),
       name = clean(nameValue, 16);
     const id = randomUUID(),
@@ -89,11 +85,12 @@ export class RoomStore {
       title,
       startedAt: null,
       finishedAt: null,
-      gameType: "omok",
-      capacity: 2,
+      gameType: definition.gameType,
+      capacity: definition.playerCount,
       status: "waiting",
       players: [{ id: playerId, name, seat: 0, ready: false }],
-      game: createInitialState(),
+      game: definition.createInitialState(),
+      result: null,
     };
     this.rooms.set(id, {
       snapshot,
@@ -110,7 +107,10 @@ export class RoomStore {
       room.snapshot.players.some((player) => player.id === accountId)
     )
       return { room: room.snapshot, playerId: accountId, token: accountId };
-    if (room.snapshot.status !== "waiting" || room.snapshot.players.length >= 2)
+    if (
+      room.snapshot.status !== "waiting" ||
+      room.snapshot.players.length >= room.snapshot.capacity
+    )
       fail(409, "ROOM_FULL");
     if (
       !accountId &&
@@ -122,11 +122,17 @@ export class RoomStore {
       fail(409, "DUPLICATE_NAME");
     const token = randomUUID(),
       playerId = accountId ?? randomUUID();
+    const seat = Array.from(
+      { length: room.snapshot.capacity },
+      (_, index) => index,
+    ).find(
+      (index) => !room.snapshot.players.some((player) => player.seat === index),
+    )!;
     room.snapshot = {
       ...room.snapshot,
       players: [
-        room.snapshot.players[0],
-        { id: playerId, name, seat: 1, ready: false },
+        ...room.snapshot.players,
+        { id: playerId, name, seat, ready: false },
       ],
     };
     room.tokens.set(accountId ?? token, playerId);
@@ -152,7 +158,7 @@ export class RoomStore {
     if (actor.seat !== 0) fail(403, "HOST_ONLY");
     if (
       room.snapshot.status !== "waiting" ||
-      room.snapshot.players.length !== 2 ||
+      room.snapshot.players.length !== room.snapshot.capacity ||
       !room.snapshot.players.every((player) => player.ready)
     )
       fail(409, "NOT_READY");
@@ -167,7 +173,7 @@ export class RoomStore {
   previewAction(
     id: string,
     token: string,
-    action: OmokAction,
+    action: unknown,
     expectedVersion: unknown,
     matchId: unknown,
   ) {
@@ -177,18 +183,21 @@ export class RoomStore {
     if (matchId !== room.snapshot.matchId) fail(409, "STALE_MATCH");
     if (expectedVersion !== room.snapshot.game.stateVersion)
       fail(409, "STALE_STATE");
-    const result = applyAction(
+    const definition = this.definition(room.snapshot.gameType);
+    const result = definition.applyAction(
       room.snapshot.game,
-      actor.seat === 0 ? "black" : "white",
+      { seat: actor.seat },
       action,
     );
     if (!result.ok) throw new RoomError(409, result.reason);
     const nextState = result.nextState;
+    const outcome = definition.getResult(nextState);
     return {
       ...room.snapshot,
       game: nextState,
-      status: nextState.result ? ("finished" as const) : ("playing" as const),
-      finishedAt: nextState.result ? new Date().toISOString() : null,
+      result: outcome,
+      status: outcome ? ("finished" as const) : ("playing" as const),
+      finishedAt: outcome ? new Date().toISOString() : null,
     };
   }
   commitAction(id: string, next: RoomSnapshot) {
@@ -199,7 +208,7 @@ export class RoomStore {
   action(
     id: string,
     token: string,
-    action: OmokAction,
+    action: unknown,
     expectedVersion: unknown,
     matchId: unknown,
   ) {
@@ -219,7 +228,8 @@ export class RoomStore {
       startedAt: null,
       finishedAt: null,
       matchId: randomUUID(),
-      game: createInitialState(),
+      game: this.definition(room.snapshot.gameType).createInitialState(),
+      result: null,
       players: room.snapshot.players.map((player) => ({
         ...player,
         ready: false,
@@ -231,7 +241,7 @@ export class RoomStore {
   leave(id: string, token: string) {
     const room = this.room(id),
       actor = this.player(room, token);
-    if (room.snapshot.status !== "waiting" || actor.seat !== 1)
+    if (room.snapshot.status !== "waiting" || actor.seat === 0)
       fail(409, "CANNOT_LEAVE");
     room.snapshot = {
       ...room.snapshot,

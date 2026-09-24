@@ -15,6 +15,7 @@ export interface Room {
   players: RoomPlayer[];
 }
 export interface CreateRoomInput {
+  gameType?: string;
   title: string;
   hostName: string;
 }

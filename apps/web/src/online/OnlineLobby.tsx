@@ -1,3 +1,4 @@
+import { getGamePresentation } from "../games/registry";
 import { useEffect, useState } from "react";
 import { CreateRoomDialog } from "../rooms/CreateRoomDialog";
 import { request, type Membership, type OnlineRoom } from "./api";
@@ -41,7 +42,7 @@ export function OnlineLobby() {
         <div>
           <div className="eyebrow">PLAY TOGETHER ONLINE</div>
           <h1 id="online-title">
-            온라인 오목 로비 <span className="tag">멀티플레이</span>
+            온라인 게임 로비 <span className="tag">멀티플레이</span>
           </h1>
           <p>각자 다른 브라우저에서 같은 방에 접속해 대국해요.</p>
         </div>
@@ -78,11 +79,16 @@ export function OnlineLobby() {
                   : "종료"}
             </span>
             <h2>{room.title}</h2>
-            <p>오목 · 15×15 자유룰</p>
+            <p>
+              {getGamePresentation(room.gameType)?.title ?? room.gameType} ·{" "}
+              {getGamePresentation(room.gameType)?.ruleLabel}
+            </p>
             <div className="room-card-host">
               <span>방장</span>
               <strong>{room.players[0]?.name}</strong>
-              <span className="room-occupancy">{room.players.length}/2명</span>
+              <span className="room-occupancy">
+                {room.players.length}/{room.capacity}명
+              </span>
             </div>
             <a className="button secondary" href={`#/online/${room.id}`}>
               방 열기 ↗

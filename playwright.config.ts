@@ -11,7 +11,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `npm run dev -- --port ${port} --strictPort`,
-    url: baseURL,
+    url: `${baseURL}/api/rooms`,
     env: { APP_ORIGIN: baseURL },
     reuseExistingServer: !process.env.CI,
   },

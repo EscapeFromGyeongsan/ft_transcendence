@@ -1,17 +1,6 @@
-import type { OmokAction, OmokState } from "@cafe/omok";
-import type { RoomPlayer, RoomStatus } from "../rooms/types";
-
-export type OnlineRoom = {
-  id: string;
-  revision: number;
-  matchId: string;
-  title: string;
-  gameType: "omok";
-  capacity: 2;
-  status: RoomStatus;
-  players: RoomPlayer[];
-  game: OmokState;
-};
+import type { RoomSnapshot } from "@cafe/game-contracts";
+export type OnlineRoom = RoomSnapshot;
+export type { ActionRequest } from "@cafe/game-contracts";
 export type Membership = { room: OnlineRoom; playerId: string };
 export const errorMessages: Record<string, string> = {
   CANNOT_CLOSE_PLAYING:
@@ -20,12 +9,13 @@ export const errorMessages: Record<string, string> = {
   RESULT_SAVE_FAILED:
     "결과를 저장하지 못했어요. 잠시 후 같은 행동을 다시 시도해 주세요.",
   ROOM_NOT_FOUND: "방이 닫혔어요.",
-  ROOM_FULL: "이미 두 명이 입장했어요.",
+  UNKNOWN_GAME: "지원하지 않는 게임이에요.",
+  ROOM_FULL: "방의 모든 자리가 찼어요.",
   DUPLICATE_NAME: "다른 플레이어 이름을 입력해 주세요.",
   INVALID_NAME: "이름과 방 제목을 확인해 주세요.",
   NOT_A_PLAYER: "참가 정보가 유효하지 않아요. 다시 입장해 주세요.",
   HOST_ONLY: "방장만 할 수 있어요.",
-  NOT_READY: "두 명 모두 준비해야 시작할 수 있어요.",
+  NOT_READY: "모든 참가자가 준비해야 시작할 수 있어요.",
   WRONG_TURN: "상대의 차례예요.",
   STALE_MATCH: "이미 새로운 대국이에요. 다시 시도해 주세요.",
   STALE_STATE: "화면의 대국 상태가 바뀌었어요. 다시 시도해 주세요.",
@@ -62,8 +52,3 @@ export async function request<T>(
   }
   return response.json() as Promise<T>;
 }
-export type ActionRequest = {
-  action: OmokAction;
-  expectedVersion: number;
-  matchId: string;
-};

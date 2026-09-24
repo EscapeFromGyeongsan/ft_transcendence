@@ -1,3 +1,4 @@
+import { games } from "../games/registry";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   PLAYER_NAME_LIMIT,
@@ -19,6 +20,7 @@ export function CreateRoomDialog({
   const ref = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState("");
   const [hostName, setHostName] = useState(accountName ?? "");
+  const [gameType, setGameType] = useState<string>(games[0].id);
   const [error, setError] = useState("");
   useEffect(() => {
     const dialog = ref.current!;
@@ -31,7 +33,11 @@ export function CreateRoomDialog({
       setError("방 이름과 방장 이름을 공백 없이 입력해 주세요.");
       return;
     }
-    onCreate({ title: title.trim(), hostName: hostName.trim() });
+    onCreate({
+      title: title.trim(),
+      hostName: hostName.trim(),
+      ...(mode === "online" ? { gameType } : {}),
+    });
   }
   return (
     <dialog
@@ -86,8 +92,18 @@ export function CreateRoomDialog({
         </label>
         <label className="field">
           게임
-          <select defaultValue="omok">
-            <option value="omok">오목 · 2인 · 15×15 자유룰</option>
+          <select
+            value={gameType}
+            onChange={(event) => setGameType(event.target.value)}
+          >
+            {(mode === "online"
+              ? games
+              : games.filter((game) => game.id === "omok")
+            ).map((game) => (
+              <option key={game.id} value={game.id}>
+                {game.title} · {game.players} · {game.ruleLabel}
+              </option>
+            ))}
           </select>
         </label>
         <div className="room-form-note">

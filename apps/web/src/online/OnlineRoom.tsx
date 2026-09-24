@@ -1,6 +1,6 @@
 import { connectRoom } from "./connection";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { Board, coordinate } from "../games/omok/Board";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { getGamePresentation } from "../games/registry";
 import {
   request,
   type ActionRequest,
@@ -14,7 +14,6 @@ export function OnlineRoom({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
   const [pending, setPending] = useState(false);
-  const helpId = useId();
   const connection = useRef<ReturnType<typeof connectRoom> | null>(null);
   const acceptRoom = (value: Room) =>
     setRoom((previous) =>
@@ -57,11 +56,7 @@ export function OnlineRoom({ id }: { id: string }) {
     };
   }, [id]);
   const self = room?.players.find((player) => player.id === member?.playerId);
-  const myTurn = Boolean(
-    self &&
-    room?.status === "playing" &&
-    room.game.currentTurn === (self.seat === 0 ? "black" : "white"),
-  );
+  const presentation = room ? getGamePresentation(room.gameType) : undefined;
   const host = self?.seat === 0;
   async function perform<T>(
     method: string,
@@ -98,23 +93,6 @@ export function OnlineRoom({ id }: { id: string }) {
       setPending(false);
     }
   }
-  function move(x: number, y: number) {
-    if (!room || pending) return;
-    if (!myTurn) {
-      setError("상대의 차례예요.");
-      return;
-    }
-    void perform<Room>(
-      "POST",
-      "/action",
-      {
-        action: { type: "PLACE_STONE", x, y },
-        expectedVersion: room.game.stateVersion,
-        matchId: room.matchId,
-      } satisfies ActionRequest,
-      acceptRoom,
-    );
-  }
   return (
     <section className="online-room">
       <a className="back-link" href="#/online">
@@ -124,7 +102,7 @@ export function OnlineRoom({ id }: { id: string }) {
         <div>
           <div className="eyebrow">ONLINE TABLE</div>
           <h1>
-            {room?.title ?? "온라인 오목"}{" "}
+            {room?.title ?? "온라인 게임"}{" "}
             <span className="tag">멀티플레이</span>
           </h1>
           <p>
@@ -133,7 +111,7 @@ export function OnlineRoom({ id }: { id: string }) {
               : "서버에 연결 중이에요. 연결이 끊기면 자동으로 다시 시도합니다."}
           </p>
         </div>
-        <span className="room-rule">15 × 15 · 자유룰</span>
+        <span className="room-rule">{presentation?.ruleLabel}</span>
       </div>
       <p className="form-error" role="alert">
         {error}
@@ -164,10 +142,16 @@ export function OnlineRoom({ id }: { id: string }) {
             <div className="waiting-layout">
               <div className="seating-panel">
                 <div className="section-label">
-                  플레이어 자리 <span>{room.players.length}/2명</span>
+                  플레이어 자리{" "}
+                  <span>
+                    {room.players.length}/{room.capacity}명
+                  </span>
                 </div>
                 <div className="player-seats">
-                  {[0, 1].map((seat) => {
+                  {Array.from(
+                    { length: room.capacity },
+                    (_, index) => index,
+                  ).map((seat) => {
                     const player = room.players.find(
                       (value) => value.seat === seat,
                     );
@@ -175,7 +159,10 @@ export function OnlineRoom({ id }: { id: string }) {
                       <article className="seat" key={seat}>
                         <div className="seat-top">
                           <span>SEAT 0{seat + 1}</span>
-                          <span>{seat === 0 ? "방장 · 흑돌" : "백돌"}</span>
+                          <span>
+                            {presentation?.seatLabel(seat) ??
+                              (seat === 0 ? "방장" : `참가자 ${seat + 1}`)}
+                          </span>
                         </div>
                         <h2>
                           {player?.name ?? "빈자리"}
@@ -201,7 +188,7 @@ export function OnlineRoom({ id }: { id: string }) {
                     );
                   })}
                 </div>
-                {!self && room.players.length < 2 && (
+                {!self && room.players.length < room.capacity && (
                   <form className="guest-form" onSubmit={join}>
                     <p>로그인한 계정의 닉네임으로 입장해요.</p>
                     {!member && <a href="#/account">로그인 / 회원가입</a>}
@@ -213,10 +200,10 @@ export function OnlineRoom({ id }: { id: string }) {
                     </button>
                   </form>
                 )}
-                {!self && room.players.length === 2 && (
+                {!self && room.players.length === room.capacity && (
                   <p>방이 가득 찼어요. 관전할 수 있습니다.</p>
                 )}
-                {self?.seat === 1 && (
+                {self && self.seat !== 0 && (
                   <button
                     className="button quiet"
                     disabled={pending || !connected}
@@ -229,7 +216,7 @@ export function OnlineRoom({ id }: { id: string }) {
               <aside className="waiting-details">
                 <div className="start-panel">
                   <p>
-                    각자 자기 화면에서 준비해 주세요. 두 사람 모두 준비하면
+                    각자 자기 화면에서 준비해 주세요. 모든 참가자가 준비하면
                     방장이 대국을 시작합니다.
                   </p>
                   {host && (
@@ -238,7 +225,7 @@ export function OnlineRoom({ id }: { id: string }) {
                       disabled={
                         pending ||
                         !connected ||
-                        room.players.length !== 2 ||
+                        room.players.length !== room.capacity ||
                         !room.players.every((player) => player.ready)
                       }
                       onClick={() => void perform("POST", "/start")}
@@ -251,92 +238,35 @@ export function OnlineRoom({ id }: { id: string }) {
             </div>
           )}
           {room.status !== "waiting" && (
-            <div className="room-layout">
-              <section className="table-panel" aria-label="온라인 대국 테이블">
-                <div className="table-status">
-                  <div className="status-copy" role="status" aria-live="polite">
-                    <strong>
-                      {room.game.result
-                        ? room.game.result.kind === "draw"
-                          ? "무승부"
-                          : `${room.game.result.winner === "black" ? "흑" : "백"}돌 승리!`
-                        : `${room.game.currentTurn === "black" ? "흑" : "백"}돌 차례${myTurn ? " · 내 차례" : ""}`}
-                    </strong>
-                  </div>
-                  <span>{room.game.moves.length}수</span>
-                </div>
-                <Board game={room.game} onPlace={move} helpId={helpId} />
-                <p id={helpId} className="board-caption">
-                  {self
-                    ? myTurn
-                      ? "원하는 교차점을 선택하세요."
-                      : "상대의 수를 기다려 주세요."
-                    : "관전 중입니다."}
-                </p>
-              </section>
-              <aside className="room-sidebar">
-                <section className="side-panel">
-                  <div className="section-label">PLAYERS</div>
-                  {room.players.map((player) => (
-                    <div className="player" key={player.id}>
-                      <span
-                        className={`player-avatar ${player.seat === 0 ? "black" : "white"}`}
-                      >
-                        <i
-                          className={`mini-stone ${player.seat === 0 ? "black" : "white"}`}
-                        />
-                      </span>
-                      <strong>
-                        {player.name}
-                        {player.id === self?.id ? " (나)" : ""}
-                      </strong>
-                    </div>
-                  ))}
-                </section>
-                <section className="side-panel history-panel">
-                  <div className="section-label">
-                    착수 기록 <span>{room.game.moves.length}수</span>
-                  </div>
-                  <ol className="move-history">
-                    {room.game.moves.map((move, index) => (
-                      <li key={index}>
-                        {index + 1}. {move.stone === "black" ? "흑" : "백"}{" "}
-                        {coordinate(move.x, move.y)}
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-                {room.status === "playing" && self && (
-                  <button
-                    className="button quiet"
-                    disabled={pending || !connected}
-                    onClick={() => {
-                      if (!myTurn) {
-                        setError("자신의 차례에 기권할 수 있어요.");
-                        return;
-                      }
-                      if (window.confirm("정말 기권할까요?"))
-                        void perform("POST", "/action", {
-                          action: { type: "RESIGN" },
-                          expectedVersion: room.game.stateVersion,
-                          matchId: room.matchId,
-                        } satisfies ActionRequest);
-                    }}
-                  >
-                    기권하기
-                  </button>
-                )}
-                {room.status === "finished" && host && (
-                  <button
-                    className="button primary"
-                    disabled={pending || !connected}
-                    onClick={() => void perform("POST", "/rematch")}
-                  >
-                    재대국 준비하기
-                  </button>
-                )}
-              </aside>
-            </div>
+            <>
+              {presentation ? (
+                <presentation.OnlineGame
+                  room={room}
+                  self={self}
+                  pending={pending}
+                  connected={connected}
+                  onError={setError}
+                  onAction={(action) =>
+                    void perform("POST", "/action", {
+                      action,
+                      expectedVersion: room.game.stateVersion,
+                      matchId: room.matchId,
+                    } satisfies ActionRequest)
+                  }
+                />
+              ) : (
+                <p role="alert">이 게임의 화면은 아직 지원하지 않아요.</p>
+              )}
+              {room.status === "finished" && host && (
+                <button
+                  className="button primary"
+                  disabled={pending || !connected}
+                  onClick={() => void perform("POST", "/rematch")}
+                >
+                  재대국 준비하기
+                </button>
+              )}
+            </>
           )}
           {room.status === "finished" && self && (
             <a className="button secondary" href="#/history">

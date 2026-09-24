@@ -30,7 +30,11 @@ export async function openDatabase(
     };
   }
   try {
-    for (const file of ["001-auth.sql", "002-matches.sql"]) {
+    for (const file of [
+      "001-auth.sql",
+      "002-matches.sql",
+      "003-game-results.sql",
+    ]) {
       const migration = await readFile(
         new URL(`./${file}`, import.meta.url),
         "utf8",

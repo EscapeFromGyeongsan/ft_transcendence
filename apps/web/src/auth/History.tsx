@@ -1,3 +1,4 @@
+import { getGamePresentation } from "../games/registry";
 import { useEffect, useState } from "react";
 
 type HistoryData = {
@@ -10,13 +11,14 @@ type HistoryData = {
   };
   matches: {
     id: string;
+    gameType: string;
     roomTitle: string;
     opponent: string;
     startedAt: string;
     finishedAt: string;
     outcome: "win" | "loss" | "draw";
-    reason: "five" | "resignation" | "draw";
-    moveCount: number;
+    reason: string;
+    moveCount: number | null;
   }[];
   nextOffset: number | null;
 };
@@ -105,12 +107,10 @@ export function History() {
                   </time>
                 </p>
                 <p>
-                  {match.reason === "five"
-                    ? "오목 완성"
-                    : match.reason === "resignation"
-                      ? "기권"
-                      : "무승부"}{" "}
-                  · {match.moveCount}수
+                  {getGamePresentation(match.gameType)?.resultLabel(
+                    match.reason,
+                  ) ?? match.reason}
+                  {match.moveCount !== null && <> · {match.moveCount}수</>}
                 </p>
               </article>
             ))}

@@ -4,7 +4,6 @@ import Fastify, { type FastifyRequest } from "fastify";
 import { saveResult, history } from "./history.ts";
 import websocket from "@fastify/websocket";
 import { RoomError, RoomStore } from "./rooms.ts";
-import type { OmokAction } from "@cafe/omok";
 
 export async function buildApp(
   store = new RoomStore(),
@@ -83,8 +82,9 @@ export async function buildApp(
     additionalProperties: false,
   });
   const name = { type: "string", minLength: 1, maxLength: 16 };
+  app.get("/api/games", async () => store.registry.list());
   app.get("/api/rooms", async () => store.list());
-  app.post<{ Body: { title: string; hostName: string } }>(
+  app.post<{ Body: { title: string; hostName: string; gameType?: string } }>(
     "/api/rooms",
     {
       schema: {
@@ -92,6 +92,7 @@ export async function buildApp(
           {
             title: { type: "string", minLength: 1, maxLength: 40 },
             hostName: name,
+            gameType: { type: "string", minLength: 1, maxLength: 64 },
           },
           auth ? ["title"] : ["title", "hostName"],
         ),
@@ -101,10 +102,22 @@ export async function buildApp(
       if (!auth)
         return reply
           .code(201)
-          .send(store.create(req.body.title, req.body.hostName));
+          .send(
+            store.create(
+              req.body.title,
+              req.body.hostName,
+              undefined,
+              req.body.gameType,
+            ),
+          );
       await auth.guard(req);
       const user = await requireUser(req);
-      const created = store.create(req.body.title, user.display_name, user.id);
+      const created = store.create(
+        req.body.title,
+        user.display_name,
+        user.id,
+        req.body.gameType,
+      );
       return reply.code(201).send({ room: created.room, playerId: user.id });
     },
   );
@@ -228,21 +241,16 @@ export async function buildApp(
                 return;
               }
               case "action":
-                if (
-                  !data.action ||
-                  !["PLACE_STONE", "RESIGN"].includes(data.action.type)
-                )
-                  throw new RoomError(400, "INVALID_REQUEST");
                 result = store.previewAction(
                   id,
                   token,
-                  data.action as OmokAction,
+                  data.action,
                   data.expectedVersion,
                   data.matchId,
                 );
                 if (
                   options &&
-                  (result as ReturnType<RoomStore["get"]>).game.result
+                  (result as ReturnType<RoomStore["get"]>).result
                 ) {
                   try {
                     await saveResult(
