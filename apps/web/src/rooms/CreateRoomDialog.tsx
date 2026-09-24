@@ -9,14 +9,16 @@ export function CreateRoomDialog({
   onCreate,
   onClose,
   mode = "local",
+  accountName,
 }: {
   onCreate: (input: CreateRoomInput) => void | Promise<void>;
   onClose: () => void;
   mode?: "local" | "online";
+  accountName?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState("");
-  const [hostName, setHostName] = useState("");
+  const [hostName, setHostName] = useState(accountName ?? "");
   const [error, setError] = useState("");
   useEffect(() => {
     const dialog = ref.current!;
@@ -72,6 +74,7 @@ export function CreateRoomDialog({
           방장 이름
           <input
             required
+            readOnly={mode === "online"}
             maxLength={PLAYER_NAME_LIMIT}
             value={hostName}
             onChange={(event) => {

@@ -9,6 +9,21 @@ test("two browsers join, synchronize turns, reconnect and finish a match", async
       : devices["Desktop Chrome"];
   const hostContext = await browser.newContext(options);
   const guestContext = await browser.newContext(options);
+  const origin = testInfo.project.use.baseURL!;
+  for (const [context, name] of [
+    [hostContext, "흑돌"],
+    [guestContext, "백돌"],
+  ] as const) {
+    const response = await context.request.post(`${origin}/api/auth/register`, {
+      headers: { origin },
+      data: {
+        email: `${name === "흑돌" ? "black" : "white"}-${testInfo.project.name}-${Date.now()}@example.com`,
+        password: "test password long enough",
+        displayName: name,
+      },
+    });
+    expect(response.status()).toBe(201);
+  }
   await guestContext.addInitScript(() => {
     const OriginalWebSocket = window.WebSocket;
     const sockets: WebSocket[] = [];
@@ -32,7 +47,11 @@ test("two browsers join, synchronize turns, reconnect and finish a match", async
     await dialog
       .getByLabel(/^방 이름/)
       .fill(`두 브라우저 대국 ${testInfo.project.name}`);
-    await dialog.getByLabel("방장 이름").fill("흑돌");
+    await expect(dialog.getByLabel("방장 이름")).toHaveValue("흑돌");
+    await expect(dialog.getByLabel("방장 이름")).toHaveAttribute(
+      "readonly",
+      "",
+    );
     await dialog
       .getByRole("button", { name: "방 만들기 ↗", exact: true })
       .click();
@@ -48,9 +67,18 @@ test("two browsers join, synchronize turns, reconnect and finish a match", async
       .filter({ hasText: `두 브라우저 대국 ${testInfo.project.name}` })
       .getByRole("link", { name: "방 열기" })
       .click();
-    await guest.getByLabel("참가할 이름").fill("백돌");
+
     await guest.getByRole("button", { name: "입장하기" }).click();
     await expect(host.getByRole("heading", { name: /백돌/ })).toBeVisible();
+    const anotherTab = await hostContext.newPage();
+    await anotherTab.goto(host.url());
+    await expect(
+      anotherTab.getByRole("heading", { name: "흑돌 (나)", exact: true }),
+    ).toBeVisible();
+    await expect(
+      anotherTab.getByRole("button", { name: "입장하기" }),
+    ).toHaveCount(0);
+    await anotherTab.close();
     await host.getByRole("button", { name: "준비하기" }).click();
     await expect(
       host.getByRole("button", { name: /대국 시작하기/ }),
@@ -100,6 +128,15 @@ test("two browsers join, synchronize turns, reconnect and finish a match", async
     host.once("dialog", (dialog) => void dialog.accept());
     await host.getByRole("button", { name: "기권하기" }).click();
     await expect(guest.getByRole("status")).toContainText("백돌 승리");
+    const historyTab = await hostContext.newPage();
+    await historyTab.goto(`${origin}/#/history`);
+    await expect(historyTab.getByLabel("전적 요약")).toContainText("0승 · 1패");
+    await expect(
+      historyTab.getByRole("heading", { name: "패배 · 상대 백돌" }),
+    ).toBeVisible();
+    await historyTab.reload();
+    await expect(historyTab.getByLabel("전적 요약")).toContainText("총 1경기");
+    await historyTab.close();
     await host.getByRole("button", { name: "재대국 준비하기" }).click();
     await expect(guest.getByRole("button", { name: "준비하기" })).toBeVisible();
     host.once("dialog", (dialog) => void dialog.accept());

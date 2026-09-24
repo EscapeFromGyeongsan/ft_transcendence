@@ -168,6 +168,12 @@ describe("Fastify HTTP and WebSocket boundary", () => {
       { action: move, expectedVersion: 0, matchId: oldMatch },
       "STALE_MATCH",
     );
+    const current = (await app.inject(`/api/rooms/${id}`)).json();
+    await a.command("action", host.token, {
+      action: { type: "RESIGN" },
+      expectedVersion: 0,
+      matchId: current.matchId,
+    });
     await a.command("close", host.token);
     await reconnected.take("closed");
     const missing = client(url);

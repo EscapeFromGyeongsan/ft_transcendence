@@ -50,7 +50,7 @@ export function Lounge({ hasGame }: { hasGame: boolean }) {
             {hasGame ? "로컬 오목 이어하기" : "한 화면에서 둘이 · 로컬 오목"} →
           </a>
           <div className="hero-footnote">
-            <span>회원가입 없이</span>
+            <span>내 계정으로</span>
             <i />
             <span>각자 접속해 함께</span>
           </div>

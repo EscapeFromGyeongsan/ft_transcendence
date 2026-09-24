@@ -191,4 +191,5 @@ export async function registerAuth(
       return { ok: true };
     },
   );
+  return { currentUser, guard };
 }

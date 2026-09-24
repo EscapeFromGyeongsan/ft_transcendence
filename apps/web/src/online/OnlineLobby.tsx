@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 import { CreateRoomDialog } from "../rooms/CreateRoomDialog";
-import {
-  request,
-  saveMembership,
-  type Membership,
-  type OnlineRoom,
-} from "./api";
+import { request, type Membership, type OnlineRoom } from "./api";
 
 export function OnlineLobby() {
+  const [user, setUser] = useState<{ displayName: string } | null>(null);
   const [rooms, setRooms] = useState<OnlineRoom[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +20,14 @@ export function OnlineLobby() {
         .catch((reason: Error) => {
           if (alive) setError(reason.message);
         });
+    void fetch("/api/auth/me")
+      .then((response) => response.json())
+      .then((value) => {
+        if (alive) setUser(value.user);
+      })
+      .catch(() => {
+        if (alive) setError("로그인 상태를 확인하지 못했어요.");
+      });
     void refresh();
     const timer = setInterval(refresh, 3000);
     return () => {
@@ -41,12 +45,18 @@ export function OnlineLobby() {
           </h1>
           <p>각자 다른 브라우저에서 같은 방에 접속해 대국해요.</p>
         </div>
-        <button className="button primary" onClick={() => setCreating(true)}>
+        <button
+          className="button primary"
+          onClick={() =>
+            user ? setCreating(true) : (window.location.hash = "/account")
+          }
+        >
           ＋ 온라인 방 만들기
         </button>
       </div>
       <p className="lobby-notice">
-        방 링크를 친구에게 보내세요. 계정 없이 이름만 정해 입장할 수 있어요.
+        로그인한 계정으로 방을 만들고 참가해요. 다른 사람과 대국하려면 각각의
+        계정으로 로그인해 주세요.
       </p>
       <p className="form-error" role="alert">
         {error}
@@ -83,11 +93,11 @@ export function OnlineLobby() {
       {creating && (
         <CreateRoomDialog
           mode="online"
+          accountName={user?.displayName}
           onClose={() => setCreating(false)}
           onCreate={async (input) => {
             try {
               const created = await request<Membership>("", "POST", input);
-              saveMembership(created.room.id, created);
               setCreating(false);
               window.location.hash = `/online/${created.room.id}`;
             } catch (reason) {

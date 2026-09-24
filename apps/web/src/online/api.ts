@@ -12,8 +12,13 @@ export type OnlineRoom = {
   players: RoomPlayer[];
   game: OmokState;
 };
-export type Membership = { room: OnlineRoom; token: string; playerId: string };
+export type Membership = { room: OnlineRoom; playerId: string };
 export const errorMessages: Record<string, string> = {
+  CANNOT_CLOSE_PLAYING:
+    "진행 중인 대국은 종료하거나 기권한 뒤 방을 닫아 주세요.",
+  LOGIN_REQUIRED: "로그인이 필요해요. 내 계정에서 로그인해 주세요.",
+  RESULT_SAVE_FAILED:
+    "결과를 저장하지 못했어요. 잠시 후 같은 행동을 다시 시도해 주세요.",
   ROOM_NOT_FOUND: "방이 닫혔어요.",
   ROOM_FULL: "이미 두 명이 입장했어요.",
   DUPLICATE_NAME: "다른 플레이어 이름을 입력해 주세요.",
@@ -56,33 +61,6 @@ export async function request<T>(
     );
   }
   return response.json() as Promise<T>;
-}
-const key = (id: string) => `cafe-online-room-${id}`;
-export function saveMembership(
-  id: string,
-  value: Pick<Membership, "token" | "playerId">,
-) {
-  sessionStorage.setItem(key(id), JSON.stringify(value));
-}
-export function membership(
-  id: string,
-): Pick<Membership, "token" | "playerId"> | null {
-  try {
-    const value = JSON.parse(sessionStorage.getItem(key(id)) ?? "null") as Pick<
-      Membership,
-      "token" | "playerId"
-    > | null;
-    return value &&
-      typeof value.token === "string" &&
-      typeof value.playerId === "string"
-      ? value
-      : null;
-  } catch {
-    return null;
-  }
-}
-export function forgetMembership(id: string) {
-  sessionStorage.removeItem(key(id));
 }
 export type ActionRequest = {
   action: OmokAction;

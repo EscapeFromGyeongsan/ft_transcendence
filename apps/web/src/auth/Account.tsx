@@ -127,11 +127,15 @@ export function Account() {
             <dd>{user.displayName}</dd>
           </dl>
           <p>
-            계정은 저장되어 다음 방문에도 로그인할 수 있어요. 현재 대국은 임시
-            참가자로 진행되며, 계정별 전적은 아직 제공하지 않아요.
+            로그인한 계정으로 온라인 대국에 참가할 수 있어요. 같은 브라우저의
+            탭은 같은 계정을 사용합니다. 두 사람의 대국은 별도 브라우저나
+            프로필에서 로그인해 주세요.
           </p>
           <a className="button primary" href="#/rooms">
             게임 로비로 이동
+          </a>
+          <a className="button secondary" href="#/history">
+            내 전적 보기
           </a>
           <button
             className="button secondary"

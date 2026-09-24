@@ -11,6 +11,8 @@ export type RoomSnapshot = {
   id: string;
   revision: number;
   matchId: string;
+  startedAt: string | null;
+  finishedAt: string | null;
   title: string;
   gameType: "omok";
   capacity: 2;
@@ -74,33 +76,44 @@ export class RoomStore {
   identity(id: string, token: string) {
     return this.player(this.room(id), token).id;
   }
-  create(titleValue: unknown, nameValue: unknown) {
+  create(titleValue: unknown, nameValue: unknown, accountId?: string) {
     const title = clean(titleValue, 40),
       name = clean(nameValue, 16);
     const id = randomUUID(),
       token = randomUUID(),
-      playerId = randomUUID();
+      playerId = accountId ?? randomUUID();
     const snapshot: RoomSnapshot = {
       id,
       revision: 0,
       matchId: randomUUID(),
       title,
+      startedAt: null,
+      finishedAt: null,
       gameType: "omok",
       capacity: 2,
       status: "waiting",
       players: [{ id: playerId, name, seat: 0, ready: false }],
       game: createInitialState(),
     };
-    this.rooms.set(id, { snapshot, tokens: new Map([[token, playerId]]) });
+    this.rooms.set(id, {
+      snapshot,
+      tokens: new Map([[accountId ?? token, playerId]]),
+    });
     this.changed(id);
     return { room: this.get(id), token, playerId };
   }
-  join(id: string, nameValue: unknown) {
+  join(id: string, nameValue: unknown, accountId?: string) {
     const name = clean(nameValue, 16),
       room = this.room(id);
+    if (
+      accountId &&
+      room.snapshot.players.some((player) => player.id === accountId)
+    )
+      return { room: room.snapshot, playerId: accountId, token: accountId };
     if (room.snapshot.status !== "waiting" || room.snapshot.players.length >= 2)
       fail(409, "ROOM_FULL");
     if (
+      !accountId &&
       room.snapshot.players.some(
         (player) =>
           player.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
@@ -108,7 +121,7 @@ export class RoomStore {
     )
       fail(409, "DUPLICATE_NAME");
     const token = randomUUID(),
-      playerId = randomUUID();
+      playerId = accountId ?? randomUUID();
     room.snapshot = {
       ...room.snapshot,
       players: [
@@ -116,7 +129,7 @@ export class RoomStore {
         { id: playerId, name, seat: 1, ready: false },
       ],
     };
-    room.tokens.set(token, playerId);
+    room.tokens.set(accountId ?? token, playerId);
     this.changed(id);
     return { room: room.snapshot, token, playerId };
   }
@@ -143,11 +156,15 @@ export class RoomStore {
       !room.snapshot.players.every((player) => player.ready)
     )
       fail(409, "NOT_READY");
-    room.snapshot = { ...room.snapshot, status: "playing" };
+    room.snapshot = {
+      ...room.snapshot,
+      status: "playing",
+      startedAt: new Date().toISOString(),
+    };
     this.changed(id);
     return room.snapshot;
   }
-  action(
+  previewAction(
     id: string,
     token: string,
     action: OmokAction,
@@ -167,13 +184,29 @@ export class RoomStore {
     );
     if (!result.ok) throw new RoomError(409, result.reason);
     const nextState = result.nextState;
-    room.snapshot = {
+    return {
       ...room.snapshot,
       game: nextState,
-      status: nextState.result ? "finished" : "playing",
+      status: nextState.result ? ("finished" as const) : ("playing" as const),
+      finishedAt: nextState.result ? new Date().toISOString() : null,
     };
+  }
+  commitAction(id: string, next: RoomSnapshot) {
+    this.room(id).snapshot = next;
     this.changed(id);
-    return room.snapshot;
+    return this.get(id);
+  }
+  action(
+    id: string,
+    token: string,
+    action: OmokAction,
+    expectedVersion: unknown,
+    matchId: unknown,
+  ) {
+    return this.commitAction(
+      id,
+      this.previewAction(id, token, action, expectedVersion, matchId),
+    );
   }
   rematch(id: string, token: string) {
     const room = this.room(id),
@@ -183,6 +216,8 @@ export class RoomStore {
     room.snapshot = {
       ...room.snapshot,
       status: "waiting",
+      startedAt: null,
+      finishedAt: null,
       matchId: randomUUID(),
       game: createInitialState(),
       players: room.snapshot.players.map((player) => ({
@@ -211,6 +246,7 @@ export class RoomStore {
   close(id: string, token: string) {
     const room = this.room(id);
     if (this.player(room, token).seat !== 0) fail(403, "HOST_ONLY");
+    if (room.snapshot.status === "playing") fail(409, "CANNOT_CLOSE_PLAYING");
     this.rooms.delete(id);
     this.changed(id);
   }

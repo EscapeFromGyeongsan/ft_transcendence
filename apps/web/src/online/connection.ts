@@ -4,7 +4,7 @@ import { errorMessages, type OnlineRoom } from "./api";
 export function connectRoom(
   id: string,
   callbacks: {
-    snapshot: (room: OnlineRoom) => void;
+    snapshot: (room: OnlineRoom, playerId: string | null) => void;
     connected: (value: boolean) => void;
     closed: () => void;
   },
@@ -38,7 +38,7 @@ export function connectRoom(
       if (stopped) return;
       const data = JSON.parse(event.data);
       if (data.type === "snapshot" || data.type === "ack") {
-        callbacks.snapshot(data.room);
+        callbacks.snapshot(data.room, data.playerId ?? null);
         callbacks.connected(true);
         attempt = 0;
       }
@@ -70,7 +70,7 @@ export function connectRoom(
   };
   open();
   return {
-    command(type: string, token: string, data?: unknown): Promise<OnlineRoom> {
+    command(type: string, data?: unknown): Promise<OnlineRoom> {
       if (stopped || socket.readyState !== WebSocket.OPEN)
         return Promise.reject(new Error("서버 연결을 기다려 주세요."));
       const requestId = crypto.randomUUID();
@@ -85,9 +85,7 @@ export function connectRoom(
           socket.close();
         }, 10000);
         pending.set(requestId, { resolve, reject, timer });
-        socket.send(
-          JSON.stringify({ ...(data as object), type, token, requestId }),
-        );
+        socket.send(JSON.stringify({ ...(data as object), type, requestId }));
       });
     },
     dispose() {

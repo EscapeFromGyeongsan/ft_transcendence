@@ -30,15 +30,16 @@ export async function openDatabase(
     };
   }
   try {
-    // Idempotent initial migration. Future changes must be separate, versioned migrations.
-    const migration = await readFile(
-      new URL("./001-auth.sql", import.meta.url),
-      "utf8",
-    );
-    for (const statement of migration
-      .split(";")
-      .filter((value) => value.trim()))
-      await db.query(statement);
+    for (const file of ["001-auth.sql", "002-matches.sql"]) {
+      const migration = await readFile(
+        new URL(`./${file}`, import.meta.url),
+        "utf8",
+      );
+      for (const statement of migration
+        .split(";")
+        .filter((value) => value.trim()))
+        await db.query(statement);
+    }
     return db;
   } catch (error) {
     await db.close();
