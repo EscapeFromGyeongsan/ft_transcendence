@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-본 문서화 체계는 상위 실행 계획인 **「사이버 보드게임 카페: 5인 실행 로드맵」**을 기준으로 프로젝트의 요구사항, 설계, 구현 계약, 테스트, 평가 증거와 팀별 기여를 일관되게 관리하기 위한 것이다.
+본 문서화 체계는 실행 계획인 **「사이버 보드게임 카페: 5인 실행 로드맵」**의 일정·범위를 바탕으로 프로젝트의 요구사항, 설계, 구현 계약, 테스트, 평가 증거와 팀별 기여를 일관되게 관리하기 위한 것이다.
 
 문서화의 목적은 다음과 같다.
 
@@ -16,18 +16,13 @@
 
 문서 흐름:
 
-```text
-Requirement
-    ↓
-Design
-    ↓
-Implementation Contract
-    ↓
-Test Scenario
-    ↓
-Evidence
-    ↓
-Evaluation
+```mermaid
+flowchart TD
+    A[Requirement] --> B[Design]
+    B --> C[Implementation Contract]
+    C --> D[Test Scenario]
+    D --> E[Evidence]
+    E --> F[Evaluation]
 ```
 
 ---
@@ -36,14 +31,16 @@ Evaluation
 
 문서 간 내용이 충돌하면 다음 우선순위를 따른다.
 
-1. 사이버 보드게임 카페: 5인 실행 로드맵
-2. ft_transcendence v21.1 Subject
-3. 추후 확인되는 학교 최신 Evaluation Sheet
-4. SRS
-5. SDS
-6. 기타 상세 문서
+1. ft_transcendence v21.1 Subject
+2. 추후 확인되는 학교 최신 Evaluation Sheet
+3. SRS
+4. SDS
+5. 기타 상세 문서 (GAME_RULES, TEST_PLAN, contracts, evaluation 등)
+6. 사이버 보드게임 카페: 5인 실행 로드맵
 
-학교 최신 Evaluation Sheet가 확인되어 상위 문서와 충돌하면 차이를 기록하고 상위 로드맵을 먼저 수정한 뒤 하위 문서를 갱신한다.
+- 로드맵은 일정·담당·범위를 정하는 러프한 계획이다. 요구사항·설계·규칙·테스트의 세부 내용은 각 상세 문서가 원본이며, 로드맵과 다르면 상세 문서를 따른다.
+- 이 명세서는 각 문서에 무엇을 써야 하는지(구성·항목)를 정의한다. 실제 내용은 각 문서에 둔다.
+- 학교 최신 Evaluation Sheet가 확인되어 기존 문서와 충돌하면 차이를 기록하고 관련 문서를 갱신한다.
 
 ---
 
@@ -113,6 +110,7 @@ Evaluation
 
 ```text
 README.md
+CONTRIBUTING.md
 
 Document/
 ├── roadmap.md
@@ -146,6 +144,19 @@ evidence/
         ├── screen.png 또는 demo.mp4
         └── changes.md
 ```
+
+### 작성 규칙
+
+- 모든 다이어그램(ERD, Class, FSM, Sequence, Use Case, Deployment 등)은 Mermaid로 작성한다.
+- 이미지를 쓸 때는 Mermaid 코드로 생성한 SVG만 사용한다. 다른 형식의 이미지, 직접 그린 이미지, ASCII 그림은 쓰지 않는다.
+- SVG를 넣은 경우에도 원본 Mermaid 코드 블록을 같은 문서에 함께 둔다.
+
+### 공유 방식
+
+- 문서는 GitHub 저장소와 Notion에 모두 올린다.
+- 공유(리뷰·피드백·변경 이력)는 GitHub에서 한다. 문서 변경도 이슈 → 커밋 → PR 흐름을 따른다 (`CONTRIBUTING.md`).
+- 확인(열람)은 Notion에서 한다.
+- 두 곳의 내용이 다르면 GitHub 버전을 기준으로 한다.
 
 ---
 
@@ -183,6 +194,36 @@ README는 영어로 작성한다.
 ## 7. SRS — Software Requirements Specification
 
 SRS는 **무엇을 만들어야 하는가**를 정의한다.
+
+### 기준
+
+ISO/IEC/IEEE 29148:2018의 SRS 구성을 따른다 (IEEE 830-1998의 후속 표준).
+
+```text
+1. Introduction
+   1.1 Purpose
+   1.2 Scope
+   1.3 Product overview
+       - Product perspective (system / user / software / communications interfaces)
+       - Product functions
+       - User characteristics
+       - Limitations
+   1.4 Definitions
+2. References
+3. Specified requirements
+   3.1 External interfaces
+   3.2 Functions
+   3.3 Usability requirements
+   3.4 Performance requirements
+   3.5 Logical database requirements
+   3.6 Design constraints
+   3.7 Standards compliance
+   3.8 Software system attributes (reliability, availability, security, maintainability, portability)
+4. Verification
+5. Appendices (assumptions and dependencies, acronyms)
+```
+
+아래 기능 요구사항은 3.2 Functions에, 비기능 요구사항은 3.3~3.8에 배치한다. 각 요구사항에는 ID를 붙이고 4. Verification에서 TEST_PLAN의 테스트 ID와 연결한다.
 
 ### 기능 요구사항
 
@@ -289,30 +330,15 @@ Use Case:
 
 ## 9. GAME_RULES.md
 
-기본 규칙:
+게임 규칙과 결과·통계 정책을 정의한다. 내용: [GAME_RULES.md](GAME_RULES.md)
 
-- Board Size: 15×15
-- Black First
-- Black / White Alternate
-- 가로/세로/대각선 5개 이상 연속 시 승리
-- Forbidden Moves 없음
-- Undo 없음
+포함 항목:
 
-종료 유형:
-
-- WIN
-- RESIGN
-- DISCONNECT_FORFEIT
-- DRAW
-- INVALIDATED
-
-통계 정책:
-
-- 무효 경기는 승률/진행도/리더보드에서 제외
-- 무승부는 완료 경기 수에 포함
-- 승률 = wins / completed_games
-- 리더보드 = 승수 기준
-- 동률: nickname → userId 순
+- 오목 기본 규칙
+- 종료 유형
+- 연결 끊김 처리
+- 통계 정책
+- 업적·진행도
 
 ---
 
@@ -340,22 +366,45 @@ SDS는 **어떻게 구현할 것인가**를 정의한다.
 16. Deployment Design
 17. Technical Decisions
 
+### 기준
+
+IEEE 1016-2009 (Software Design Descriptions)를 따른다.
+
+```text
+1. Frontmatter (date, status, scope, authorship, references, glossary, change history)
+2. Design stakeholders and concerns
+3. Design views (viewpoint별 1개 이상)
+4. Design rationale
+```
+
+위 구성 항목은 다음 design viewpoint에 배치한다.
+
+| IEEE 1016 viewpoint | SDS 구성 항목 | 산출물 |
+|---|---|---|
+| Context | 1. System Architecture | Use Case Diagram, System Architecture |
+| Composition | 2. Frontend Architecture, 3. Backend Architecture, 4. Domain Boundary | 플랫폼 경계 (12장) |
+| Logical | 6. Class Design | Class Diagram |
+| Information | 5. Database Design, 14. Statistics Design | ERD |
+| Interface | 8. API Contract, 9. WebSocket Contract | contracts.md |
+| Interaction | 11. Authentication Design, 13. Reconnection Design | Sequence Diagram |
+| State dynamics | 7. Game FSM | Game FSM |
+| Algorithm | 10. Command / Version Model, 12. Concurrency Design | 동시성 설계 (18장) |
+| Resource | 16. Deployment Design | Deployment Diagram |
+
+- 15. Security Design은 viewpoint가 아니라 2. Design stakeholders and concerns에 관심사로 기록하고, 관련 view에서 다룬다.
+- 17. Technical Decisions는 4. Design rationale에 기록한다.
+
 ---
 
 ## 11. System Architecture
 
-```text
-Browser
-   │
- HTTPS / WSS
-   │
- Nginx
-  /   \
-Frontend Backend
-          │
-         ORM
-          │
-     PostgreSQL
+```mermaid
+flowchart TD
+    Browser -->|HTTPS / WSS| Nginx
+    Nginx --> Frontend
+    Nginx --> Backend
+    Backend --> ORM
+    ORM --> PostgreSQL
 ```
 
 ---
@@ -465,27 +514,19 @@ Frontend Backend
 
 핵심 관계만 표시한다.
 
-```text
-AuthRouter
-   ↓
-AuthService
-   ↓
-UserRepository
+```mermaid
+classDiagram
+    AuthRouter --> AuthService
+    AuthService --> UserRepository
 
-GameWebSocketHandler
-   ↓
-GameSessionManager
-   ↓
-GameService
-   ├── GameEngine
-   ├── GameRepository
-   └── CommandRepository
+    GameWebSocketHandler --> GameSessionManager
+    GameSessionManager --> GameService
+    GameService --> GameEngine
+    GameService --> GameRepository
+    GameService --> CommandRepository
 
-StatisticsRouter
-   ↓
-StatisticsService
-   ↓
-GameRepository
+    StatisticsRouter --> StatisticsService
+    StatisticsService --> GameRepository
 ```
 
 모든 DTO나 Utility는 넣지 않는다.
@@ -494,26 +535,16 @@ GameRepository
 
 ## 16. Game FSM
 
-```text
-WAITING
-   │ opponent joins
-   ▼
-READY
-   │ start
-   ▼
-PLAYING
-   │
-   ├── win / draw / resign ──────▶ FINISHED
-   │
-   └── disconnect
-          ▼
-      PAUSED
-       │    │
-       │    └── timeout ─────────▶ FINISHED
-       │
-       └── reconnect
-              ▼
-           PLAYING
+```mermaid
+stateDiagram-v2
+    [*] --> WAITING
+    WAITING --> READY: opponent joins
+    READY --> PLAYING: start
+    PLAYING --> FINISHED: win / draw / resign
+    PLAYING --> PAUSED: disconnect
+    PAUSED --> PLAYING: reconnect
+    PAUSED --> FINISHED: timeout
+    FINISHED --> [*]
 ```
 
 각 Transition:
@@ -534,44 +565,51 @@ PLAYING
 
 ### 정상 착수
 
-```text
-Player
-→ Frontend
-→ WebSocket
-→ Game Session
-→ Game Service
-→ Game Engine
-→ Repository
-→ DB
-→ Broadcast
-→ Both Players
+```mermaid
+sequenceDiagram
+    actor Player
+    participant Frontend
+    participant WebSocket
+    participant Session as Game Session
+    participant Service as Game Service
+    participant Engine as Game Engine
+    participant Repository
+    participant DB
+    Player->>Frontend: place stone
+    Frontend->>WebSocket: command
+    WebSocket->>Session: command
+    Session->>Service: execute
+    Service->>Engine: validate / apply
+    Service->>Repository: save
+    Repository->>DB: commit
+    Session-->>Player: broadcast to both players
 ```
 
 처리 원칙:
 
-```text
-Client Request
-→ Server Validation
-→ State Transition
-→ DB Commit
-→ Broadcast
+```mermaid
+flowchart LR
+    A[Client Request] --> B[Server Validation]
+    B --> C[State Transition]
+    C --> D[DB Commit]
+    D --> E[Broadcast]
 ```
 
 ### Disconnect / Reconnect
 
-```text
-Connection Lost
-→ Detect Disconnect
-→ Pause
-→ Start Timeout
-→ Notify Opponent
-→ Reconnect
-→ Authenticate
-→ Validate Participant
-→ Restore Subscription
-→ Load Snapshot
-→ Sync stateVersion
-→ Resume
+```mermaid
+flowchart TD
+    A[Connection Lost] --> B[Detect Disconnect]
+    B --> C[Pause]
+    C --> D[Start Timeout]
+    D --> E[Notify Opponent]
+    E --> F[Reconnect]
+    F --> G[Authenticate]
+    G --> H[Validate Participant]
+    H --> I[Restore Subscription]
+    I --> J[Load Snapshot]
+    J --> K[Sync stateVersion]
+    K --> L[Resume]
 ```
 
 ---
@@ -583,13 +621,11 @@ Connection Lost
 
 ### stateVersion
 
-```text
-expectedVersion == currentVersion
-→ 처리 가능
-
-expectedVersion != currentVersion
-→ Conflict
-→ 최신 상태 반환
+```mermaid
+flowchart TD
+    A{expectedVersion == currentVersion} -->|yes| B[처리 가능]
+    A -->|no| C[Conflict]
+    C --> D[최신 상태 반환]
 ```
 
 ### Result Finalization
@@ -634,16 +670,12 @@ Server → Client:
 
 ## 20. Deployment Diagram
 
-```text
-Client Browser
-      │
- HTTPS / WSS
-      │
-    Nginx
-    /   \
-Frontend Backend
-            │
-        PostgreSQL
+```mermaid
+flowchart TD
+    Client[Client Browser] -->|HTTPS / WSS| Nginx
+    Nginx --> Frontend
+    Nginx --> Backend
+    Backend --> PostgreSQL
 ```
 
 Docker Compose:
@@ -669,59 +701,14 @@ DB Port는 외부 비공개를 기본으로 한다.
 
 ## 21. TEST_PLAN.md
 
-테스트 단계:
+테스트 단계·검증 환경·공식 시스템 테스트를 정의한다. 내용: [TEST_PLAN.md](TEST_PLAN.md)
 
-- Unit Test
-- Integration Test
-- System / E2E Test
+포함 항목:
 
-### Unit
-- 정상 착수
-- 차례 위반
-- 중복 위치
-- 가로/세로/대각 승리
-- 종료 판정
-- 통계 계산
-
-### Integration
-- Authentication → DB
-- Game Command → Engine → Persistence
-- WebSocket → Broadcast
-- Game Result → Statistics
-
-### 공식 시스템 테스트
-
-상위 로드맵의 ID를 그대로 사용한다.
-
-- T00 실행
-- T01 인증
-- T02 프로필
-- T03 한 판
-- T04 복구·지연
-- T05 경합·격리
-- T06 소셜
-- T07 종료 예외
-- T08 통계
-- T09 필수 UI
-- T10 이해·문서
-
-각 Test 기록:
-
-- Test ID
-- Requirement ID
-- Module ID
-- Precondition
-- Accounts
-- Input
-- Steps
-- Expected
-- Actual
-- Evidence
-- Tester
-- Reviewer
-- Date
-- Commit SHA
-- Result
+- 테스트 단계 (Unit / Integration / System·E2E)
+- 검증 환경과 테스트 계정
+- 공식 시스템 테스트 T00~T10 (로드맵의 ID를 그대로 사용)
+- 테스트 기록 항목
 
 ---
 
@@ -729,18 +716,13 @@ DB Port는 외부 비공개를 기본으로 한다.
 
 요구사항부터 평가 증거까지 연결한다.
 
-```text
-Subject Requirement
-↓
-SRS Requirement
-↓
-Module
-↓
-Implementation
-↓
-Test Scenario
-↓
-Evidence
+```mermaid
+flowchart TD
+    A[Subject Requirement] --> B[SRS Requirement]
+    B --> C[Module]
+    C --> D[Implementation]
+    D --> E[Test Scenario]
+    E --> F[Evidence]
 ```
 
 예:
@@ -755,38 +737,13 @@ Evidence
 
 ## 23. Module Matrix
 
-### MOD-03 User Interaction
-- Basic Chat
-- Profile Viewing
-- Add Friend
-- Remove Friend
-- Friends List
+선택 모듈 14점의 책임·시나리오·세부 조건을 정의한다. 내용: [evaluation/module-matrix.md](evaluation/module-matrix.md)
 
-### MOD-04 Standard User Management
-- Profile Update
-- Avatar Upload
-- Default Avatar
-- Friend Management
-- Friend Online Status
-- Profile Page
+포함 항목:
 
-### MOD-08 Game Statistics
-- Wins
-- Losses
-- Win Rate
-- Match History
-- Date
-- Result
-- Opponent
-- Achievement
-- Progression
-- Leaderboard Integration
-
-최소 구현:
-
-- Achievement: First Win
-- Progression: 10 Games Played
-- Leaderboard: Number of Wins
+- 모듈별 점수·책임자·실제 서버 시나리오·내부 평가 목표
+- subject 모듈 조건 대조
+- 모듈별 세부 조건과 최소 구현
 
 ---
 
@@ -863,26 +820,7 @@ evidence/<ID>/<YYYYMMDD-HHMM>/
 
 ## 26. Project Management 문서
 
-### Issue
-- ID
-- Title
-- Owner
-- Backup
-- Deadline
-- Dependency
-- Module
-- Requirement
-- Acceptance Criteria
-- Status
-
-### PR
-- Related Issue
-- Implementation Summary
-- Affected Requirements
-- Affected Contracts
-- Test Result
-- Documentation Change
-- Reviewer
+이슈·마일스톤·레이블·PR 작성 규칙과 협업 흐름을 정의한다. 내용: [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 Schema, Contract, Auth, Game State가 바뀌면 관련 문서도 같은 PR에서 수정한다.
 
@@ -897,7 +835,7 @@ Schema, Contract, Auth, Game State가 바뀌면 관련 문서도 같은 PR에서
 - Database
 - ORM
 - WebSocket
-- Authentication
+- Authentication: JWT (B)
 - Password Hashing
 - Server-authoritative Game State
 - commandId
@@ -944,13 +882,9 @@ FRONTEND_ORIGIN=
 
 ## 30. 학교 평가표 상태
 
-학교 최신 Evaluation Sheet가 확인되기 전까지:
+확인한 자료·확인하지 못한 자료와 표현 규칙을 관리한다. 내용: [evaluation/school-evaluation-status.md](evaluation/school-evaluation-status.md)
 
-- v21.1 기준 확인
-- 학교 기준 미확인
-- 공식 통과 표현 금지
-
-별도 `school-evaluation-status.md`로 관리한다.
+공통 필수 요건별 상태: [evaluation/mandatory-checklist.md](evaluation/mandatory-checklist.md)
 
 ---
 
