@@ -890,7 +890,7 @@ FRONTEND_ORIGIN=
 
 ## 31. 문서 작성 시점
 
-### 9/21~9/23
+### 9/28~9/29
 - README Skeleton
 - SRS v0.1
 - GAME_RULES
@@ -899,7 +899,7 @@ FRONTEND_ORIGIN=
 - Architecture Draft
 - contracts.md
 
-### 9/24~9/27
+### 9/30~10/01
 - SDS v0.1
 - Class Diagram
 - FSM
@@ -907,7 +907,7 @@ FRONTEND_ORIGIN=
 - Authentication Design
 - Test Plan Draft
 
-### 9/28~10/04
+### 10/02~10/04
 - ERD Update
 - contracts Update
 - Move Sequence
