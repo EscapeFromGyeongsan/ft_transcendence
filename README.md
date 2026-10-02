@@ -50,14 +50,14 @@ npm run preview     # Serve the production build (run the API separately)
 npm test            # Unit tests
 npm run test:watch
 npx playwright install chromium
-npm run test:e2e    # E2E tests; starts Vite and the API automatically
+npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:up and db:migrate first)
 ```
 
 ## Environment variables
 
-The API server, migration configuration and DB check load `.env` from the repository root. Do not commit it.
+The API server, Vite configuration, migration configuration and DB check load `.env` from the repository root. Do not commit it.
 
-- `PORT`: API port (default `3001`). The Vite proxy uses the same variable when set in the shell.
+- `PORT`: API port (default `3001`), an integer between 1 and 65535. The Vite proxy (dev and preview) uses the same value.
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: local database initialization settings.
 - `POSTGRES_PORT`: local database port (default `5432`).
 - `DATABASE_URL`: server/migration connection string matching the PostgreSQL settings. Percent-encode special characters in credentials. The example password is for local development only.

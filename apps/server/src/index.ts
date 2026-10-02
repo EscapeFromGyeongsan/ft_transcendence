@@ -6,6 +6,10 @@ if (existsSync(".env")) loadEnvFile(".env");
 if (!process.env.DATABASE_URL) {
   throw new Error("Set DATABASE_URL in .env before starting the API server.");
 }
+const port = Number(process.env.PORT ?? 3001);
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error("Set PORT in .env to an integer between 1 and 65535.");
+}
 const app = await buildApp({}, process.env.DATABASE_URL);
 try {
   const databaseHealth = await app.inject({
@@ -18,7 +22,7 @@ try {
     );
   }
   const address = await app.listen({
-    port: Number(process.env.PORT ?? 3001),
+    port,
     host: "127.0.0.1",
   });
   console.log(`Fastify API listening on ${address}`);
