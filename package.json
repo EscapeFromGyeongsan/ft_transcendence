@@ -1,0 +1,48 @@
+{
+  "name": "cyber-board-cafe",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "node --experimental-strip-types apps/server/src/index.ts",
+    "db:up": "docker compose --env-file .env --project-directory . -f infra/compose.yaml up -d --wait db",
+    "db:stop": "docker compose --env-file .env --project-directory . -f infra/compose.yaml stop db",
+    "db:generate": "drizzle-kit generate --config=config/drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=config/drizzle.config.ts",
+    "db:check": "node --experimental-strip-types scripts/check-db.mjs",
+    "build": "tsc --noEmit && npm run build --workspace @cafe/web",
+    "test": "vitest run --config=config/vitest.config.ts",
+    "test:watch": "vitest --config=config/vitest.config.ts",
+    "test:e2e": "playwright test --config=config/playwright.config.ts",
+    "preview": "npm run preview --workspace @cafe/web -- --host 0.0.0.0",
+    "format": "prettier --write apps packages tests scripts config infra *.json"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "^0.31.11",
+    "prettier": "^3.9.8",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "@fastify/swagger": "^9.9.0",
+    "@fastify/swagger-ui": "^6.1.1",
+    "argon2": "^0.45.1",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.0"
+  }
+}
