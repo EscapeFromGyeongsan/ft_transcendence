@@ -1,55 +1,113 @@
 # 게임 공통 계약
 
-- 문서 버전: 0.1 / 작성일: 2026-10-08 (KST)
-- 상태: 요청자 초안 검토 및 좌표 기준 확인(2026-10-08) — 팀 검토 대기
+- 문서 버전: 0.2 / 작성일: 2026-10-08 / 수정일: 2026-10-12 (KST)
+- 상태: 요청자 문서·좌표 검토 확인 및 게임별 확장 구조 요청 반영 — 팀 검토 대기
 - 관련 이슈: [#5 공통 계약 초안](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/5)
 - 작성 책임: dong-hki / 문서 작성 지원: Codex
-- 타입 정의: [types.ts](../packages/game-contracts/src/types.ts)
+- 공통 기반: [common.ts](../packages/game-contracts/src/common.ts)
+- 공개 유니언: [types.ts](../packages/game-contracts/src/types.ts)
 - 공개 입구: [index.ts](../packages/game-contracts/src/index.ts)
-- 코드 예제: [examples.ts](../packages/game-contracts/src/examples.ts)
+- 오목 계약: [gomoku/types.ts](../packages/game-contracts/src/gomoku/types.ts)
+- 오델로 계약: [othello/types.ts](../packages/game-contracts/src/othello/types.ts)
+- 코드 예제: [gomoku/examples.ts](../packages/game-contracts/src/gomoku/examples.ts)
 
 ## 1. 목적과 범위
 
-서버와 프론트가 공유할 게임 명령, 현재 경기 상태, 종료 결과, 오류 형식을 설명한다. 현재 타입 정의를 문서화하고 오목의 초기 상태 → 착수 요청 → 갱신 상태 예제를 제공한다.
+서버와 프론트가 공유할 게임 명령, 현재 경기 상태, 종료 결과, 오류 형식을 설명한다. 현재 지원 대상으로 정한 오목·오델로의 명령·상태·결과를 게임별로 정의하고, 오목의 초기 상태 → 착수 요청 → 갱신 상태 예제를 제공한다.
 
-오목과 오델로를 `gameType`으로 구분하지만, 현재 타입은 공통 보드와 `place` 행동을 사용한다. 게임별 행동·상태를 분리하는 구조와 오델로 예제는 후속 검토 대상이다. 아래 JSON은 코드의 예제 데이터이며 실제 게임 엔진의 처리 결과나 구현 완료 증빙을 뜻하지 않는다.
+2026-10-12 요청자는 향후 부루마블·윷놀이·할리갈리처럼 행동, 플레이어 구성, 차례 및 결과가 다른 게임도 추가할 수 있는 구조를 요청했다. 공통 기본 타입은 경기 식별·버전·생명주기에 한정하고, 게임별 필드를 각 게임 타입에서 정의한다. 이 추가 게임들은 현재 `GameType`과 공개 유니언에 등록하거나 구현한 대상이 아니다.
 
-## 2. 타입의 역할
+아래 JSON은 코드의 예제 데이터이며 실제 게임 엔진의 처리 결과나 구현 완료 증빙을 뜻하지 않는다. 오델로 JSON 예제와 실제 엔진은 후속 작업이다.
+
+## 2. 타입의 역할과 파일 구조
 
 | 타입 | 현재 정의 | 역할 |
 |---|---|---|
-| `GameType` | `"gomoku" \| "othello"` | 게임 종류 |
+| `GameType` | `"gomoku" 또는 "othello"` | 현재 등록한 게임 종류 |
 | `PlayerId` | `string` | 플레이어 식별자 |
-| `Cell` | `"black" \| "white" \| null` | 보드 한 칸의 돌 색 또는 빈칸 |
-| `GameCommand` | 명령 객체 | 클라이언트가 서버에 보내는 행동 요청 |
-| `GameSnapshot` | 상태 객체 | 서버가 참가자에게 전달하는 현재 경기 상태 |
-| `GameResult` | 결과 객체의 유니언 | 승리·무승부·무효 결과 |
+| `GameStatus` | `waiting`, `playing`, `paused`, `finished` | 공통 경기 생명주기 |
+| `GameCommandBase` | 경기 ID·명령 ID·기대 버전 | 모든 명령의 공통 기반 |
+| `GameSnapshotBase` | 경기 ID·규칙 버전·상태 버전·진행 상태 | 모든 snapshot의 공통 기반 |
+| `PlaceAction` | `place`, `row`, `col` | 돌 놓기 게임이 선택해서 공유하는 행동 |
+| `Cell`, `TwoColorPlayers` | 흑·백 보드 칸과 두 플레이어 | 현재 두 게임이 선택해서 공유하는 보드 모델 |
+| `TwoPlayerResult<WinReason>` | 게임별 정상 승리 사유를 받는 1:1 결과 | 현재 두 게임이 선택해서 공유하는 결과 모델 |
+| `GameCommand` | `GomokuCommand` 또는 `OthelloCommand` | 현재 등록한 게임 명령 유니언 |
+| `GameSnapshot` | `GomokuSnapshot` 또는 `OthelloSnapshot` | 현재 등록한 게임 상태 유니언 |
+| `GameResult` | `GomokuResult` 또는 `OthelloResult` | 현재 등록한 게임 결과 유니언 |
 | `GameError` | 오류 객체 | 요청 실패 이유 |
 
-`@cafe/game-contracts`에서 필요한 타입을 가져온다.
+```text
+packages/game-contracts/src/
+├── common.ts
+├── types.ts
+├── index.ts
+├── actions/
+│   └── place.ts
+├── shared/
+│   ├── two-color-board.ts
+│   └── two-player-result.ts
+├── gomoku/
+│   ├── types.ts
+│   └── examples.ts
+└── othello/
+    └── types.ts
+```
+
+`@cafe/game-contracts`에서 공통 유니언이나 게임별 타입을 가져온다.
 
 ```ts
-import type { GameCommand, GameSnapshot } from "@cafe/game-contracts";
+import type {
+  GameCommand,
+  GameSnapshot,
+  GomokuCommand,
+  OthelloSnapshot,
+} from "@cafe/game-contracts";
 ```
+
+### 2.1 새 게임 추가 방법
+
+1. 해당 게임 폴더에서 행동, 명령, 상태, 결과를 정의한다. 명령은 `GameCommandBase`, 상태는 `GameSnapshotBase`를 확장하고, `gameType`은 해당 게임의 문자열 리터럴로 고정한다.
+2. 필요한 게임만 `PlaceAction`, 흑·백 보드, 1:1 결과 같은 공유 모델을 선택해서 사용한다. 다른 행동·플레이어 수·점수·승자 표현을 가진 게임은 자기 모델을 정의한다.
+3. `GameType`에 게임 종류를 추가하고, 루트 `types.ts`의 명령·상태·결과 유니언과 `index.ts`의 공개 타입을 함께 확장한다.
+4. JSON 입력의 런타임 검증, 게임 규칙과 테스트, 필드 설명 및 예제를 추가한다.
+
+공통 기본 타입에는 `action`, `board`, `players`, `currentPlayerId`, `result`를 포함하지 않는다. 해당 필드의 존재와 형태는 각 게임이 결정한다. 현재 두 게임의 명령·snapshot에서는 `gameType`을 확인하면 TypeScript가 해당 게임 타입으로 좁혀준다.
 
 ## 3. 공통 식별자와 버전
 
+### 3.1 GameCommandBase
+
 | 필드 | 타입 | 의미 |
 |---|---|---|
-| `gameType` | `GameType` | 데이터가 속하는 게임 종류 |
 | `matchId` | `string` | 경기 식별자. 같은 경기의 명령과 snapshot은 같은 값을 사용 |
 | `commandId` | `string` | 요청 식별자. 같은 요청을 재전송할 때 같은 값을 사용 |
 | `expectedVersion` | `number` | 클라이언트가 요청을 만들 때 보고 있던 상태 버전 |
-| `stateVersion` | `number` | 서버가 확정한 현재 상태 버전 |
-| `rulesVersion` | `string` | 해당 경기에서 사용하는 규칙 버전 |
 
-현재 예제는 `expectedVersion: 0`으로 첫 착수를 요청하고, 갱신 상태를 `stateVersion: 1`로 표현한다. 전체 상태 전이의 버전 증가 규칙, 요청 중복 판정 범위·보관 기간·응답 재사용 방식은 검토 필요하다.
+### 3.2 GameSnapshotBase
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| `matchId` | `string` | 경기 식별자 |
+| `rulesVersion` | `string` | 해당 경기에서 사용하는 규칙 버전 |
+| `stateVersion` | `number` | 서버가 확정한 현재 상태 버전 |
+| `status` | `GameStatus` | 대기·진행·일시정지·종료 상태 |
+
+`gameType`은 공통 기본 인터페이스의 필드가 아니라 각 게임 명령·상태에 추가하는 고정된 구분 값이다.
+
+현재 오목 예제는 `expectedVersion: 0`으로 첫 착수를 요청하고, 갱신 상태를 `stateVersion: 1`로 표현한다. 전체 상태 전이의 버전 증가 규칙, 요청 중복 판정 범위·보관 기간·응답 재사용 방식은 검토 필요하다.
 
 `rulesVersion: "gomoku-temp-ver"`는 예제용 임시 값이다. 실제 규칙 버전의 명명과 관리 방식은 아직 정하지 않았다.
 
-## 4. GameCommand
+## 4. 게임별 명령과 행동
 
-현재 행동 요청은 `place` 한 종류이다. 위 공통 필드 중 `gameType`, `matchId`, `commandId`, `expectedVersion`과 아래 `action`을 포함하며 모두 필수이다.
+| 명령 | `gameType` | 행동 타입 |
+|---|---|---|
+| `GomokuCommand` | `"gomoku"` | `GomokuAction = PlaceAction` |
+| `OthelloCommand` | `"othello"` | `OthelloAction = PlaceAction` |
+
+현재 두 게임 명령은 `GameCommandBase`를 확장하고 `gameType`과 `action`을 추가한다. 현재 필드는 모두 필수이다. 각 게임의 행동 타입은 독립적으로 확장할 수 있다.
+
+[PlaceAction](../packages/game-contracts/src/actions/place.ts)은 현재 오목·오델로가 재사용하는 행동이다. 공통 기본 명령은 이 행동을 요구하지 않으므로 좌표를 사용하지 않는 게임도 자기 행동 타입을 정의할 수 있다.
 
 | 필드 | 타입 | 의미 |
 |---|---|---|
@@ -57,42 +115,47 @@ import type { GameCommand, GameSnapshot } from "@cafe/game-contracts";
 | `action.row` | `number` | 행 좌표 |
 | `action.col` | `number` | 열 좌표 |
 
-플레이어 ID나 돌 색을 요청에 직접 넣지 않는다. 서버는 인증 정보로 행위자를 식별하고 경기 참가자·차례와 연결하여 검사한다. 이러한 서버 검증은 현재 공통 타입과 예제만으로 구현된 것이 아니다.
+플레이어 ID나 돌 색을 현재 착수 요청에 직접 넣지 않는다. 서버는 인증 정보로 행위자를 식별하고 경기 참가자·차례와 연결하여 검사한다. 이러한 서버 검증은 현재 공통 타입과 예제만으로 구현된 것이 아니다.
 
-### 4.1 좌표 기준
+### 4.1 오목·오델로 좌표 기준
 
-엔진·API·DB 좌표는 0부터 시작하는 `row/col`을 사용한다. `(0, 0)`은 좌상단이며 `board[row][col]`로 접근한다. `row`, `col`은 정수이고, 오목은 `0..14`, 오델로는 `0..7` 범위이다. 화면에서 행·열을 1부터 표시할 경우 입력과 표시 경계에서 변환한다.
+두 게임의 엔진·API·DB 좌표는 0부터 시작하는 `row/col`을 사용한다. `(0, 0)`은 좌상단이며 `board[row][col]`로 접근한다. `row`, `col`은 정수이고, 오목은 `0..14`, 오델로는 `0..7` 범위이다. 화면에서 행·열을 1부터 표시할 경우 입력과 표시 경계에서 변환한다.
 
-2026-10-08 요청자가 `row/col` 기준을 확인하고 SRS 표기도 맞추도록 요청했다. [SRS v0.3.1 초안](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/codex/srs-draft/Document/SRS.md)에 같은 기준을 반영한다. 요청자의 초안 확인과 팀의 최종 계약 승인은 구분한다.
+2026-10-08 요청자가 `row/col` 기준을 확인하고 SRS 표기도 맞추도록 요청했다. [SRS v0.3.1 초안](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/codex/srs-draft/Document/SRS.md)에 같은 기준을 반영했다. 요청자의 초안 확인과 팀의 최종 계약 승인은 구분한다.
 
-## 5. GameSnapshot
+## 5. 게임별 snapshot
 
-위 공통 필드 중 `gameType`, `matchId`, `rulesVersion`, `stateVersion`과 아래 필드를 포함한다. 모든 필드는 필수이며, `currentPlayerId`와 `result`는 값으로 `null`을 허용한다.
+`GomokuSnapshot`, `OthelloSnapshot`은 공통 `GameSnapshotBase`를 확장한다. 다음 필드는 각 게임 타입에서 추가한다. 현재 두 게임에서는 모든 필드가 필수이며, `currentPlayerId`와 `result`는 값으로 `null`을 허용한다.
 
-| 필드 | 타입 | 의미 |
-|---|---|---|
-| `status` | `"waiting" \| "playing" \| "paused" \| "finished"` | 대기·진행·일시정지·종료 상태 |
-| `players.black` | `PlayerId` | 흑을 맡은 플레이어 ID |
-| `players.white` | `PlayerId` | 백을 맡은 플레이어 ID |
-| `board` | `Cell[][]` | 행 우선의 2차원 보드. 오목 예제는 15×15 |
-| `currentPlayerId` | `PlayerId \| null` | 현재 차례인 플레이어. 현재 예제에서는 흑 또는 백의 ID |
-| `result` | `GameResult \| null` | 경기 종료 결과. 현재 진행 중인 예제에서는 `null` |
+| 필드 | 오목 | 오델로 | 의미 |
+|---|---|---|---|
+| `gameType` | `"gomoku"` | `"othello"` | 게임 종류를 고정하는 구분 값 |
+| `players` | `TwoColorPlayers` | `TwoColorPlayers` | 흑·백을 맡은 플레이어 ID |
+| `board` | `Cell[][]` | `Cell[][]` | 행 우선 보드. 각각 15×15·8×8 |
+| `currentPlayerId` | `PlayerId 또는 null` | `PlayerId 또는 null` | 현재 차례인 플레이어 |
+| `result` | `GomokuResult 또는 null` | `OthelloResult 또는 null` | 해당 게임의 종료 결과 |
 
-현재 `Cell[][]` 타입만으로 보드 크기를 고정하지 않는다. 상태별 필드 조합도 타입이 완전히 제한하지 않는다. 대기 중 참가자 미배정 표현, 일시정지·종료 시 차례 값, 종료 상태와 결과의 관계를 구체화해야 한다.
+[흑·백 공유 모델](../packages/game-contracts/src/shared/two-color-board.ts)은 현재 두 게임이 선택해서 재사용한다. 공통 기본 상태가 흑·백 플레이어, 보드, 현재 차례나 종료 결과 형식을 강제하지 않는다. 다른 게임은 플레이어 목록, 동시 행동 상태, 자기 점수·승자 표현 등을 별도로 정의할 수 있다.
 
-## 6. GameResult
+현재 `Cell[][]` 타입만으로 보드 크기를 고정하지 않는다. 상태별 필드 조합도 타입이 완전히 제한하지 않는다. 대기 중 참가자 미배정 표현, 일시정지·종료 시 차례 값, 종료 상태와 결과의 관계는 구체화해야 한다.
 
-| `outcome` | `winnerId` | 허용되는 `reason` |
-|---|---|---|
-| `"win"` | `PlayerId` | `"five_in_row"`, `"disc_count"`, `"resign"`, `"disconnect_timeout"` |
-| `"draw"` | `null` | `"draw"` |
-| `"void"` | `null` | `"server_restart"`, `"disconnect_timeout"` |
+## 6. 게임별 결과와 GameResult
+
+`GomokuResult`, `OthelloResult`는 [TwoPlayerResult](../packages/game-contracts/src/shared/two-player-result.ts)의 1:1 결과 형식을 재사용한다. 정상 승리 사유는 오목 `five_in_row`, 오델로 `disc_count`로 구분한다.
+
+| `outcome` | `winnerId` | 오목의 `reason` | 오델로의 `reason` |
+|---|---|---|---|
+| `"win"` | `PlayerId` | `five_in_row`, `resign`, `disconnect_timeout` | `disc_count`, `resign`, `disconnect_timeout` |
+| `"draw"` | `null` | `draw` | `draw` |
+| `"void"` | `null` | `server_restart`, `disconnect_timeout` | `server_restart`, `disconnect_timeout` |
 
 `five_in_row`는 오목의 연속 돌 승리, `disc_count`는 오델로의 돌 개수 판정, `resign`은 기권, `disconnect_timeout`은 연결 복귀 유예 만료, `server_restart`는 서버 재시작으로 인한 무효를 표현하는 초안 값이다. 승리 결과의 `winnerId`는 승리한 참가자의 ID이다.
 
-현재 타입은 결과에 `gameType`을 포함하지 않으므로 게임별 승리 사유를 제한하지 않는다. `GAME_RULES.md`의 `resultType`·`winnerUserId` 제안과 현재 `outcome`·`reason`·`winnerId` 형식의 통일도 검토 필요하다.
+각 snapshot의 `result`는 해당 게임의 결과 타입을 사용하므로, 오목 상태에 `disc_count` 승리를 넣거나 오델로 상태에 `five_in_row` 승리를 넣으면 타입 오류가 발생한다. 공개 `GameResult` 유니언을 단독으로 사용할 때는 경기의 게임 종류와 함께 해석해야 한다.
 
-다음은 별도의 경기 종료 결과 예시이다. 7장의 첫 착수 후 상태에 대한 결과가 아니다.
+`TwoPlayerResult`는 현재 1:1 게임의 선택형 공유 모델이다. 다른 승자·점수 형식이 필요한 게임은 자기 결과 타입을 만들고 공개 `GameResult` 유니언에 추가할 수 있다. `GAME_RULES.md`의 `resultType`·`winnerUserId` 제안과 현재 결과 명칭의 최종 통일은 팀 검토 필요하다.
+
+다음은 별도의 오목 경기 종료 결과 예시이다. 7장의 첫 착수 후 상태에 대한 결과가 아니다.
 
 ```json
 {
@@ -240,11 +303,11 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 - [x] 요청자가 필드 설명과 초기 상태 → 착수 → 갱신 예제 흐름을 검토했다(2026-10-08).
 - [x] 요청자가 0부터 시작하는 `row/col` 기준과 같은 기준의 SRS 반영을 확인했다(2026-10-08).
-- [ ] 오목·오델로별 명령과 상태를 분리하고 `gameType`으로 구분하는 구조를 어떻게 적용할 것인가?
+- [x] 오목·오델로 명령·상태·결과를 게임별로 분리하고 공개 유니언을 구성했다(2026-10-12). 구현 초안은 팀 검토 대상이다.
 - [ ] `rulesVersion`의 실제 값과 관리 방식을 어떻게 정할 것인가?
 - [ ] 명령 중복 판정 범위·보관 기간·응답 재사용 및 버전 처리 순서를 어떻게 정할 것인가?
 - [ ] 대기 중 참가자 미배정, 일시정지·종료 시 차례, 종료 결과의 필드 조합을 어떻게 제한할 것인가?
 - [ ] 종료 결과 명칭과 게임별 사유를 `GAME_RULES.md` 및 SRS와 어떻게 통일할 것인가?
 - [ ] 오류의 요청 연결, 재동기화 방식, REST·WebSocket 전달 형식을 어떻게 정할 것인가?
 
-요청자는 필드 설명과 예제 흐름을 검토하고 좌표 기준을 확인했다. 나머지 미결정 항목은 승인된 것으로 보지 않으며, B/C/D의 서버·게임·UI 연결 관점 검토 대상으로 유지한다.
+요청자는 필드 설명·예제 흐름·좌표 기준을 검토하고, 2026-10-12 게임별 행동·상태·결과를 분리하는 확장 구조의 반영을 요청했다. 나머지 미결정 항목과 구현 초안의 최종 승인은 B/C/D의 서버·게임·UI 연결 관점 검토 대상으로 유지한다.

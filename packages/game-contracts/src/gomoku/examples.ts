@@ -1,4 +1,4 @@
-import type { Cell, GameCommand, GameSnapshot } from "./index.ts";
+import type { Cell, GomokuCommand, GomokuSnapshot } from "../index.ts";
 
 function createEmptyBoard(): Cell[][] {
   return Array.from({ length: 15 }, () => Array<Cell>(15).fill(null));
@@ -17,7 +17,7 @@ export const initialSnapshot = {
   board: createEmptyBoard(),
   currentPlayerId: "ex-player-1",
   result: null,
-} satisfies GameSnapshot;
+} satisfies GomokuSnapshot;
 
 export const firstCommand = {
   gameType: "gomoku",
@@ -29,7 +29,7 @@ export const firstCommand = {
     row: 4,
     col: 2,
   },
-} satisfies GameCommand;
+} satisfies GomokuCommand;
 
 const updateBoard = createEmptyBoard();
 updateBoard[4][2] = "black";
@@ -39,4 +39,4 @@ export const updateSnapshot = {
   stateVersion: 1,
   board: updateBoard,
   currentPlayerId: "ex-player-2",
-} satisfies GameSnapshot;
+} satisfies GomokuSnapshot;

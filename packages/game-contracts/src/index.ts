@@ -1,11 +1,31 @@
 export type {
   GameType,
   PlayerId,
-  Cell,
-  GameCommand,
-  GameResult,
-  GameSnapshot,
+  GameStatus,
+  GameCommandBase,
+  GameSnapshotBase,
   GameError,
-} from "./types.ts";
+} from "./common.ts";
 
-// 다른 소스파일에서 다음과 같이 사용! `import type { GameCommand } from "@cafe/game-contracts";`
+export type { PlaceAction } from "./actions/place.ts";
+export type {
+  PlayerColor,
+  Cell,
+  TwoColorPlayers,
+} from "./shared/two-color-board.ts";
+export type { TwoPlayerResult } from "./shared/two-player-result.ts";
+
+export type { GameCommand, GameSnapshot, GameResult } from "./types.ts";
+
+export type {
+  GomokuAction,
+  GomokuCommand,
+  GomokuResult,
+  GomokuSnapshot,
+} from "./gomoku/types.ts";
+export type {
+  OthelloAction,
+  OthelloCommand,
+  OthelloResult,
+  OthelloSnapshot,
+} from "./othello/types.ts";
