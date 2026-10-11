@@ -299,6 +299,19 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 이 문서는 공통 데이터 객체를 정의하는 초안이다. REST endpoint·HTTP 상태 코드, WebSocket 이벤트 이름·메시지 포장 형식·요청 응답 연결 방식은 해당 구현과 함께 추가한다. `GameError.code`만으로 HTTP 상태 코드나 WebSocket 이벤트를 확정하지 않는다.
 
+### 9.1 엔진 규칙 상태와 전송 snapshot
+
+`@cafe/game-engine`의 `gomoku.createInitialState()`는 `GomokuState`를 반환한다. 현재 엔진 상태는 다음 두 필드로 구성한다.
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| `board` | `Cell[][]` | 15×15 오목 보드. 초기에는 모든 칸이 `null` |
+| `currentPlayerColor` | `PlayerColor` | 현재 차례의 돌 색. 초기에는 `"black"` |
+
+엔진은 규칙 데이터로 작업한다. 경기 관리 계층이 `currentPlayerColor`를 배정된 흑·백 사용자 ID와 연결해 `currentPlayerId`를 구성하고, 경기 ID·규칙 버전·상태 버전·진행 상태·결과를 붙여 전송용 `GomokuSnapshot`을 만든다. 인증·명령 중복 처리·버전 관리·저장·전송은 경기 관리 계층의 책임이다.
+
+초기 상태 생성 함수와 테스트는 구현했으며 팀 검토 대상이다. 실제 경기 관리·snapshot 구성·착수 처리·승패 판정은 후속 작업이다. 상세 공개 함수와 검증 방법은 [game-engine/README.md](../packages/game-engine/README.md)를 참조한다.
+
 ## 10. 요청자 및 팀 검토 항목
 
 - [x] 요청자가 필드 설명과 초기 상태 → 착수 → 갱신 예제 흐름을 검토했다(2026-10-08).
