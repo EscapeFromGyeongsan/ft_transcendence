@@ -109,9 +109,31 @@ docker compose --env-file .env.full --project-directory . \
 | https://localhost:8443/docs/json | OpenAPI JSON |
 | http://localhost:8080/ | HTTPS 포트 8443으로 308 리다이렉트 |
 
-첫 빌드는 의존성 설치, 이미지 제공 여부, 도구·실행 버전 호환 문제로 실패할 수 있다. 이 세션에서는 실행하지 못했다. 설정 파일 작성만으로 기동이 검증됐다고 판단하지 않는다.
+2026-10-12 WSL/Docker 환경에서 위 명령의 첫 빌드·기동을 실행해 통과했다. 검증에서는 포트·프로젝트·환경 파일만 격리용 값으로 바꿨다. 실제 환경·이미지 ID·실패/복구 결과와 남은 확인은 [검증 기록](runtime-validation.md)에 있다.
+
+명령은 저장소 루트에서 `--project-directory .`를 지정해 실행한다. Compose의 `build.context: .`는 이 프로젝트 디렉터리를 기준으로 하며 Dockerfile은 `infra/Dockerfile`이다.
 
 workspace 이미지는 커밋된 루트 잠금 파일을 기준으로 `npm ci`를 수행한다. `web-build` 단계는 기존 타입 검사와 Vite 빌드를 실행한다. 최종 `web` 이미지에는 Nginx와 웹 빌드 결과가 들어간다. `server` 이미지는 기존 Node TypeScript 실행 방식을 유지하며 migration 도구도 포함한다. 실행에 불필요한 의존성을 제거하는 최적화는 후속 작업으로 남긴다. 두 이미지 모두 호스트의 `node_modules`에 의존하지 않는다.
+
+## master 병합 후 사용과 유지보수
+
+이 브랜치를 master에 병합하면 팀이 같은 Compose·Dockerfile·프록시·실행 안내를 공통 기반으로 계속 사용한다. 매번 실행 환경 브랜치를 새로 만들 필요는 없다. 각 컴퓨터에서는 처음 사용할 때 환경 파일·비밀번호·인증서를 별도로 준비한다. 개인 설정과 비밀값은 Git으로 배포되지 않는다.
+
+기동할 때마다 migration 서비스가 기존 Drizzle 이력을 확인하고 미적용 migration을 적용한다. 적용된 migration을 다시 적용하거나 DB를 초기화하는 과정은 아니다. 이번 검증에서 동일한 프로젝트와 volume의 반복 기동·재생성 후 행 보존을 확인했다.
+
+| 변경·작업 | 계속 관리할 내용 |
+|---|---|
+| 평소 기동·중지 | 같은 프로젝트 이름으로 `up`·`stop` 또는 volume을 유지한 `down` 사용 |
+| 웹·API 코드 변경 | 최신 코드를 받아 `up --build -d --wait`로 이미지 갱신 |
+| DB 스키마 변경 | 새 migration을 검토·커밋하고 웹·API를 중지한 뒤 migration 성공 후 다시 기동 |
+| API·WebSocket 경로 변경 | Nginx 프록시 경로·heartbeat 설정과 실제 HTTPS/WSS 통합 검증 갱신 |
+| 환경 변수·비밀번호 변경 | 예시·안내·서비스 설정 갱신. 기존 DB 비밀번호는 SQL 변경과 함께 조정 |
+| 인증서 | 유효기간·접속 주소·클라이언트 신뢰 관리. 포함된 자체 서명 인증서는 30일 뒤 갱신 필요 |
+| 도구·이미지 업데이트 | 의존성·이미지 버전과 보안 업데이트 검토 후 회귀 검증 |
+
+데이터 보존은 같은 Docker volume을 유지하는 조건이다. 프로젝트 이름·volume 매핑을 바꾸면 다른 DB를 선택할 수 있으므로 변경 시 데이터 인계를 함께 계획한다. DB 백업·복원은 별도로 관리한다.
+
+자체 검증 결과는 PR 리뷰를 받을 단계다. 작성자 외 팀원의 재현과 실제 클라이언트 인증서 신뢰 확인 후 병합을 권장한다. 실제 WSS는 endpoint 제공 후 후속 통합 검증으로 진행한다.
 
 ## 환경 변수 우선순위와 내부 주소
 
@@ -273,4 +295,4 @@ npm run test:e2e
 - [Node TypeScript 실행](https://nodejs.org/docs/latest-v24.x/api/typescript.html)
 - [mkcert](https://github.com/FiloSottile/mkcert)
 
-계획·구현·소스 수준 검토에 Codex의 도움을 받았다. 이 문서 자체는 실제 실행 결과나 학교 평가 통과의 증거가 아니다.
+계획·구현·실행 검증에 Codex의 도움을 받았다. 실제 실행 증거는 별도의 [검증 기록](runtime-validation.md)에 있으며, 프로젝트 전체의 기능 인수나 학교 평가 통과를 의미하지 않는다.

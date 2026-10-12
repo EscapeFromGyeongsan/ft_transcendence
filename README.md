@@ -16,7 +16,7 @@ A turn-based online board game platform offering Omok (15 × 15, free rules). Pl
 
 ## Instructions
 
-Choose the local development workflow below, or the separate [full application HTTPS workflow](Document/runtime.md). The latter is an implementation draft pending executed validation.
+Choose the local development workflow below, or the separate [full application HTTPS workflow](Document/runtime.md). Full-app startup, failure handling and persistence have been locally validated; see the remaining checks in the validation record.
 
 ### Local development
 
@@ -57,7 +57,7 @@ npx playwright install chromium
 npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:up and db:migrate first)
 ```
 
-### Full application containers (implementation draft)
+### Full application containers
 
 Prepare `.env.full` from `.env.full.example`, the password file, and certificates as described in [the full execution guide](Document/runtime.md). Then:
 
@@ -68,7 +68,7 @@ docker compose --env-file .env.full --project-directory . \
 
 Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
 
-The full app has a separate project/DB volume from local development. Actual startup, certificate trust, failure/persistence behavior and non-author reproduction are still pending. WebSocket upgrade forwarding is prepared under `/api/`; actual WSS validation requires the real endpoint. See [the validation record](Document/runtime-validation.md). No PR has been created.
+The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. WebSocket upgrade forwarding is prepared under `/api/`; actual WSS validation requires the real endpoint. See [the validation record](Document/runtime-validation.md). No PR has been created.
 
 ## Environment variables
 
