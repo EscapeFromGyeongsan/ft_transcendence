@@ -1,7 +1,7 @@
 name: cyber-board-cafe-full
 
 x-server-build: &server-build
-  context: ..
+  context: .
   dockerfile: infra/Dockerfile
   target: server
 
@@ -72,7 +72,7 @@ services:
 
   web:
     build:
-      context: ..
+      context: .
       dockerfile: infra/Dockerfile
       target: web
     environment:
