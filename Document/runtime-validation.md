@@ -1,52 +1,54 @@
-# Issue #7 validation record
+# 이슈 #7 실행 환경 검증 기록
 
-- Date: 2026-10-12 (Asia/Seoul)
-- Branch: `codex/full-app-containers`
-- Base: `d4a939fea197d78f066e20e66cb6279cc3520c9e`
-- Plan commit: `d3652320b870806ee4540bd9dcad78f788b427ff`
-- Tester: Codex in this chat; no non-author runtime tester yet
-- Implementation revision: the commit containing this record; obtain its exact SHA with `git log --format=%H -- Document/runtime-validation.md`
-- Status: source implementation draft; execution acceptance is incomplete
-- PR: none; no merge, issue closure, reviewer request or external message
+- 기록일: 2026-10-12 (한국 시간, Asia/Seoul)
+- 작업 브랜치: `codex/full-app-containers`
+- 기준 커밋: `d4a939fea197d78f066e20e66cb6279cc3520c9e`
+- 최초 계획 커밋: `d3652320b870806ee4540bd9dcad78f788b427ff`
+- 검증 대상 구현 커밋: `bfd3f2ec14d1479fce8cf382f8bf750f23907fa7`
+- 확인 주체: 이 대화의 Codex. 작성자 외 팀원의 실행 검증은 아직 없음
+- 상태: 소스 구현 초안이며 실행 환경 수용 기준은 미완료
+- PR: 없음. 병합·이슈 종료·리뷰 요청·외부 메시지 전송도 하지 않음
 
-## Actual checks
+## 실제 확인한 결과
 
-| Check | Actual result | Boundary |
+| 확인 항목 | 실제 결과 | 확인 범위와 한계 |
 |---|---|---|
-| Remote baseline/rules | Read master source tree and CONTRIBUTING.md; no AGENTS.md present in the remote baseline | Local-only files/rules could not be read |
-| Local shell | Failed to start: No such file or directory (os error 2) | No shell command ran |
-| Node file tool | Rejected Linux workspace URI as non-local | No Node/file command ran |
-| Pure listen/DB URL helpers | 23 assertions passed in the tool's V8 isolate | Controlled removal of TypeScript annotations; not Node/Vitest/tsc |
-| Limited JS syntax | Three prepared script/test bodies compiled after removing module imports and replacing import.meta.url | Not ESM loading, TypeScript compilation or dependency execution |
-| Prepared file formatting | Final newline and no trailing whitespace | Source-string inspection; not git diff --check |
-| Compose source review | Only web has a ports block; migration success dependency present; internal DB URL generated at runtime | Docker Compose parser and daemon not run |
-| Nginx source review | URI prefixes preserved; only public port substituted; upgrade headers and dynamic DNS configured | nginx -t, HTTPS and proxy requests not run |
-| Scope review | Existing development Compose, shared migrations, package/lock files and game/auth/social code excluded from changes | Connector source/diff inspection |
-| Remote save | Commit/ref creation checked through GitHub connector | Does not validate a running application |
+| 원격 기준 소스·작업 규칙 | `master` 소스 트리와 `CONTRIBUTING.md` 확인. 원격 기준 트리에는 `AGENTS.md`가 없음 | 로컬에만 있는 파일·규칙은 읽지 못함 |
+| 로컬 셸 | 시작 실패: `No such file or directory (os error 2)` | 셸 명령은 실행되지 않음 |
+| Node 파일 도구 | Linux 작업 폴더 URI를 로컬 URI로 인식하지 못해 거부 | Node·파일 작업은 실행되지 않음 |
+| listen 설정·DB URL 처리 함수 | 도구의 V8 실행 환경에서 23개 확인 항목 통과 | TypeScript 타입 선언을 제한적으로 제거해 확인했으며 Node·Vitest·tsc 실행 결과가 아님 |
+| 제한된 JavaScript 구문 확인 | 준비한 스크립트·테스트 본문 3개를 모듈 import 제거와 `import.meta.url` 대체 후 구문 검사 | ESM 모듈 로딩·TypeScript 컴파일·의존성 실행 결과가 아님 |
+| 준비한 파일 형식 | 파일 끝 개행과 줄 끝 공백 여부 확인 | 소스 문자열 확인이며 `git diff --check` 실행 결과가 아님 |
+| Compose 소스 검토 | `web`만 `ports`를 선언하고 migration 성공 의존 조건이 있음. 내부 DB URL은 실행 시 생성 | Docker Compose 설정 해석과 Docker daemon 실행은 하지 못함 |
+| Nginx 소스 검토 | URI 접두어를 보존하고 공개 HTTPS 포트만 치환. upgrade 헤더 전달과 동적 DNS 조회 설정 | `nginx -t`, HTTPS 접속, 프록시 요청 검증은 하지 못함 |
+| 변경 범위 검토 | 기존 개발용 Compose, 공유 migration, package·잠금 파일, 게임·인증·소셜 코드를 변경 대상에서 제외 | GitHub 연결 도구로 소스·차이를 확인한 결과 |
+| 원격 저장 | GitHub 연결 도구로 커밋·브랜치 갱신 확인 | 애플리케이션의 실제 동작을 검증한 것은 아님 |
 
-The 23 assertions cover local defaults, a PORT override, the container listen address, invalid ports/empty or padded hosts, the db:5432 URI, URI-reserved characters/dollar signs, LF/CRLF handling, significant spaces, invalid password-file formats, and missing DB settings. Test passwords are illustrative values only.
+23개 확인 항목은 로컬 기본값, `PORT` 변경, 컨테이너 listen 주소, 잘못된 포트·빈 주소·앞뒤 공백이 있는 주소, `db:5432` 연결 URL, URL 예약 문자·달러 기호, LF·CRLF 처리, 비밀번호 공백 보존, 잘못된 비밀번호 파일 형식, DB 설정 누락을 다룬다. 확인에 사용한 비밀번호는 예시 문자열이다.
 
-Vitest files were added for these regressions and an actual wildcard listen/HTTP request. Those files have not run. Do not report the V8 assertions as passed Vitest tests.
+위 회귀 항목과 실제 wildcard listen·HTTP 요청 확인을 위한 Vitest 테스트 파일을 추가했지만 실행하지 못했다. V8 확인 결과를 Vitest 테스트 통과로 보고하지 않는다.
 
-## Pending executed verification
+## 실행 검증 대기 항목
 
-- Docker Compose config parsing and first image builds with an empty host node_modules.
-- npm ci, TypeScript/web build, Vitest (including actual Fastify socket test), E2E and PORT/dev/preview regressions.
-- Password-file permissions under the target engine; actual PostgreSQL connection with reserved characters.
-- Empty isolated DB -> migration -> ready API -> ready Nginx startup.
-- HTTPS trust, HTTP redirect, web page, API health, Swagger UI/assets/JSON and browser console.
-- API container replacement and DNS recovery.
-- Probe-table persistence across down/up with the same volume.
-- Migration conflict and startup failure on an isolated empty failure project.
-- Runtime DB failure -> generic 503 -> recovery; SIGTERM and Ctrl+C behavior.
-- Image/file review for actual secret exclusion.
-- Non-author reproduction with recorded commands, environments, image IDs and commit.
-- Actual WSS endpoint/message/close/reconnect validation after endpoint handoff.
+- Docker Compose 설정 해석, 호스트 `node_modules`가 없는 상태에서 첫 이미지 빌드
+- `npm ci`, TypeScript·웹 빌드, Vitest(실제 Fastify 소켓 테스트 포함), E2E, `PORT`·개발·preview 회귀 검증
+- 대상 Docker 환경에서 비밀번호 파일 접근 권한과 예약 문자가 포함된 비밀번호의 실제 PostgreSQL 연결
+- 빈 검증용 DB → migration → API 준비 → Nginx 준비 기동 흐름
+- HTTPS 인증서 신뢰, HTTP 리다이렉트, 웹 화면, API health, Swagger UI·정적 파일·JSON, 브라우저 콘솔
+- API 컨테이너 재생성 후 DNS 재조회와 연결 복구
+- 동일 볼륨을 유지한 `down/up` 이후 연결 확인 테이블의 데이터 보존
+- 별도의 빈 실패 검증용 프로젝트에서 migration 충돌과 기동 실패
+- 실행 중 DB 장애 → 일반 오류 응답 503 → 복구, `SIGTERM`·Ctrl+C 종료 동작
+- 실제 이미지·파일에 비밀값이 포함되지 않았는지 확인
+- 작성자 외 팀원의 재현과 명령·환경·이미지 ID·커밋 기록
+- 실제 endpoint 인계 후 WSS 연결·메시지·종료·재접속 검증
 
-[The execution guide](runtime.md) provides preparation and isolated verification commands. No acceptance checkbox on issue #7 is marked complete. No account/game persistence, complete real-time integration, deployment readiness or school-evaluation claim is made.
+[실행 안내](runtime.md)에 사전 준비와 격리된 검증 명령을 기록했다. 이슈 #7의 수용 기준은 완료로 체크하지 않았다. 계정·경기 데이터 보존, 전체 실시간 통합, 배포 준비 완료, 학교 평가 통과를 주장하지 않는다.
 
-## Scope outcome
+## 계획 대비 결과
 
-The fixed plan was followed for implementation preparation, proxy/config review and reporting.
-Its runtime verification remains pending because both local execution tools failed before a process could start.
-Work was saved on the existing remote work branch as the available fallback; the local checkout was not switched or modified by these tools.
+정한 계획에 따라 구현 초안 작성, 프록시·설정 검토, 결과 기록을 진행했다.
+두 로컬 실행 도구가 프로세스 시작 전에 실패해 실제 실행 검증은 대기 상태다.
+사용 가능한 대안으로 기존 원격 작업 브랜치에 저장했으며, 이 도구들로 로컬 작업 폴더의 브랜치를 전환하거나 파일을 수정하지는 않았다.
+
+이번 문서의 한글화는 설명만 수정한 작업이다. 위 구현 커밋을 대상으로 기록한 결과와 미실행 상태는 그대로 유지한다.

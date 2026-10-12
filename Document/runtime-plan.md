@@ -1,39 +1,41 @@
-# Issue #7 execution plan
+# 이슈 #7 실행 환경 작업 계획
 
-- Date: 2026-10-12 (Asia/Seoul)
-- Branch: `codex/full-app-containers`
-- Base: `d4a939fea197d78f066e20e66cb6279cc3520c9e` (master)
-- Scope: full application containers and HTTPS; issue #7.
-- Publication constraint: no pull request, merge, issue closure, or reviewer messaging.
+- 작성일: 2026-10-12 (한국 시간, Asia/Seoul)
+- 작업 브랜치: `codex/full-app-containers`
+- 기준 커밋: `d4a939fea197d78f066e20e66cb6279cc3520c9e` (`master`)
+- 작업 범위: 이슈 #7의 웹·API·DB 전체 컨테이너화와 HTTPS 실행 환경
+- 게시 제한: PR 생성·병합·이슈 종료·리뷰어 메시지 전송을 하지 않는다.
 
-## Fixed sequence
+## 진행 순서
 
-1. Add a separate full-app Compose entry point and reproducible workspace images.
-2. Connect DB readiness, existing migrations, and API readiness; keep local defaults.
-3. Serve built web files, API and Swagger over HTTPS; prepare WebSocket upgrade forwarding.
-4. Document certificate/password preparation, environment precedence, lifecycle and isolated verification.
-5. Review the diff, record actual checks and outstanding validation, and report to the requester.
+1. 전체 앱 실행용 Compose 진입점을 별도로 추가하고, npm workspace를 기준으로 재현 가능한 이미지를 구성한다.
+2. DB 준비 확인·기존 migration 적용·API 준비 확인을 연결하고 기존 로컬 기본값을 유지한다.
+3. 빌드된 웹 파일·API·Swagger를 HTTPS로 제공하고 WebSocket upgrade 전달 설정을 준비한다.
+4. 인증서·비밀번호 준비, 환경 변수 우선순위, 기동·종료·재생성 방법과 격리된 검증 절차를 문서화한다.
+5. 변경 내용을 검토하고, 실제 확인한 결과와 남은 검증 항목을 기록한 뒤 요청자에게 보고한다.
 
-## Guardrails
+## 작업 범위와 원칙
 
-- Do not implement game, authentication, social or WebSocket application endpoints.
-- Do not change shared migrations, dependency versions or existing development Compose data.
-- Use a separate full-app project/volume; first-start and failure verification must use another isolated project.
-- Never commit actual passwords, private keys or certificates.
-- Do not treat proxy configuration as actual WSS validation.
-- Do not mark acceptance criteria complete without executed evidence and non-author reproduction.
+- 게임·인증·소셜 기능이나 실제 WebSocket endpoint를 구현하지 않는다.
+- 공유된 migration, 의존성 버전, 기존 개발용 Compose 데이터를 변경하지 않는다.
+- 전체 앱은 별도 Compose 프로젝트·볼륨을 사용한다. 첫 기동과 실패 상황 검증은 추가로 격리한 검증용 프로젝트에서 수행한다.
+- 실제 비밀번호·개인키·인증서를 커밋하지 않는다.
+- 프록시 설정 준비를 실제 WSS 검증 완료로 취급하지 않는다.
+- 실행 증거와 작성자 외 팀원의 재현 결과가 없으면 수용 기준을 완료로 표시하지 않는다.
 
-## Environment limitation
+## 현재 작업 환경의 제약
 
-The local shell fails to start with "No such file or directory (os error 2)".
-The Node file tool rejects the Linux workspace URI as a non-local URI.
-Implementation will be committed on the existing remote working branch through the GitHub connector.
-Docker, Node/npm, OpenSSL, browser and OS-level tests cannot be run in this session.
-Only specifically recorded source-level checks can be claimed; runtime validation remains pending.
+로컬 셸은 프로세스 시작 단계에서 `No such file or directory (os error 2)` 오류가 발생한다.
+Node 파일 도구는 Linux 작업 폴더 URI를 로컬 파일 URI로 인식하지 못해 접근을 거부한다.
 
-## Progress for this pass
+따라서 GitHub 연결 도구를 사용해 기존 원격 작업 브랜치에 구현을 커밋한다.
+이 세션에서는 Docker·Node/npm·OpenSSL·브라우저·운영체제 수준의 검증을 실행할 수 없다.
+실제로 기록한 소스 수준 확인 결과만 보고하며, 실행 검증은 대기 상태로 남긴다.
 
-- Steps 1–4: source/configuration and documentation drafted.
-- Step 5: source-level review completed; validation record added.
-- Runtime validation: pending due to the recorded local-tool failures.
-- Save location: remote working branch. No PR created.
+## 이번 작업의 진행 상태
+
+- 1~4단계: 소스·설정과 문서 초안 작성
+- 5단계: 소스 수준 검토 완료, 검증 기록 추가
+- 실행 검증: 위 로컬 도구 오류로 인해 대기
+- 저장 위치: 원격 작업 브랜치
+- PR: 생성하지 않음

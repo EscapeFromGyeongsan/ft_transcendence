@@ -1,51 +1,51 @@
-# Full application execution — issue #7
+# 이슈 #7 전체 앱 실행 안내
 
-Status: implementation draft; Docker/build/browser/integration validation and non-author reproduction are pending. No PR has been created. See [the fixed plan](runtime-plan.md) and [validation record](runtime-validation.md).
+상태: 구현 초안. Docker·빌드·브라우저·통합 검증과 작성자 외 팀원의 재현은 대기 중이다. PR은 생성하지 않았다. [작업 계획](runtime-plan.md)과 [검증 기록](runtime-validation.md)을 함께 확인한다.
 
-## Architecture and boundary
+## 구성과 책임 범위
 
 ~~~mermaid
 flowchart LR
-    browser[Browser] -->|HTTPS / future WSS| web[web: Nginx]
-    web -->|Static HTML / JavaScript / CSS| browser
-    web -->|Internal HTTP, preserve URI| api[api: Fastify]
-    api -->|SQL, db:5432| db[db: PostgreSQL]
-    migrate[migrate: existing Drizzle Kit migrations] -->|SQL| db
-    db --- volume[(postgres_data)]
+    browser["브라우저"] -->|"HTTPS / 인계 후 WSS"| web["web: Nginx"]
+    web -->|"정적 HTML / JavaScript / CSS"| browser
+    web -->|"내부 HTTP, URI 보존"| api["api: Fastify"]
+    api -->|"SQL, db:5432"| db["db: PostgreSQL"]
+    migrate["migrate: 기존 Drizzle Kit migration"] -->|SQL| db
+    db --- volume[("postgres_data")]
 ~~~
 
 ~~~mermaid
 flowchart LR
-    db[DB health succeeds] --> migrate[Migration exits with code 0]
-    migrate --> api[API starts and DB readiness succeeds]
-    api --> web[HTTPS entry starts]
+    db["DB health 성공"] --> migrate["migration 종료 코드 0"]
+    migrate --> api["API 시작 및 DB 준비 확인 성공"]
+    api --> web["HTTPS 진입점 시작"]
 ~~~
 
-Only web publishes host ports. API has a configurable listen address and no host port mapping. The data network is internal; DB and migration are on it, API joins data and edge, and Nginx joins edge. This isolates the DB from Nginx as well as from published ports. Docker administrators still control/access containers; this is not a boundary against the host administrator.
+호스트 포트를 공개하는 서비스는 `web`뿐이다. API는 listen 주소를 설정할 수 있지만 호스트 포트를 연결하지 않는다. `data` 네트워크는 내부 전용이며 DB와 migration이 사용한다. API는 `data`·`edge`에, Nginx는 `edge`에 연결한다. 따라서 DB는 공개 포트뿐 아니라 Nginx와도 네트워크를 분리한다. 다만 Docker 관리자는 컨테이너를 제어하고 접근할 수 있으므로 호스트 관리자에 대한 접근 차단 수단은 아니다.
 
-The existing development entry point is infra/compose.yaml with project cyber-board-cafe. Full application execution uses infra/compose.full.yaml with project cyber-board-cafe-full and its own default named volume. Validation must use an additional, uniquely named project. Do not set an external/fixed volume name shared with development.
+기존 개발용 진입점은 `infra/compose.yaml`이며 프로젝트 이름은 `cyber-board-cafe`다. 전체 앱 실행은 `infra/compose.full.yaml`과 `cyber-board-cafe-full` 프로젝트를 사용하고, 별도의 기본 named volume에 데이터를 저장한다. 검증에는 이름이 다른 추가 프로젝트를 사용한다. 개발 환경과 공유하는 외부 볼륨이나 고정 볼륨 이름을 지정하지 않는다.
 
-No domain schema, game/auth/social code, or actual WebSocket endpoint is added. The only current database table is connection_probe.
+이번 작업에서는 도메인 스키마, 게임·인증·소셜 코드, 실제 WebSocket endpoint를 추가하지 않는다. 현재 DB에는 연결 확인용 `connection_probe` 테이블만 구현돼 있다.
 
-## Prerequisites and preparation
+## 실행 전 준비
 
-Run commands from the repository root in a POSIX shell such as WSL/Linux.
+명령은 저장소 루트에서 WSL·Linux 등의 POSIX 셸로 실행한다.
 
-- Docker engine and Docker Compose v2 with health dependency and bind.create_host_path support.
-- Internet access for image pulls and npm dependencies on the first build.
-- Node/npm are inside the images; they are not required on the host for full-app startup.
-- Certificate preparation needs a supplied certificate/key pair, or OpenSSL 1.1.1+ for the included local generator. Browser trust preparation is separate.
-- curl is needed for the verification commands below.
-- Image tags select Node 24/bookworm-slim, Nginx 1.28/alpine, and PostgreSQL 17/alpine. They are not digest-pinned; record the actual image IDs/digests and engine/Compose versions when validating.
+- Docker engine과 Docker Compose v2가 필요하다. health 의존 조건과 `bind.create_host_path`를 지원해야 한다.
+- 첫 빌드에서는 이미지와 npm 의존성을 내려받을 인터넷 연결이 필요하다.
+- Node/npm은 이미지 안에 있으므로 전체 앱 기동에 호스트 Node/npm 설치가 필요하지 않다.
+- 인증서·개인키 쌍을 직접 준비하거나, 포함된 로컬 생성 스크립트를 위해 OpenSSL 1.1.1 이상을 준비한다. 브라우저 신뢰 설정은 별도 작업이다.
+- 아래 검증 명령에는 `curl`이 필요하다.
+- 이미지 태그는 Node 24/bookworm-slim, Nginx 1.28/alpine, PostgreSQL 17/alpine을 사용한다. digest로 고정하지 않았으므로 검증할 때 실제 이미지 ID·digest와 Docker engine·Compose 버전을 기록한다.
 
-If .env.full does not exist, copy .env.full.example to it. Preserve an existing file.
+`.env.full`이 없으면 `.env.full.example`을 복사한다. 기존 파일이 있으면 보존한다.
 
 ~~~sh
 cp -n .env.full.example .env.full
 chmod 600 .env.full
 ~~~
 
-Create a separate password file if none exists:
+비밀번호 파일이 없으면 별도로 생성한다.
 
 ~~~sh
 umask 077
@@ -57,88 +57,88 @@ fi
 chmod 444 infra/secrets/postgres-password
 ~~~
 
-The directory is private to the host owner. The mounted file is readable by the non-root node user inside the API/migration containers; the read-only secret mount is supplied only to those services and DB. Local Compose file secrets are not an encrypted secret store. Do not print the file, commit it, or record a generated DATABASE_URL in evidence.
+디렉터리는 호스트 소유자만 접근할 수 있도록 설정한다. 컨테이너에 연결되는 파일은 API·migration 컨테이너의 일반 권한 `node` 사용자도 읽을 수 있어야 한다. 읽기 전용 secret은 API·migration·DB에만 전달한다. 로컬 Compose의 파일 기반 secret은 암호화된 비밀 저장소가 아니다. 파일 내용을 출력하거나 커밋하지 않으며, 생성된 `DATABASE_URL`도 검증 증거에 남기지 않는다.
 
-Keep the password file under the ignored infra/secrets directory, or outside the repository/build context. If paths are changed, review .gitignore and .dockerignore as well. A secret file must contain one non-empty line, optionally ending in LF or CRLF. Spaces are significant; embedded newlines/NUL are rejected. URL-reserved characters and dollar signs are encoded by the API/migration wrapper, without Compose interpolation of the password itself.
+비밀번호 파일은 무시 대상인 `infra/secrets` 아래나 저장소·빌드 context 밖에 둔다. 경로를 바꾸면 `.gitignore`와 `.dockerignore`도 확인한다. 파일은 비어 있지 않은 한 줄이어야 하며 끝의 LF·CRLF 개행 하나는 허용한다. 공백은 비밀번호의 일부로 보존하고, 중간 개행·NUL 문자는 거부한다. API·migration 시작 스크립트가 URL 예약 문자와 달러 기호를 인코딩하므로, 비밀번호 자체는 Compose 변수 치환을 거치지 않는다.
 
-PostgreSQL initialization settings apply to an empty data directory. Editing the password/user/database file or variables does not update an existing database. Rotate deliberately with SQL and coordinated service configuration; never delete an existing volume as a password-change shortcut.
+PostgreSQL 초기 설정은 데이터 디렉터리가 비어 있을 때 적용된다. 비밀번호 파일이나 사용자·DB 변수만 바꿔도 기존 DB의 설정이 갱신되지는 않는다. 비밀번호 변경은 SQL과 서비스 설정을 함께 조정해서 진행하며, 변경을 쉽게 하려고 기존 볼륨을 삭제하지 않는다.
 
-## Certificates and trust
+## 인증서와 신뢰 설정
 
-The Nginx mount expects server.crt and server.key inside CERT_DIR. The pair is mounted read-only, not baked into either image.
+Nginx는 `CERT_DIR` 안의 `server.crt`와 `server.key`를 읽는다. 두 파일은 읽기 전용으로 연결하며 이미지에 포함하지 않는다.
 
-For a self-signed localhost certificate for CLI validation:
+CLI 확인용 자체 서명 localhost 인증서는 다음과 같이 준비한다.
 
 ~~~sh
 sh infra/generate-local-cert.sh
 curl --cacert infra/certs/server.crt https://localhost:8443/api/health
 ~~~
 
-The curl command runs after startup. The generator creates a 30-day certificate with localhost, 127.0.0.1 and ::1 subject alternative names. It refuses to overwrite an existing pair. It does not install browser trust. This path alone does not demonstrate warning-free browser access.
+위 `curl` 명령은 서비스를 기동한 뒤 실행한다. 생성 스크립트는 `localhost`·`127.0.0.1`·`::1`을 subject alternative name(SAN)으로 포함하는 30일 인증서를 만든다. 기존 인증서·개인키 쌍은 덮어쓰지 않는다. 브라우저 신뢰 설정을 설치하지 않으므로, 이 절차만으로 브라우저에서 경고 없이 접속할 수 있다고 판단하지 않는다.
 
-For trusted local browser reproduction, one option is an already installed mkcert. Generate the pair instead of running the self-signed generator:
+브라우저가 신뢰하는 로컬 인증서를 준비하는 한 가지 방법은 이미 설치된 `mkcert`를 사용하는 것이다. 이 경우 자체 서명 생성 스크립트 대신 다음 절차로 인증서·개인키 쌍을 만든다.
 
 ~~~sh
 umask 077
 mkdir -p infra/certs
-# If a pair already exists, preserve it or move it aside deliberately first.
+# 기존 인증서·개인키 쌍이 있으면 먼저 보존하거나 명시적으로 다른 위치로 옮긴다.
 mkcert -install
 mkcert -cert-file infra/certs/server.crt -key-file infra/certs/server.key \
   localhost 127.0.0.1 ::1
 ~~~
 
-mkcert -install changes that computer's trust store and may need OS approval. Obtain trust on every browser/client used for reproduction; a WSL trust-store change alone need not change Windows Chrome's trust store. On another client, trust the issuing CA's rootCA.pem; installing an unrelated local CA there will not validate this server's certificate. Keep the local CA private key private as well. With mkcert, curl's trust file is the generated CA certificate (rootCA.pem), not the leaf server.crt.
+`mkcert -install`은 해당 컴퓨터의 신뢰 저장소를 변경하며 운영체제 승인이 필요할 수 있다. 재현에 사용하는 각 브라우저·클라이언트에서 신뢰를 설정한다. WSL 신뢰 저장소를 바꿨다고 Windows Chrome의 신뢰 저장소까지 바뀌는 것은 아니다. 다른 클라이언트에는 인증서를 발급한 CA의 `rootCA.pem`을 신뢰하도록 설정해야 한다. 그 컴퓨터에서 무관한 다른 CA를 만들고 설치해도 이 서버 인증서를 검증할 수 없다. 로컬 CA 개인키도 비공개로 보관한다. `mkcert`를 사용한 경우 `curl`의 신뢰 파일은 서버 인증서 `server.crt`가 아니라 발급 CA의 `rootCA.pem`이다.
 
-For LAN access, the certificate must include the IP/DNS name actually used. The OpenSSL helper accepts LOCAL_CERT_SAN for a different SAN list. Change BIND_ADDRESS explicitly (for example, 0.0.0.0), prepare trust on the other client, and review host firewall access. Never transfer the server's private key or a local CA private key to a client merely to establish trust.
+LAN 접속에서는 다른 컴퓨터가 실제로 사용하는 IP·DNS 이름이 인증서에 포함돼야 한다. OpenSSL 생성 스크립트는 `LOCAL_CERT_SAN`으로 다른 SAN 목록을 받을 수 있다. `BIND_ADDRESS`를 명시적으로 바꾸고(예: `0.0.0.0`), 상대 클라이언트의 신뢰 설정과 호스트 방화벽 접근을 확인한다. 신뢰 설정을 위해 서버 개인키나 로컬 CA 개인키를 클라이언트에 전달하지 않는다.
 
-## Single-command startup
+## 단일 명령 기동
 
-After preparation:
+사전 준비를 마친 뒤 실행한다.
 
 ~~~sh
 docker compose --env-file .env.full --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
 ~~~
 
-| Public URL with example ports | Expected behavior |
+| 예시 포트 기준 공개 URL | 기대 동작 |
 |---|---|
-| https://localhost:8443/ | Built web page |
-| https://localhost:8443/api/health | API liveness, 200 |
-| https://localhost:8443/api/health/db | DB/table readiness, 200 or generic 503 |
-| https://localhost:8443/docs/ | Swagger UI and its assets |
+| https://localhost:8443/ | 빌드된 웹 화면 |
+| https://localhost:8443/api/health | API 생존 확인, 200 |
+| https://localhost:8443/api/health/db | DB·테이블 준비 확인, 200 또는 일반 오류 응답 503 |
+| https://localhost:8443/docs/ | Swagger UI와 관련 정적 파일 |
 | https://localhost:8443/docs/json | OpenAPI JSON |
-| http://localhost:8080/ | 308 to HTTPS port 8443 |
+| http://localhost:8080/ | HTTPS 포트 8443으로 308 리다이렉트 |
 
-A first build can fail on dependency installation, image availability or tool/runtime compatibility; this session has not executed it. Do not declare startup proven from the configuration alone.
+첫 빌드는 의존성 설치, 이미지 제공 여부, 도구·실행 버전 호환 문제로 실패할 수 있다. 이 세션에서는 실행하지 못했다. 설정 파일 작성만으로 기동이 검증됐다고 판단하지 않는다.
 
-The workspace image installs the committed root lock using npm ci. The web-build target runs the existing type check and Vite build. The final web target contains Nginx and built web files. The server target uses the existing Node TypeScript execution mode and intentionally retains migration tooling; dependency pruning is deferred. Neither depends on host node_modules.
+workspace 이미지는 커밋된 루트 잠금 파일을 기준으로 `npm ci`를 수행한다. `web-build` 단계는 기존 타입 검사와 Vite 빌드를 실행한다. 최종 `web` 이미지에는 Nginx와 웹 빌드 결과가 들어간다. `server` 이미지는 기존 Node TypeScript 실행 방식을 유지하며 migration 도구도 포함한다. 실행에 불필요한 의존성을 제거하는 최적화는 후속 작업으로 남긴다. 두 이미지 모두 호스트의 `node_modules`에 의존하지 않는다.
 
-## Environment precedence and internal addresses
+## 환경 변수 우선순위와 내부 주소
 
-| Setting | Source / behavior |
+| 설정 | 입력 위치·동작 |
 |---|---|
-| POSTGRES_USER / POSTGRES_DB | Shell variables take precedence over the Compose --env-file values; required |
-| POSTGRES_PASSWORD_FILE | Host file path used by Compose secrets; the container receives /run/secrets/postgres_password |
-| CERT_DIR | Host directory mounted read-only into Nginx |
-| BIND_ADDRESS / HTTP_PORT / HTTPS_PORT | Compose interpolation; defaults 127.0.0.1 / 8080 / 8443 |
-| API_HOST / PORT in full-app API | Explicitly 0.0.0.0 / 3001 in the service |
-| DATABASE_URL in full-app API/migration | Constructed from the password file and initialization variables; always db:5432 |
-| API_HOST in local development | Optional; default 127.0.0.1 |
-| PORT in local development/preview | Existing root .env/process behavior and Vite proxy remain unchanged |
+| `POSTGRES_USER` / `POSTGRES_DB` | 필수. 셸 환경 변수가 Compose `--env-file`의 값보다 우선함 |
+| `POSTGRES_PASSWORD_FILE` | Compose secret에 사용할 호스트 파일 경로. 컨테이너에는 `/run/secrets/postgres_password`로 전달 |
+| `CERT_DIR` | Nginx에 읽기 전용으로 연결할 호스트 디렉터리 |
+| `BIND_ADDRESS` / `HTTP_PORT` / `HTTPS_PORT` | Compose 변수 치환에 사용. 기본값은 `127.0.0.1` / `8080` / `8443` |
+| 전체 앱 API의 `API_HOST` / `PORT` | 서비스 설정에서 `0.0.0.0` / `3001`로 명시 |
+| 전체 앱 API·migration의 `DATABASE_URL` | 비밀번호 파일과 DB 초기 설정으로 생성. 주소는 항상 `db:5432` |
+| 로컬 개발의 `API_HOST` | 선택 사항. 기본값은 `127.0.0.1` |
+| 로컬 개발·preview의 `PORT` | 기존 루트 `.env`·프로세스 환경과 Vite 프록시 동작을 유지 |
 
-The documented lifecycle commands explicitly set -p cyber-board-cafe-full so an inherited COMPOSE_PROJECT_NAME cannot select the development project. Validation commands explicitly select their disposable project.
+문서의 기동·종료 명령은 `-p cyber-board-cafe-full`을 명시한다. 셸에서 상속된 `COMPOSE_PROJECT_NAME` 때문에 개발용 프로젝트가 선택되는 일을 방지하기 위해서다. 검증 명령에서는 별도 폐기 가능한 프로젝트를 명시적으로 선택한다.
 
-Compose --env-file performs configuration interpolation; it does not pass every variable into every container. The service environment mappings explicitly select values. The root development .env is not loaded by the full-app Compose command and is excluded from images. Do not source .env.full as a shell script.
+Compose의 `--env-file`은 설정값을 치환하는 입력이다. 모든 변수를 모든 컨테이너에 자동으로 전달하는 기능이 아니다. 각 서비스의 `environment` 설정에서 전달할 값을 명시한다. 전체 앱 Compose 명령은 개발용 루트 `.env`를 읽지 않으며, 해당 파일은 이미지에서도 제외한다. `.env.full`을 셸 스크립트처럼 `source`하지 않는다.
 
-Credentials are URI-encoded before building the internal DATABASE_URL. Browser requests use same-origin /api paths; the browser must never try to resolve the internal service names api or db. A bind to 0.0.0.0 inside a container does not itself publish a host port.
+내부 `DATABASE_URL`을 생성하기 전에 사용자명·비밀번호·DB 이름을 URI 인코딩한다. 브라우저는 같은 origin의 `/api` 경로로 요청한다. 내부 서비스 이름인 `api`·`db`를 브라우저에서 조회하려고 하면 안 된다. 컨테이너 내부에서 `0.0.0.0`에 listen하는 것 자체가 호스트 포트를 공개하는 것은 아니다.
 
-Only PUBLIC_HTTPS_PORT is substituted into the Nginx template. Nginx variables such as $host, $request_uri and $http_upgrade stay intact. /api and /docs are forwarded without stripping their prefix. Docker DNS is consulted through a variable upstream so API container replacement can be resolved again.
+Nginx 템플릿에서는 `PUBLIC_HTTPS_PORT`만 치환한다. `$host`·`$request_uri`·`$http_upgrade` 같은 Nginx 변수는 그대로 남긴다. `/api`·`/docs`는 접두어를 제거하지 않고 전달한다. 변수 기반 upstream에서 Docker DNS를 조회하므로 API 컨테이너가 교체된 뒤에도 주소를 다시 찾을 수 있도록 구성한다.
 
-## Readiness, migrations and lifecycle
+## 준비 상태·migration·기동과 종료
 
-DB uses pg_isready. Migration runs the existing Drizzle Kit command with the existing config and SQL files. Its successful exit is a prerequisite for API startup. API additionally checks the existing DB/table readiness route before listening. Web starts after API health succeeds.
+DB 준비 상태는 `pg_isready`로 확인한다. migration은 기존 설정과 SQL 파일을 사용하는 Drizzle Kit 명령을 실행한다. migration의 성공 종료가 API 시작 조건이다. API는 listen 전에 기존 DB·테이블 준비 확인 경로를 추가로 검사한다. 웹은 API health가 성공한 뒤 시작한다.
 
-Migration/DB failure prevents a fresh API from becoming ready; up --wait must not be treated as successful if it exits non-zero. Health dependencies apply at startup. Runtime DB failure marks readiness unhealthy but does not automatically orchestrate recovery or stop every other container.
+migration·DB 실패 시 새 API가 정상 준비 상태가 되지 않아야 한다. `up --wait`가 0이 아닌 종료 코드를 반환하면 성공으로 취급하지 않는다. health 의존 조건은 기동 시점에 적용된다. 실행 중 DB 장애는 준비 상태를 비정상으로 표시하지만, 자동으로 전체 복구를 조율하거나 다른 모든 컨테이너를 멈추지는 않는다.
 
 ~~~sh
 docker compose --env-file .env.full --project-directory . \
@@ -148,30 +148,30 @@ docker compose --env-file .env.full --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml logs --tail=100 db migrate api web
 ~~~
 
-Check logs before attaching them to evidence; remove any unexpected sensitive values. Do not attach the password file, personal .env, private key or raw process environment.
+증거로 첨부하기 전에 로그를 확인하고, 예상치 못한 비밀값이 있으면 제거한다. 비밀번호 파일, 개인 `.env`, 개인키, 프로세스 환경 변수 전체를 첨부하지 않는다.
 
-Normal stop:
+정상 종료 명령은 다음과 같다.
 
 ~~~sh
 docker compose --env-file .env.full --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml stop
 ~~~
 
-Recreate after a normal stop with the same startup command and project name. To remove the containers/networks while preserving the named DB volume, use down without --volumes. Do not use down -v for the real full-app or development project.
+정상 종료 후에는 동일한 기동 명령과 프로젝트 이름으로 다시 실행한다. named DB volume을 보존하면서 컨테이너·네트워크를 제거하려면 `--volumes` 없이 `down`을 사용한다. 실제 전체 앱·개발 프로젝트에는 `down -v`를 사용하지 않는다.
 
-For a schema-changing deployment, stop web/api before applying migration and recreate them only after success. An already running API is not automatically stopped by a newly failed migration; do not treat an in-place up as a deployment transaction.
+스키마를 변경하는 배포에서는 웹·API를 먼저 멈추고 migration 성공 후에 재생성한다. 새 migration이 실패해도 이미 실행 중인 API가 자동으로 종료되지는 않는다. 실행 중인 서비스에 `up`을 적용하는 것만으로 배포 전체가 하나의 트랜잭션처럼 처리된다고 가정하지 않는다.
 
-The API entry wrapper imports the existing server in the same Node process so SIGTERM reaches its Fastify shutdown handlers. init: true reaps children; the migration wrapper forwards SIGINT/SIGTERM to its Drizzle process. Graceful shutdown still needs executed verification.
+API 시작 스크립트는 같은 Node 프로세스에서 기존 서버를 import하므로 `SIGTERM`이 Fastify 종료 핸들러에 전달되도록 구성한다. `init: true`는 자식 프로세스를 정리하고, migration 시작 스크립트는 `SIGINT`·`SIGTERM`을 Drizzle 프로세스에 전달한다. 정상 종료 여부도 실제 실행으로 검증해야 한다.
 
-## WebSocket handoff
+## WebSocket 인계 조건
 
-Upgrade/Connection forwarding is prepared for paths under /api/. The 75-second upstream idle timeout requires a future endpoint's heartbeat policy to be coordinated. Confirm the real endpoint path with its owner. If it is outside /api/, add its explicit proxy location and verify it.
+`/api/` 아래 경로에는 `Upgrade`·`Connection` 헤더 전달 설정을 준비했다. upstream 유휴 제한 시간은 75초이므로 실제 endpoint의 heartbeat 정책과 조율해야 한다. 담당자에게 실제 endpoint 경로를 확인한다. `/api/` 밖에 있으면 해당 프록시 경로를 명시적으로 추가하고 검증한다.
 
-Pending endpoint handoff items: path, authentication/origin handling, heartbeat interval, close behavior, and connection/message/reconnect tests. Until then, actual WSS is pending. Do not add a fake echo endpoint and label it product integration.
+인계 대기 항목은 endpoint 경로, 인증·origin 처리, heartbeat 주기, 연결 종료 동작, 연결·메시지·재접속 검증이다. 인계 전까지 실제 WSS 검증은 대기로 둔다. 임시 echo endpoint만 추가하고 제품의 실시간 통합이 완료됐다고 기록하지 않는다.
 
-## Isolated acceptance verification
+## 격리된 수용 기준 검증
 
-Use a unique project name and unused ports. These commands never target the existing development/full-app data volumes:
+고유한 프로젝트 이름과 사용하지 않는 포트를 선택한다. 아래 명령은 기존 개발용·전체 앱 데이터 볼륨을 대상으로 하지 않는다.
 
 ~~~sh
 export HTTP_PORT=18080
@@ -187,10 +187,10 @@ dc up --build -d --wait
 dc ps -a
 ~~~
 
-Use the appropriate trust file from the certificate preparation section:
+인증서 준비 방식에 맞는 신뢰 파일을 사용한다.
 
 ~~~sh
-# Self-signed helper path; for mkcert use its rootCA.pem instead.
+# 자체 서명 생성 스크립트 기준 경로. mkcert를 사용했다면 해당 CA의 rootCA.pem으로 바꾼다.
 TRUST_FILE=infra/certs/server.crt
 curl --fail --cacert "$TRUST_FILE" https://localhost:18443/
 curl --fail --cacert "$TRUST_FILE" https://localhost:18443/api/health
@@ -200,11 +200,11 @@ curl --fail --cacert "$TRUST_FILE" https://localhost:18443/docs/json
 curl -sS -D - -o /dev/null http://localhost:18080/api/health
 ~~~
 
-Expected: health routes 200; Swagger routes/assets load; HTTP responds 308 with Location https://localhost:18443/api/health. Open the page/Swagger in a browser with trust configured and record browser console output. curl -k and the internal Nginx healthcheck do not prove certificate trust.
+기대 결과는 health 경로의 200 응답, Swagger 경로·정적 파일 정상 로딩, HTTP의 308 응답과 `Location: https://localhost:18443/api/health`다. 인증서 신뢰를 설정한 브라우저에서 웹 화면·Swagger를 열고 콘솔 출력을 기록한다. `curl -k`나 Nginx 내부 healthcheck는 인증서 신뢰 검증을 대신하지 않는다.
 
-Inspect published ports: only web has bindings. Test API replacement with dc up -d --force-recreate api and retry the HTTPS health URL after DNS cache expiry. Record any transient failure.
+공개 포트 연결은 `web`에만 있는지 확인한다. `dc up -d --force-recreate api`로 API를 교체한 뒤 DNS 캐시 만료 후 HTTPS health URL을 다시 요청한다. 일시적인 실패가 있으면 함께 기록한다.
 
-Verify one connection-probe row survives container/network recreation:
+컨테이너·네트워크 재생성 후에도 연결 확인용 행 하나가 보존되는지 확인한다.
 
 ~~~sh
 dc exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
@@ -218,11 +218,11 @@ DELETE FROM connection_probe WHERE id = 'runtime-persistence-probe';
 SQL
 ~~~
 
-Expected: the same row is returned. This proves probe-table persistence only, not account or match-history preservation.
+기대 결과는 동일한 행이 조회되는 것이다. 이는 연결 확인 테이블의 데이터 보존만 확인하며, 계정·경기 기록 보존 검증을 의미하지 않는다.
 
-Runtime DB failure: dc stop db, then check that /api/health/db returns generic 503 while API liveness can remain 200. Restore db, then verify readiness recovers. Record exit/shutdown behavior when stopping all services.
+실행 중 DB 장애는 `dc stop db` 후 `/api/health/db`가 일반 오류 응답 503을 반환하는지 확인한다. 이때 API 생존 확인은 200을 유지할 수 있다. DB를 다시 시작한 뒤 준비 상태가 복구되는지 확인한다. 전체 서비스 종료 시 종료 코드·종료 동작도 기록한다.
 
-Test migration failure on another empty project by deliberately creating a conflicting view. This uses the unchanged migration SQL and never modifies an applied migration:
+migration 실패는 별도의 빈 프로젝트에서 충돌하는 view를 만들어 검증한다. 기존 migration SQL을 그대로 사용하며, 이미 적용된 migration 파일을 수정하지 않는다.
 
 ~~~sh
 FAILURE_PROJECT="$VERIFY_PROJECT-migration-failure"
@@ -239,9 +239,9 @@ failure_dc ps -a
 failure_dc logs --tail=100 migrate
 ~~~
 
-Expected: CREATE TABLE in migration fails on the existing view; the migration exits non-zero, and fresh API/web do not become ready. Record the startup command's non-zero exit status rather than hiding it with shell fallthrough. Run this only in the newly named empty failure project. If the view creation fails, stop and inspect that project instead of continuing.
+기대 결과는 기존 view와 migration의 `CREATE TABLE`이 충돌해 migration이 0이 아닌 종료 코드로 끝나고, 새 API·웹이 준비 상태가 되지 않는 것이다. 뒤의 셸 명령을 계속 실행하면서 기동 명령의 실패 코드를 놓치지 말고 기록한다. 새로 만든 빈 실패 검증용 프로젝트에서만 수행한다. view 생성이 실패하면 계속 진행하지 말고 해당 프로젝트를 확인한다.
 
-After recording evidence, clean up only the disposable projects. Confirm the printed project names are the unique validation names, not cyber-board-cafe or cyber-board-cafe-full:
+증거 기록 후에는 폐기 가능한 검증용 프로젝트만 정리한다. 출력된 프로젝트 이름이 `cyber-board-cafe`·`cyber-board-cafe-full`이 아니라 이번에 만든 고유 검증 이름인지 확인한다.
 
 ~~~sh
 printf '%s\n' "$VERIFY_PROJECT" "$FAILURE_PROJECT"
@@ -249,7 +249,7 @@ dc down --volumes
 failure_dc down --volumes
 ~~~
 
-Existing host development regression (host Node/npm are needed for these tests only):
+기존 호스트 개발 흐름의 회귀 검증은 다음과 같다. 이 검증에만 호스트 Node/npm이 필요하다.
 
 ~~~sh
 npm ci
@@ -260,17 +260,17 @@ npm run db:migrate
 npm run test:e2e
 ~~~
 
-Also exercise a non-default PORT, development and preview API proxying, and Ctrl+C shutdown. Use a separate local verification DB if the normal development DB contains valuable data.
+기본값과 다른 `PORT`, 개발·preview API 프록시, Ctrl+C 종료도 확인한다. 일반 개발 DB에 보존할 데이터가 있다면 별도의 로컬 검증용 DB를 사용한다.
 
-Record date/time (KST), tester, commit SHA, engine/Compose/Node/browser versions, image IDs, commands, exit codes, redacted logs, HTTPS/browser evidence, persistence result, failure results and WSS pending status. A non-author must repeat the README instructions before issue #7 can be accepted.
+기록에는 한국 시간 기준 날짜·시각, 검증자, 커밋 SHA, Docker engine·Compose·Node·브라우저 버전, 이미지 ID, 명령, 종료 코드, 비밀값을 제거한 로그, HTTPS·브라우저 증거, 데이터 보존 결과, 실패 검증 결과, WSS 대기 상태를 포함한다. 이슈 #7을 수용하려면 작성자 외 팀원이 README 절차를 재현해야 한다.
 
-## References
+## 참고 자료
 
-- [Docker startup dependencies](https://docs.docker.com/compose/how-tos/startup-order/)
-- [Docker network names and ports](https://docs.docker.com/compose/how-tos/networking/)
-- [Compose environment configuration](https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/)
-- [Nginx WebSocket forwarding](https://nginx.org/en/docs/http/websocket.html)
-- [Node TypeScript execution](https://nodejs.org/docs/latest-v24.x/api/typescript.html)
+- [Docker 기동 의존 조건](https://docs.docker.com/compose/how-tos/startup-order/)
+- [Docker 네트워크 이름과 포트](https://docs.docker.com/compose/how-tos/networking/)
+- [Compose 환경 변수 설정](https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/)
+- [Nginx WebSocket 전달 설정](https://nginx.org/en/docs/http/websocket.html)
+- [Node TypeScript 실행](https://nodejs.org/docs/latest-v24.x/api/typescript.html)
 - [mkcert](https://github.com/FiloSottile/mkcert)
 
-Codex assisted with planning, implementation and source-level review. This record is not runtime or school-evaluation evidence.
+계획·구현·소스 수준 검토에 Codex의 도움을 받았다. 이 문서 자체는 실제 실행 결과나 학교 평가 통과의 증거가 아니다.
