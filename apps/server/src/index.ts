@@ -1,15 +1,13 @@
 import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { buildApp } from "./app.ts";
+import { readListenOptions } from "./listen-options.ts";
 
 if (existsSync(".env")) loadEnvFile(".env");
 if (!process.env.DATABASE_URL) {
   throw new Error("Set DATABASE_URL in .env before starting the API server.");
 }
-const port = Number(process.env.PORT ?? 3001);
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new Error("Set PORT in .env to an integer between 1 and 65535.");
-}
+const listenOptions = readListenOptions();
 const app = await buildApp({}, process.env.DATABASE_URL);
 try {
   const databaseHealth = await app.inject({
@@ -21,10 +19,7 @@ try {
       "Database is unavailable. Run npm run db:up and npm run db:migrate first.",
     );
   }
-  const address = await app.listen({
-    port,
-    host: "127.0.0.1",
-  });
+  const address = await app.listen(listenOptions);
   console.log(`Fastify API listening on ${address}`);
 } catch (error) {
   await app.close();
