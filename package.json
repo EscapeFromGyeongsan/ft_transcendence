@@ -38,6 +38,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.1",
     "@fastify/swagger": "^9.9.0",
     "@fastify/swagger-ui": "^6.1.1",
     "argon2": "^0.45.1",

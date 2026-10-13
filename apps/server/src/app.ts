@@ -1,11 +1,48 @@
-import Fastify, { type FastifyServerOptions } from "fastify";
+import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import rateLimit from "@fastify/rate-limit";
 import { createDatabase } from "./db/client.ts";
+import { registerAuthRoutes } from "./api/auth-routes.ts";
+import { errorBody } from "./schemas/errors.ts";
+import {
+  createAuthService,
+  type AuthConfig,
+  type AuthService,
+} from "./services/auth-service.ts";
+
+class ServiceUnavailableError extends Error {}
+
+const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
+
+// Connection-level failures (DB down, pool timeout) map to 503, not 500.
+function isDatabaseUnavailable(error: unknown) {
+  if (error instanceof ServiceUnavailableError) return true;
+  for (
+    let e = error as
+      { code?: unknown; message?: unknown; cause?: unknown } | undefined;
+    e;
+    e = e.cause as typeof e
+  ) {
+    const code = typeof e.code === "string" ? e.code : "";
+    const message = typeof e.message === "string" ? e.message : "";
+    if (
+      unavailableCodes.has(code) ||
+      code.startsWith("08") ||
+      code.startsWith("57P") ||
+      message.includes("timeout exceeded when trying to connect") ||
+      message.includes("Connection terminated")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export async function buildApp(
   options: FastifyServerOptions = {},
   databaseUrl?: string,
+  authConfig?: AuthConfig,
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -13,12 +50,69 @@ export async function buildApp(
         app.log.error("Database pool connection lost."),
       )
     : undefined;
+  const auth =
+    database && authConfig
+      ? createAuthService(database.db, authConfig)
+      : undefined;
+  const getAuth = (): AuthService => {
+    if (!auth) throw new ServiceUnavailableError();
+    return auth;
+  };
   app.addHook("onClose", async () => {
     await database?.close();
   });
+  app.setErrorHandler<FastifyError>((error, request, reply) => {
+    if (error.validation) {
+      return reply.code(422).send({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Request validation failed.",
+          details: {
+            issues: error.validation.map((issue) => ({
+              path: issue.instancePath,
+              message: issue.message,
+            })),
+          },
+        },
+      });
+    }
+    if (error.statusCode === 429) {
+      return reply
+        .code(429)
+        .send(errorBody("RATE_LIMITED", "Too many requests."));
+    }
+    if (error.statusCode === 415) {
+      return reply
+        .code(415)
+        .send(errorBody("UNSUPPORTED_MEDIA_TYPE", "Use application/json."));
+    }
+    if (error.statusCode === 400) {
+      return reply
+        .code(400)
+        .send(errorBody("BAD_REQUEST", "Malformed request body."));
+    }
+    if (isDatabaseUnavailable(error)) {
+      request.log.error("Database is unavailable.");
+      return reply
+        .code(503)
+        .send(errorBody("SERVICE_UNAVAILABLE", "Database is unavailable."));
+    }
+    request.log.error({ err: error }, "Unhandled error.");
+    return reply
+      .code(500)
+      .send(errorBody("INTERNAL_ERROR", "Internal server error."));
+  });
+  // JSON-only API: other bodies get 415 instead of failing validation as text.
+  app.removeContentTypeParser("text/plain");
+  await app.register(rateLimit, { global: false });
   await app.register(swagger, {
     openapi: {
       info: { title: "Cyber Board Cafe API", version: "0.1.0" },
+      components: {
+        securitySchemes: {
+          bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+        },
+      },
     },
   });
   await app.register(swaggerUi, { routePrefix: "/docs" });
@@ -91,5 +185,6 @@ export async function buildApp(
       }
     },
   );
+  registerAuthRoutes(app, getAuth);
   return app;
 }
