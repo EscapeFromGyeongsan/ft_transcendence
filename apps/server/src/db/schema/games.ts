@@ -57,14 +57,15 @@ export const games = pgTable(
       "games_outcome_check",
       sql`${table.outcome} IS NULL OR ${table.outcome} IN ('win', 'draw', 'void')`,
     ),
-    // A result exists exactly when the match is finished; only a win has a winner.
+    // Unfinished: no result fields at all. Finished: outcome, reason and time
+    // are all set. Only a win has a winner.
     check(
       "games_result_check",
-      sql`(${table.status} = 'finished') = (${table.outcome} IS NOT NULL AND ${table.resultReason} IS NOT NULL AND ${table.finishedAt} IS NOT NULL)`,
+      sql`(${table.status} = 'finished' AND ${table.outcome} IS NOT NULL AND ${table.resultReason} IS NOT NULL AND ${table.finishedAt} IS NOT NULL) OR (${table.status} <> 'finished' AND ${table.outcome} IS NULL AND ${table.resultReason} IS NULL AND ${table.finishedAt} IS NULL AND ${table.winnerUserId} IS NULL)`,
     ),
     check(
       "games_winner_check",
-      sql`(${table.outcome} = 'win') = (${table.winnerUserId} IS NOT NULL)`,
+      sql`(${table.outcome} = 'win' AND ${table.winnerUserId} IS NOT NULL) OR (${table.outcome} IS DISTINCT FROM 'win' AND ${table.winnerUserId} IS NULL)`,
     ),
     check("games_state_version_check", sql`${table.stateVersion} >= 0`),
   ],

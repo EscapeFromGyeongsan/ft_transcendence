@@ -10,7 +10,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { users } from "./users.ts";
+import { sessions, users } from "./users.ts";
 
 // External identity linked to a platform account. One account per provider
 // user, and at most one link per provider for each platform account.
@@ -42,7 +42,8 @@ export const oauthAccounts = pgTable(
 );
 
 // One-time OAuth `state`. Blocks forged callbacks and replayed responses.
-// mode "link" carries the signed-in user that started the flow.
+// browser_hash binds the flow to the browser that started it (login CSRF);
+// mode "link" also records the user and session, rechecked at callback.
 export const oauthStates = pgTable(
   "oauth_states",
   {
@@ -52,6 +53,10 @@ export const oauthStates = pgTable(
     userId: bigint("user_id", { mode: "number" }).references(() => users.id, {
       onDelete: "cascade",
     }),
+    sessionId: uuid("session_id").references(() => sessions.id, {
+      onDelete: "cascade",
+    }),
+    browserHash: text("browser_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -61,7 +66,7 @@ export const oauthStates = pgTable(
   (table) => [
     check(
       "oauth_states_mode_check",
-      sql`(${table.mode} = 'login' AND ${table.userId} IS NULL) OR (${table.mode} = 'link' AND ${table.userId} IS NOT NULL)`,
+      sql`(${table.mode} = 'login' AND ${table.userId} IS NULL AND ${table.sessionId} IS NULL) OR (${table.mode} = 'link' AND ${table.userId} IS NOT NULL AND ${table.sessionId} IS NOT NULL)`,
     ),
   ],
 );
