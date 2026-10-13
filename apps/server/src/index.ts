@@ -37,7 +37,11 @@ const port = Number(process.env.PORT ?? 3001);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("Set PORT in .env to an integer between 1 and 65535.");
 }
-const app = await buildApp({}, process.env.DATABASE_URL, {
+// Client IP for rate limiting comes from X-Forwarded-For only when the direct
+// peer is a trusted proxy. Default: loopback (local dev proxy). Behind the
+// Docker Nginx set TRUST_PROXY=uniquelocal (private network addresses).
+const trustProxy = process.env.TRUST_PROXY || "loopback";
+const app = await buildApp({ trustProxy }, process.env.DATABASE_URL, {
   jwtSecret,
   twoFactorKey,
   oauth42,
