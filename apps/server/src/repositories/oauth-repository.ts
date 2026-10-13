@@ -9,6 +9,8 @@ export async function insertState(
     provider: string;
     mode: "login" | "link";
     userId: number | null;
+    sessionId: string | null;
+    browserHash: string;
     expiresAt: Date;
   },
 ) {
@@ -16,10 +18,12 @@ export async function insertState(
 }
 
 // Atomically marks an unused, unexpired state as used, so a callback
-// (or a replayed provider response) is accepted at most once.
+// (or a replayed provider response) is accepted at most once, and only from
+// the browser that started the flow (matching browser_hash).
 export async function consumeState(
   db: Executor,
   stateHash: string,
+  browserHash: string,
   provider: string,
 ) {
   const [row] = await db
@@ -28,12 +32,17 @@ export async function consumeState(
     .where(
       and(
         eq(oauthStates.stateHash, stateHash),
+        eq(oauthStates.browserHash, browserHash),
         eq(oauthStates.provider, provider),
         isNull(oauthStates.usedAt),
         gt(oauthStates.expiresAt, sql`now()`),
       ),
     )
-    .returning({ mode: oauthStates.mode, userId: oauthStates.userId });
+    .returning({
+      mode: oauthStates.mode,
+      userId: oauthStates.userId,
+      sessionId: oauthStates.sessionId,
+    });
   return row;
 }
 

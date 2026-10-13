@@ -22,6 +22,20 @@ export type OAuthProfile = {
 // The provider could not be reached or answered unexpectedly (maps to 502).
 export class OAuthProviderError extends Error {}
 
+// A 2xx body that is not a JSON object is a provider fault, not ours.
+async function readJsonObject(response: Response) {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new OAuthProviderError("42 returned invalid JSON.");
+  }
+  if (typeof body !== "object" || body === null) {
+    throw new OAuthProviderError("42 returned an unexpected body.");
+  }
+  return body as Record<string, unknown>;
+}
+
 export function create42Client(config: OAuth42Config) {
   const request = config.fetch ?? fetch;
 
@@ -62,26 +76,22 @@ export function create42Client(config: OAuth42Config) {
         return null;
       }
       if (!tokenResponse.ok) throw new OAuthProviderError("42 token error.");
-      const { access_token: accessToken } = (await tokenResponse.json()) as {
-        access_token?: string;
-      };
-      if (!accessToken) throw new OAuthProviderError("42 token missing.");
+      const { access_token: accessToken } = await readJsonObject(tokenResponse);
+      if (typeof accessToken !== "string" || !accessToken) {
+        throw new OAuthProviderError("42 token missing.");
+      }
 
       const meResponse = await call(ME_URL, {
         headers: { authorization: `Bearer ${accessToken}` },
       });
       if (!meResponse.ok) throw new OAuthProviderError("42 profile error.");
-      const me = (await meResponse.json()) as {
-        id?: number;
-        login?: string;
-        email?: string | null;
-      };
+      const me = await readJsonObject(meResponse);
       if (typeof me.id !== "number" || typeof me.login !== "string") {
         throw new OAuthProviderError("42 profile is incomplete.");
       }
       return {
         providerUserId: String(me.id),
-        email: me.email ?? null,
+        email: typeof me.email === "string" && me.email ? me.email : null,
         login: me.login,
       };
     },

@@ -24,8 +24,10 @@ const people: Record<string, { login: string; email: string | null }> = {
   "104": { login: "noemail", email: null },
 };
 let providerDown = false;
+let providerBadJson = false;
 const fake42: typeof fetch = async (input, init) => {
   if (providerDown) throw new TypeError("fetch failed");
+  if (providerBadJson) return new Response("<html>oops</html>");
   const url = String(input);
   if (url.endsWith("/oauth/token")) {
     const code = new URLSearchParams(String(init?.body)).get("code") ?? "";
@@ -61,13 +63,19 @@ test("OAuth routes declare every status code in Swagger", async () => {
     Object.keys(paths[path].post.responses).sort();
   expect(codes("/api/auth/oauth/42/login")).toEqual([
     "200",
+    "400",
+    "413",
+    "415",
     "429",
     "500",
     "503",
   ]);
   expect(codes("/api/auth/oauth/42/link")).toEqual([
     "200",
+    "400",
     "401",
+    "413",
+    "415",
     "500",
     "503",
   ]);
@@ -76,6 +84,7 @@ test("OAuth routes declare every status code in Swagger", async () => {
     "400",
     "401",
     "409",
+    "413",
     "415",
     "422",
     "429",
@@ -98,24 +107,31 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
   });
   beforeEach(async () => {
     providerDown = false;
+    providerBadJson = false;
     await resetTestDatabase(database);
     await app?.close();
     app = await buildApp({}, testDatabaseUrl, config);
   });
 
-  const stateOf = (authorizeUrl: string) =>
-    new URL(authorizeUrl).searchParams.get("state")!;
+  type Flow = { state: string; flowToken: string };
+  const stateOf = (body: {
+    authorizeUrl: string;
+    flowToken: string;
+  }): Flow => ({
+    state: new URL(body.authorizeUrl).searchParams.get("state")!,
+    flowToken: body.flowToken,
+  });
   const startLogin = async () =>
     stateOf(
       (
         await app.inject({ method: "POST", url: "/api/auth/oauth/42/login" })
-      ).json().authorizeUrl,
+      ).json(),
     );
-  const callback = (code: string, state: string) =>
+  const callback = (code: string, flow: Flow) =>
     app.inject({
       method: "POST",
       url: "/api/auth/oauth/42/callback",
-      payload: { code, state },
+      payload: { code, state: flow.state, flowToken: flow.flowToken },
     });
   const me = (accessToken: string) =>
     app.inject({
@@ -177,9 +193,10 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
     const replay = await callback("code-101", state);
     expect(replay.statusCode).toBe(401);
     expect(replay.json().error.code).toBe("OAUTH_STATE_INVALID");
-    expect((await callback("code-101", "forged")).json().error.code).toBe(
-      "OAUTH_STATE_INVALID",
-    );
+    expect(
+      (await callback("code-101", { state: "forged", flowToken: "x" })).json()
+        .error.code,
+    ).toBe("OAUTH_STATE_INVALID");
     const rejected = await callback("bad-code", await startLogin());
     expect(rejected.statusCode).toBe(401);
     expect(rejected.json().error.code).toBe("OAUTH_FAILED");
@@ -209,10 +226,7 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
       url: "/api/auth/oauth/42/link",
       headers: { authorization: `Bearer ${token}` },
     });
-    const linked = await callback(
-      "code-101",
-      stateOf(start.json().authorizeUrl),
-    );
+    const linked = await callback("code-101", stateOf(start.json()));
     expect(linked.json()).toEqual({ linked: true });
     const viaOAuth = await callback("code-101", await startLogin());
     expect((await me(viaOAuth.json().accessToken)).json().email).toBe(
@@ -245,10 +259,7 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
       url: "/api/auth/oauth/42/link",
       headers: { authorization: `Bearer ${token}` },
     });
-    const conflict = await callback(
-      "code-101",
-      stateOf(start.json().authorizeUrl),
-    );
+    const conflict = await callback("code-101", stateOf(start.json()));
     expect(conflict.statusCode).toBe(409);
     expect(conflict.json().error.code).toBe("OAUTH_ACCOUNT_LINKED");
   });
@@ -300,5 +311,55 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
       url: "/api/auth/oauth/42/login",
     });
     expect(response.statusCode).toBe(503);
+  });
+  test("a callback from another browser (wrong flowToken) is refused", async () => {
+    const flow = await startLogin();
+    const other = await callback("code-101", {
+      ...flow,
+      flowToken: "attacker",
+    });
+    expect(other.statusCode).toBe(401);
+    expect(other.json().error.code).toBe("OAUTH_STATE_INVALID");
+    // The real browser can still finish its own flow.
+    expect((await callback("code-101", flow)).statusCode).toBe(200);
+  });
+
+  test("linking fails once the session that started it has logged out", async () => {
+    const token = await registerAndLogin();
+    const auth = { authorization: `Bearer ${token}` };
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth/42/link",
+      headers: auth,
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      headers: auth,
+    });
+    const response = await callback("code-101", stateOf(start.json()));
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe("UNAUTHENTICATED");
+  });
+
+  test("invalid JSON from 42 is a provider error (502)", async () => {
+    const flow = await startLogin();
+    providerBadJson = true;
+    const response = await callback("code-101", flow);
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.code).toBe("OAUTH_PROVIDER_ERROR");
+  });
+
+  test("parallel first logins of one 42 account end in the same account", async () => {
+    const [a, b] = [await startLogin(), await startLogin()];
+    const results = await Promise.all([
+      callback("code-101", a),
+      callback("code-101", b),
+    ]);
+    expect(results.map((r) => r.statusCode)).toEqual([200, 200]);
+    const ids = await Promise.all(
+      results.map(async (r) => (await me(r.json().accessToken)).json().id),
+    );
+    expect(ids[0]).toBe(ids[1]);
   });
 });

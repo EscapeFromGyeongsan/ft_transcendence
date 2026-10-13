@@ -3,6 +3,7 @@ import type { AuthService } from "../services/auth-service.ts";
 import type { OAuthService } from "../services/oauth-service.ts";
 import {
   bodyErrorResponses,
+  parseErrorResponses,
   errorBody,
   errorSchema,
   rateLimitResponse,
@@ -17,10 +18,14 @@ import {
 } from "./auth-routes.ts";
 
 const authorizeUrlSchema = {
-  description: "브라우저를 이 42 인증 페이지로 이동시킵니다 (state 10분 유효)",
+  description:
+    "브라우저를 authorizeUrl로 이동시킵니다(state 10분 유효). flowToken은 이 브라우저의 sessionStorage에 보관했다가 callback에 같이 보냅니다.",
   type: "object",
-  properties: { authorizeUrl: { type: "string" } },
-  required: ["authorizeUrl"],
+  properties: {
+    authorizeUrl: { type: "string" },
+    flowToken: { type: "string" },
+  },
+  required: ["authorizeUrl", "flowToken"],
 };
 const providerError = errorSchema("42 API 연결 실패 또는 예상하지 못한 응답", [
   "OAUTH_PROVIDER_ERROR",
@@ -32,6 +37,7 @@ const messages: Record<string, [number, string]> = {
     "OAuth state is invalid, expired or already used.",
   ],
   OAUTH_FAILED: [401, "42 rejected the authorization code."],
+  UNAUTHENTICATED: [401, "The session that started linking has ended."],
   EMAIL_TAKEN: [
     409,
     "This email already has an account. Log in and link 42 from settings.",
@@ -62,12 +68,13 @@ export function registerOAuthRoutes(
           "처음 로그인하는 42 계정은 새 계정을 만듭니다. 같은 이메일의 기존 계정이 있으면 자동으로 연결하지 않고 409를 반환합니다.",
         response: {
           200: authorizeUrlSchema,
+          ...parseErrorResponses,
           429: rateLimitResponse,
           ...serverErrorResponses,
         },
       },
     },
-    async () => ({ authorizeUrl: await getOAuth().startLogin() }),
+    async () => getOAuth().startLogin(),
   );
 
   app.post(
@@ -80,17 +87,17 @@ export function registerOAuthRoutes(
         security: [{ bearerAuth: [] }],
         response: {
           200: authorizeUrlSchema,
+          ...parseErrorResponses,
           401: unauthenticatedResponse,
           ...serverErrorResponses,
         },
       },
     },
-    async (request) => ({
-      authorizeUrl: await getOAuth().startLink(request.auth!.userId),
-    }),
+    async (request) =>
+      getOAuth().startLink(request.auth!.userId, request.auth!.sessionId),
   );
 
-  app.post<{ Body: { code: string; state: string } }>(
+  app.post<{ Body: { code: string; state: string; flowToken: string } }>(
     "/api/auth/oauth/42/callback",
     {
       config: authRateLimit,
@@ -98,14 +105,15 @@ export function registerOAuthRoutes(
         tags: ["auth"],
         summary: "42 인증 결과 처리",
         description:
-          "redirect 페이지가 받은 code와 state를 보냅니다. 로그인 시작이면 토큰(또는 2FA challenge), 연결 시작이면 {linked: true}를 반환합니다. state는 1회만 사용할 수 있습니다.",
+          "redirect 페이지가 받은 code, state와 시작할 때 보관한 flowToken을 보냅니다. 로그인 시작이면 토큰(또는 2FA challenge), 연결 시작이면 {linked: true}를 반환합니다. state는 시작한 브라우저(flowToken 일치)에서 1회만 사용할 수 있습니다.",
         body: {
           type: "object",
           properties: {
             code: { type: "string", minLength: 1, maxLength: 512 },
             state: { type: "string", minLength: 1, maxLength: 128 },
+            flowToken: { type: "string", minLength: 1, maxLength: 128 },
           },
-          required: ["code", "state"],
+          required: ["code", "state", "flowToken"],
           additionalProperties: false,
         },
         response: {
@@ -122,10 +130,10 @@ export function registerOAuthRoutes(
             ],
           },
           ...bodyErrorResponses,
-          401: errorSchema("state 무효·만료·재사용 또는 42가 code 거절", [
-            "OAUTH_STATE_INVALID",
-            "OAUTH_FAILED",
-          ]),
+          401: errorSchema(
+            "state 무효·만료·재사용·다른 브라우저, 42가 code 거절, 또는 연결을 시작한 세션 종료",
+            ["OAUTH_STATE_INVALID", "OAUTH_FAILED", "UNAUTHENTICATED"],
+          ),
           409: errorSchema("기존 계정과 이메일 중복 또는 연결 충돌", [
             "EMAIL_TAKEN",
             "OAUTH_ACCOUNT_LINKED",
@@ -145,6 +153,7 @@ export function registerOAuthRoutes(
       const result = await getOAuth().callback(
         request.body.code,
         request.body.state,
+        request.body.flowToken,
       );
       if (!result.ok) {
         const [status, message] = messages[result.code];
