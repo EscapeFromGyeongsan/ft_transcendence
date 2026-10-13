@@ -28,11 +28,12 @@ test("auth routes declare every status code in Swagger", async () => {
   await app.close();
   expect(
     Object.keys(paths["/api/auth/register"].post.responses).sort(),
-  ).toEqual(["201", "400", "409", "415", "422", "429", "500", "503"]);
+  ).toEqual(["201", "400", "409", "413", "415", "422", "429", "500", "503"]);
   expect(Object.keys(paths["/api/auth/login"].post.responses).sort()).toEqual([
     "200",
     "400",
     "401",
+    "413",
     "415",
     "422",
     "429",
@@ -40,11 +41,14 @@ test("auth routes declare every status code in Swagger", async () => {
     "503",
   ]);
   expect(Object.keys(paths["/api/auth/refresh"].post.responses).sort()).toEqual(
-    ["200", "400", "401", "415", "422", "429", "500", "503"],
+    ["200", "400", "401", "413", "415", "422", "429", "500", "503"],
   );
   expect(Object.keys(paths["/api/auth/logout"].post.responses).sort()).toEqual([
     "204",
+    "400",
     "401",
+    "413",
+    "415",
     "500",
     "503",
   ]);
@@ -224,5 +228,29 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     const limited = await attempt();
     expect(limited.statusCode).toBe(429);
     expect(limited.json().error.code).toBe("RATE_LIMITED");
+  });
+  test("a body over 1 MiB returns 413, not 500", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { email: account.email, password: "x".repeat(1_100_000) },
+    });
+    expect(response.statusCode).toBe(413);
+    expect(response.json().error.code).toBe("PAYLOAD_TOO_LARGE");
+  });
+
+  test("a POST that takes no body still answers 400 for broken JSON", async () => {
+    await register(account);
+    const { accessToken } = (await login(account)).json();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+      },
+      payload: "{",
+    });
+    expect(response.statusCode).toBe(400);
   });
 });

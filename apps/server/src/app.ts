@@ -135,6 +135,11 @@ export async function buildApp(
         .code(429)
         .send(errorBody("RATE_LIMITED", "Too many requests."));
     }
+    if (error.statusCode === 413) {
+      return reply
+        .code(413)
+        .send(errorBody("PAYLOAD_TOO_LARGE", "Request body is too large."));
+    }
     if (error.statusCode === 415) {
       return reply
         .code(415)

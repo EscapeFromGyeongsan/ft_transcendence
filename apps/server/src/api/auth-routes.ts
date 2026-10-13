@@ -4,6 +4,7 @@ import type { AuthService } from "../services/auth-service.ts";
 import {
   bodyErrorResponses,
   errorBody,
+  parseErrorResponses,
   errorSchema,
   rateLimitResponse,
   serverErrorResponses,
@@ -223,6 +224,7 @@ export function registerAuthRoutes(
         security: [{ bearerAuth: [] }],
         response: {
           204: { description: "로그아웃 완료", type: "null" },
+          ...parseErrorResponses,
           401: unauthenticatedResponse,
           ...serverErrorResponses,
         },

@@ -27,10 +27,17 @@ export const unauthenticatedResponse = errorSchema(
   ["UNAUTHENTICATED"],
 );
 
+// Body parsing errors. Fastify parses any POST/PATCH body that is sent, even
+// on routes that expect none, so those routes can hit these too.
+export const parseErrorResponses = {
+  400: errorSchema("JSON 본문을 해석할 수 없음", ["BAD_REQUEST"]),
+  413: errorSchema("본문 크기 제한(1 MiB) 초과", ["PAYLOAD_TOO_LARGE"]),
+  415: errorSchema("JSON이 아닌 Content-Type", ["UNSUPPORTED_MEDIA_TYPE"]),
+};
+
 // Responses any route with a JSON body can hit before the handler runs.
 export const bodyErrorResponses = {
-  400: errorSchema("JSON 본문을 해석할 수 없음", ["BAD_REQUEST"]),
-  415: errorSchema("JSON이 아닌 Content-Type", ["UNSUPPORTED_MEDIA_TYPE"]),
+  ...parseErrorResponses,
   422: errorSchema("필드 형식·범위 검증 실패", ["VALIDATION_ERROR"]),
 };
 
