@@ -60,21 +60,28 @@ export function findFinishedMatches(
     .limit(options.limit);
 }
 
+// DEC-08 order: wins desc, win rate desc, user id asc. Void matches are not
+// counted; users with at least one counted match are listed.
 export function findLeaderboard(db: Executor, gameType: string, limit: number) {
-  const wins = sql<number>`count(*)::int`;
+  const wins = sql<number>`count(*) filter (where ${gamePlayers.result} = 'win')::int`;
+  const played = sql<number>`count(*) filter (where ${gamePlayers.result} in ('win', 'loss', 'draw'))::int`;
+  const winRate = sql<number>`(${wins})::float8 / nullif(${played}, 0)`;
   return db
     .select({
-      rank: sql<number>`rank() over (order by count(*) desc)::int`,
+      rank: sql<number>`row_number() over (order by ${wins} desc, ${winRate} desc nulls last, ${users.id})::int`,
       userId: users.id,
       nickname: users.nickname,
       wins,
+      played,
+      winRate: sql<number>`coalesce(${winRate}, 0)`,
     })
     .from(gamePlayers)
     .innerJoin(games, eq(games.id, gamePlayers.gameId))
     .innerJoin(users, eq(users.id, gamePlayers.userId))
-    .where(and(eq(gamePlayers.result, "win"), eq(games.gameType, gameType)))
+    .where(eq(games.gameType, gameType))
     .groupBy(users.id)
-    .orderBy(desc(wins), users.id)
+    .having(sql`${played} > 0`)
+    .orderBy(desc(wins), sql`${winRate} desc nulls last`, users.id)
     .limit(limit);
 }
 

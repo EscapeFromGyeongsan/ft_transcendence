@@ -1,6 +1,8 @@
 import type { Database } from "../db/client.ts";
 import * as repo from "../repositories/stats-repository.ts";
 
+const PROGRESS_TARGET = 10;
+
 export function createStatsService(db: Database) {
   return {
     async getStats(userId: number, gameType: string) {
@@ -19,6 +21,13 @@ export function createStatsService(db: Database) {
         draws,
         played,
         winRate: played === 0 ? 0 : wins / played,
+        // DEC-08: first-win achievement and 10-match participation progress,
+        // both per game type and derived from counted matches.
+        achievements: { firstWin: wins > 0 },
+        progress: {
+          current: Math.min(played, PROGRESS_TARGET),
+          target: PROGRESS_TARGET,
+        },
       };
     },
 

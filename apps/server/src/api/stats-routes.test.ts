@@ -156,11 +156,18 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
       draws: 0,
       played: 3,
       winRate: 1 / 3,
+      achievements: { firstWin: true },
+      progress: { current: 3, target: 10 },
     });
     const othello = (await get("/api/users/1/stats?gameType=othello")).json();
     expect(othello).toMatchObject({ wins: 1, played: 1, winRate: 1 });
     const empty = (await get("/api/users/3/stats?gameType=othello")).json();
-    expect(empty).toMatchObject({ played: 0, winRate: 0 });
+    expect(empty).toMatchObject({
+      played: 0,
+      winRate: 0,
+      achievements: { firstWin: false },
+      progress: { current: 0, target: 10 },
+    });
   });
 
   test("stats validation and missing user", async () => {
@@ -211,22 +218,32 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
     expect((await get("/api/users/1/matches?limit=0")).statusCode).toBe(422);
   });
 
-  test("leaderboard ranks by wins per game type with shared ranks", async () => {
+  test("leaderboard orders by wins, then win rate, then user id", async () => {
     await playMatch("gomoku", 1, 2);
     await playMatch("gomoku", 1, 3);
     await playMatch("gomoku", 2, 3);
     await playMatch("gomoku", 3, 2);
+    await playMatch("gomoku", 1, 2);
     await playMatch("othello", 2, 1);
 
     const board = await get("/api/leaderboard?gameType=gomoku");
     expect(board.statusCode).toBe(200);
     expect(board.json()).toEqual([
-      { rank: 1, userId: 1, nickname: "p1", wins: 2 },
-      { rank: 2, userId: 2, nickname: "p2", wins: 1 },
-      { rank: 2, userId: 3, nickname: "p3", wins: 1 },
+      { rank: 1, userId: 1, nickname: "p1", wins: 3, played: 3, winRate: 1 },
+      // Same wins: p3 (1/3) ranks above p2 (1/4) by win rate.
+      {
+        rank: 2,
+        userId: 3,
+        nickname: "p3",
+        wins: 1,
+        played: 3,
+        winRate: 1 / 3,
+      },
+      { rank: 3, userId: 2, nickname: "p2", wins: 1, played: 4, winRate: 0.25 },
     ]);
     expect((await get("/api/leaderboard?gameType=othello")).json()).toEqual([
-      { rank: 1, userId: 2, nickname: "p2", wins: 1 },
+      { rank: 1, userId: 2, nickname: "p2", wins: 1, played: 1, winRate: 1 },
+      { rank: 2, userId: 1, nickname: "p1", wins: 0, played: 1, winRate: 0 },
     ]);
     expect((await get("/api/leaderboard")).statusCode).toBe(422);
     const unauthenticated = await app.inject({

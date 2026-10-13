@@ -53,8 +53,25 @@ export function registerStatsRoutes(
               draws: { type: "integer" },
               played: { type: "integer" },
               winRate: { type: "number" },
+              achievements: {
+                type: "object",
+                properties: { firstWin: { type: "boolean" } },
+                required: ["firstWin"],
+              },
+              progress: {
+                type: "object",
+                description:
+                  "참여 진행도 (무효 제외 완료 경기 수, 최대 target)",
+                properties: {
+                  current: { type: "integer" },
+                  target: { type: "integer", const: 10 },
+                },
+                required: ["current", "target"],
+              },
             },
             required: [
+              "achievements",
+              "progress",
               "userId",
               "gameType",
               "wins",
@@ -175,7 +192,7 @@ export function registerStatsRoutes(
         tags: ["statistics"],
         summary: "게임별 승수 순위",
         description:
-          "승수가 같으면 같은 순위입니다. 1승 이상인 사용자만 포함합니다.",
+          "승수 내림차순, 승률 내림차순, 사용자 ID 오름차순으로 정렬합니다(DEC-08). 무효를 제외한 완료 경기가 1경기 이상인 사용자만 포함합니다.",
         security: [{ bearerAuth: [] }],
         querystring: {
           type: "object",
@@ -196,8 +213,17 @@ export function registerStatsRoutes(
                 userId: { type: "integer" },
                 nickname: { type: "string" },
                 wins: { type: "integer" },
+                played: { type: "integer" },
+                winRate: { type: "number" },
               },
-              required: ["rank", "userId", "nickname", "wins"],
+              required: [
+                "rank",
+                "userId",
+                "nickname",
+                "wins",
+                "played",
+                "winRate",
+              ],
             },
           },
           401: unauthenticatedResponse,
