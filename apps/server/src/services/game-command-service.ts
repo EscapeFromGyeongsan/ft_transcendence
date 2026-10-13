@@ -229,14 +229,19 @@ export function createGameCommandService(
 
     // Data the match layer (D) needs to build a GameSnapshot; board comes from
     // replaying moves with the engine.
-    async getMatch(matchId: number) {
-      const game = await repo.findGame(db, matchId);
-      if (!game) return undefined;
-      const [players, history] = await Promise.all([
-        repo.findPlayers(db, matchId),
-        repo.findMoves(db, matchId),
-      ]);
-      return { game, players, moves: history };
+    // One REPEATABLE READ snapshot, so stateVersion, players and moves always
+    // describe the same moment even if a command commits in between.
+    getMatch(matchId: number) {
+      return db.transaction(
+        async (tx) => {
+          const game = await repo.findGame(tx, matchId);
+          if (!game) return undefined;
+          const players = await repo.findPlayers(tx, matchId);
+          const history = await repo.findMoves(tx, matchId);
+          return { game, players, moves: history };
+        },
+        { isolationLevel: "repeatable read", accessMode: "read only" },
+      );
     },
   };
 }
