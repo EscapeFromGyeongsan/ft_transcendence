@@ -4,12 +4,17 @@ import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
+import { registerUserRoutes } from "./api/user-routes.ts";
 import { errorBody } from "./schemas/errors.ts";
 import {
   createAuthService,
   type AuthConfig,
   type AuthService,
 } from "./services/auth-service.ts";
+import {
+  createUserService,
+  type UserService,
+} from "./services/user-service.ts";
 
 class ServiceUnavailableError extends Error {}
 
@@ -57,6 +62,11 @@ export async function buildApp(
   const getAuth = (): AuthService => {
     if (!auth) throw new ServiceUnavailableError();
     return auth;
+  };
+  const users = database ? createUserService(database.db) : undefined;
+  const getUsers = (): UserService => {
+    if (!users) throw new ServiceUnavailableError();
+    return users;
   };
   app.addHook("onClose", async () => {
     await database?.close();
@@ -186,5 +196,6 @@ export async function buildApp(
     },
   );
   registerAuthRoutes(app, getAuth);
+  registerUserRoutes(app, getAuth, getUsers);
   return app;
 }

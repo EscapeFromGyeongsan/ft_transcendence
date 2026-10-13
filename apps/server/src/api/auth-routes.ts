@@ -16,6 +16,12 @@ declare module "fastify" {
   }
 }
 
+export const nicknameSchema = {
+  type: "string",
+  pattern: "^[\\p{L}\\p{N}_-]{2,32}$",
+  description: "2~32자, 문자·숫자·_·-",
+};
+
 export const userSchema = {
   type: "object",
   properties: {
@@ -81,11 +87,7 @@ export function registerAuthRoutes(
           type: "object",
           properties: {
             ...credentialsProperties,
-            nickname: {
-              type: "string",
-              pattern: "^[\\p{L}\\p{N}_-]{2,32}$",
-              description: "2~32자, 문자·숫자·_·-",
-            },
+            nickname: nicknameSchema,
           },
           required: ["email", "password", "nickname"],
           additionalProperties: false,
@@ -192,7 +194,7 @@ export function registerAuthRoutes(
   app.post(
     "/api/auth/logout",
     {
-      preHandler: requireAuth,
+      onRequest: requireAuth,
       schema: {
         tags: ["auth"],
         summary: "현재 세션 로그아웃",
@@ -209,33 +211,6 @@ export function registerAuthRoutes(
     async (request, reply) => {
       await getAuth().logout(request.auth!.sessionId);
       return reply.code(204).send();
-    },
-  );
-
-  app.get(
-    "/api/users/me",
-    {
-      preHandler: requireAuth,
-      schema: {
-        tags: ["users"],
-        summary: "내 계정 정보",
-        security: [{ bearerAuth: [] }],
-        response: {
-          200: { description: "조회 성공", ...userSchema },
-          401: unauthenticatedResponse,
-          ...serverErrorResponses,
-        },
-      },
-    },
-    async (request, reply) => {
-      const user = await getAuth().getUser(request.auth!.userId);
-      // Session is active but the account row is gone: treat as signed out.
-      if (!user) {
-        return reply
-          .code(401)
-          .send(errorBody("UNAUTHENTICATED", "Authentication required."));
-      }
-      return user;
     },
   );
 }

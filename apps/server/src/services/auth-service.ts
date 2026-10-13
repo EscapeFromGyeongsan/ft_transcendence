@@ -31,7 +31,7 @@ export type RegisterResult =
   | { ok: true; user: repo.PublicUser }
   | { ok: false; code: "EMAIL_TAKEN" | "NICKNAME_TAKEN" };
 
-function uniqueViolation(error: unknown) {
+export function uniqueViolation(error: unknown) {
   // Drizzle wraps driver errors; the pg error is on `cause`.
   const pgError = (error as { cause?: unknown }).cause ?? error;
   const { code, constraint } = pgError as {
