@@ -11,7 +11,8 @@ import {
 export const users = pgTable("users", {
   id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
   email: varchar("email", { length: 254 }).notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  // NULL for accounts created through OAuth only (no password login).
+  passwordHash: text("password_hash"),
   nickname: varchar("nickname", { length: 32 }).notNull().unique(),
   avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at", { withTimezone: true })

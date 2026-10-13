@@ -27,6 +27,6 @@ export async function resetTestDatabase(
   database: Awaited<ReturnType<typeof openTestDatabase>>,
 ) {
   await database.db.execute(
-    sql`TRUNCATE users, sessions, refresh_tokens, games, game_players, moves, game_commands RESTART IDENTITY CASCADE`,
+    sql`TRUNCATE users, sessions, refresh_tokens, games, game_players, moves, game_commands, oauth_accounts, oauth_states, two_factor_secrets, two_factor_recovery_codes, two_factor_challenges RESTART IDENTITY CASCADE`,
   );
 }

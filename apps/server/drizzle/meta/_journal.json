@@ -15,6 +15,13 @@
       "when": 1791872894856,
       "tag": "0001_auth_and_games",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791874891538,
+      "tag": "0002_oauth_and_two_factor",
+      "breakpoints": true
     }
   ]
 }
