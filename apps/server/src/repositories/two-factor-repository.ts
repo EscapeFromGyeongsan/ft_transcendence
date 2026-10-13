@@ -20,19 +20,24 @@ export async function isEnabled(db: Executor, userId: number) {
   return Boolean(row?.enabledAt);
 }
 
-// Starts (or restarts) setup with a new, not yet confirmed secret.
+// Starts (or restarts) setup with a new, not yet confirmed secret. Never
+// overwrites an enabled secret, even when a parallel setup+enable won the race
+// after this request saw no row. Returns false if 2FA is already enabled.
 export async function savePendingSecret(
   db: Executor,
   userId: number,
   secretEncrypted: string,
 ) {
-  await db
+  const rows = await db
     .insert(twoFactorSecrets)
     .values({ userId, secretEncrypted })
     .onConflictDoUpdate({
       target: twoFactorSecrets.userId,
       set: { secretEncrypted, enabledAt: null, lastUsedStep: null },
-    });
+      setWhere: isNull(twoFactorSecrets.enabledAt),
+    })
+    .returning({ userId: twoFactorSecrets.userId });
+  return rows.length > 0;
 }
 
 export async function enableSecret(db: Executor, userId: number, step: number) {

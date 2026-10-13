@@ -4,6 +4,7 @@ import type { TwoFactorService } from "../services/two-factor-service.ts";
 import {
   bodyErrorResponses,
   errorBody,
+  parseErrorResponses,
   errorSchema,
   rateLimitResponse,
   serverErrorResponses,
@@ -128,6 +129,7 @@ export function registerTwoFactorRoutes(
             },
             required: ["secret", "otpauthUrl"],
           },
+          ...parseErrorResponses,
           401: unauthenticatedResponse,
           409: errorSchema("이미 2FA 사용 중", ["TWO_FACTOR_ALREADY_ENABLED"]),
           ...serverErrorResponses,

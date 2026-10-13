@@ -9,6 +9,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../app.ts";
 import { currentStep, totpCode } from "../core/totp.ts";
+import { savePendingSecret } from "../repositories/two-factor-repository.ts";
 import {
   openTestDatabase,
   resetTestDatabase,
@@ -40,6 +41,7 @@ test("2FA routes declare every status code in Swagger", async () => {
     "200",
     "400",
     "401",
+    "413",
     "415",
     "422",
     "429",
@@ -49,8 +51,11 @@ test("2FA routes declare every status code in Swagger", async () => {
   expect(codes("/api/auth/2fa", "get")).toEqual(["200", "401", "500", "503"]);
   expect(codes("/api/auth/2fa/setup", "post")).toEqual([
     "200",
+    "400",
     "401",
     "409",
+    "413",
+    "415",
     "500",
     "503",
   ]);
@@ -59,6 +64,7 @@ test("2FA routes declare every status code in Swagger", async () => {
     "400",
     "401",
     "409",
+    "413",
     "415",
     "422",
     "429",
@@ -70,6 +76,7 @@ test("2FA routes declare every status code in Swagger", async () => {
     "400",
     "401",
     "409",
+    "413",
     "415",
     "422",
     "429",
@@ -222,5 +229,17 @@ describe.skipIf(!testDatabaseUrl)("2FA with PostgreSQL", () => {
     await app.close();
     app = await buildApp({}, testDatabaseUrl, { jwtSecret: config.jwtSecret });
     expect((await post("/api/auth/2fa/setup")).statusCode).toBe(503);
+  });
+  test("a late setup cannot reset an enabled secret (setup race)", async () => {
+    await enable();
+    // Simulates a setup request that saw no row before another request enabled 2FA.
+    const saved = await savePendingSecret(database.db, 1, "replacement");
+    expect(saved).toBe(false);
+    const status = await app.inject({
+      method: "GET",
+      url: "/api/auth/2fa",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(status.json()).toEqual({ enabled: true });
   });
 });

@@ -75,7 +75,12 @@ export function createTwoFactorService(db: Database, box: SecretBox) {
           };
         }
         const secret = generateTotpSecret();
-        await repo.savePendingSecret(tx, userId, box.seal(secret));
+        if (!(await repo.savePendingSecret(tx, userId, box.seal(secret)))) {
+          return {
+            ok: false as const,
+            code: "TWO_FACTOR_ALREADY_ENABLED" as const,
+          };
+        }
         return {
           ok: true as const,
           secret,
