@@ -9,9 +9,16 @@ import { registerStatsRoutes } from "./api/stats-routes.ts";
 import { errorBody } from "./schemas/errors.ts";
 import {
   createAuthService,
+  ServiceUnavailableError,
   type AuthConfig,
   type AuthService,
 } from "./services/auth-service.ts";
+import { registerTwoFactorRoutes } from "./api/two-factor-routes.ts";
+import { createSecretBox } from "./core/secret-box.ts";
+import {
+  createTwoFactorService,
+  type TwoFactorService,
+} from "./services/two-factor-service.ts";
 import {
   createUserService,
   type UserService,
@@ -20,8 +27,6 @@ import {
   createStatsService,
   type StatsService,
 } from "./services/stats-service.ts";
-
-class ServiceUnavailableError extends Error {}
 
 const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
 
@@ -60,9 +65,20 @@ export async function buildApp(
         app.log.error("Database pool connection lost."),
       )
     : undefined;
+  const twoFactor =
+    database && authConfig?.twoFactorKey
+      ? createTwoFactorService(
+          database.db,
+          createSecretBox(authConfig.twoFactorKey),
+        )
+      : undefined;
+  const getTwoFactor = (): TwoFactorService => {
+    if (!twoFactor) throw new ServiceUnavailableError();
+    return twoFactor;
+  };
   const auth =
     database && authConfig
-      ? createAuthService(database.db, authConfig)
+      ? createAuthService(database.db, authConfig, twoFactor)
       : undefined;
   const getAuth = (): AuthService => {
     if (!auth) throw new ServiceUnavailableError();
@@ -206,6 +222,7 @@ export async function buildApp(
     },
   );
   registerAuthRoutes(app, getAuth);
+  registerTwoFactorRoutes(app, getAuth, getTwoFactor);
   registerUserRoutes(app, getAuth, getUsers);
   registerStatsRoutes(app, getAuth, getStats);
   return app;

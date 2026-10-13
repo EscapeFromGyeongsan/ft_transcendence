@@ -34,7 +34,7 @@ export const userSchema = {
   required: ["id", "email", "nickname", "avatarUrl", "createdAt"],
 };
 
-const tokenPairSchema = {
+export const tokenPairSchema = {
   type: "object",
   properties: {
     accessToken: { type: "string" },
@@ -50,8 +50,26 @@ const credentialsProperties = {
   password: { type: "string", minLength: 8, maxLength: 128 },
 };
 
+// Login answer for an account with 2FA: no session yet, only a short-lived
+// challenge to send with a code to POST /api/auth/2fa/verify.
+export const twoFactorChallengeSchema = {
+  type: "object",
+  properties: {
+    twoFactorRequired: { type: "boolean", const: true },
+    challengeToken: { type: "string" },
+    expiresIn: { type: "integer", description: "challenge 유효 시간(초)" },
+  },
+  required: ["twoFactorRequired", "challengeToken", "expiresIn"],
+};
+
+export const loginResultSchema = {
+  description:
+    "2FA 미사용: 토큰 발급. 2FA 사용: twoFactorRequired와 challengeToken 반환",
+  anyOf: [tokenPairSchema, twoFactorChallengeSchema],
+};
+
 // Brute-force guard for unauthenticated auth endpoints (per client IP).
-const authRateLimit = { rateLimit: { max: 10, timeWindow: "1 minute" } };
+export const authRateLimit = { rateLimit: { max: 10, timeWindow: "1 minute" } };
 
 export function createRequireAuth(getAuth: () => AuthService) {
   return async function requireAuth(
@@ -124,6 +142,8 @@ export function registerAuthRoutes(
       schema: {
         tags: ["auth"],
         summary: "이메일 로그인, 서버 세션 생성",
+        description:
+          "2FA를 켠 계정은 세션 대신 challengeToken을 받고, POST /api/auth/2fa/verify로 코드를 보내야 로그인됩니다.",
         body: {
           type: "object",
           properties: credentialsProperties,
@@ -131,7 +151,7 @@ export function registerAuthRoutes(
           additionalProperties: false,
         },
         response: {
-          200: { description: "로그인 성공", ...tokenPairSchema },
+          200: loginResultSchema,
           ...bodyErrorResponses,
           401: errorSchema("이메일 또는 비밀번호 불일치", [
             "INVALID_CREDENTIALS",
@@ -142,15 +162,15 @@ export function registerAuthRoutes(
       },
     },
     async (request, reply) => {
-      const tokens = await getAuth().login(request.body);
-      if (!tokens) {
+      const result = await getAuth().login(request.body);
+      if (!result) {
         return reply
           .code(401)
           .send(
             errorBody("INVALID_CREDENTIALS", "Email or password is incorrect."),
           );
       }
-      return tokens;
+      return result;
     },
   );
 

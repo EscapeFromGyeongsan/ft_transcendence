@@ -12,11 +12,20 @@ if (!jwtSecret || jwtSecret.length < 32) {
     "Set JWT_SECRET in .env to a random string of 32+ characters.",
   );
 }
+const twoFactorKey = process.env.TWO_FACTOR_KEY;
+if (twoFactorKey !== undefined && twoFactorKey.length < 32) {
+  throw new Error(
+    "Set TWO_FACTOR_KEY in .env to a random string of 32+ characters.",
+  );
+}
 const port = Number(process.env.PORT ?? 3001);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("Set PORT in .env to an integer between 1 and 65535.");
 }
-const app = await buildApp({}, process.env.DATABASE_URL, { jwtSecret });
+const app = await buildApp({}, process.env.DATABASE_URL, {
+  jwtSecret,
+  twoFactorKey,
+});
 try {
   const databaseHealth = await app.inject({
     method: "GET",
