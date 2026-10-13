@@ -15,6 +15,7 @@
     "db:generate": "drizzle-kit generate --config=config/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=config/drizzle.config.ts",
     "db:check": "node --experimental-strip-types scripts/check-db.mjs",
+    "qa:accounts": "node scripts/qa-accounts.mjs",
     "build": "tsc --noEmit && npm run build --workspace @cafe/web",
     "test": "vitest run --config=config/vitest.config.ts",
     "test:watch": "vitest --config=config/vitest.config.ts",
