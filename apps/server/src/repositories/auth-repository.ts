@@ -20,7 +20,7 @@ export type PublicUser = {
 
 export async function insertUser(
   db: Executor,
-  values: { email: string; nickname: string; passwordHash: string },
+  values: { email: string; nickname: string; passwordHash: string | null },
 ): Promise<PublicUser> {
   const [user] = await db
     .insert(users)

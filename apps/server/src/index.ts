@@ -18,6 +18,21 @@ if (twoFactorKey !== undefined && twoFactorKey.length < 32) {
     "Set TWO_FACTOR_KEY in .env to a random string of 32+ characters.",
   );
 }
+const oauthEnv = [
+  process.env.FT_OAUTH_CLIENT_ID,
+  process.env.FT_OAUTH_CLIENT_SECRET,
+  process.env.FT_OAUTH_REDIRECT_URI,
+];
+if (oauthEnv.some(Boolean) && !oauthEnv.every(Boolean)) {
+  throw new Error(
+    "Set all of FT_OAUTH_CLIENT_ID, FT_OAUTH_CLIENT_SECRET and FT_OAUTH_REDIRECT_URI, or none.",
+  );
+}
+const [clientId, clientSecret, redirectUri] = oauthEnv;
+const oauth42 =
+  clientId && clientSecret && redirectUri
+    ? { clientId, clientSecret, redirectUri }
+    : undefined;
 const port = Number(process.env.PORT ?? 3001);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("Set PORT in .env to an integer between 1 and 65535.");
@@ -25,6 +40,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const app = await buildApp({}, process.env.DATABASE_URL, {
   jwtSecret,
   twoFactorKey,
+  oauth42,
 });
 try {
   const databaseHealth = await app.inject({

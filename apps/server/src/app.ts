@@ -14,6 +14,12 @@ import {
   type AuthService,
 } from "./services/auth-service.ts";
 import { registerTwoFactorRoutes } from "./api/two-factor-routes.ts";
+import { registerOAuthRoutes } from "./api/oauth-routes.ts";
+import { create42Client, OAuthProviderError } from "./core/oauth-42.ts";
+import {
+  createOAuthService,
+  type OAuthService,
+} from "./services/oauth-service.ts";
 import { createSecretBox } from "./core/secret-box.ts";
 import {
   createTwoFactorService,
@@ -84,6 +90,18 @@ export async function buildApp(
     if (!auth) throw new ServiceUnavailableError();
     return auth;
   };
+  const oauth =
+    auth && authConfig?.oauth42
+      ? createOAuthService(
+          database!.db,
+          create42Client(authConfig.oauth42),
+          auth,
+        )
+      : undefined;
+  const getOAuth = (): OAuthService => {
+    if (!oauth) throw new ServiceUnavailableError();
+    return oauth;
+  };
   const users = database ? createUserService(database.db) : undefined;
   const getUsers = (): UserService => {
     if (!users) throw new ServiceUnavailableError();
@@ -126,6 +144,12 @@ export async function buildApp(
       return reply
         .code(400)
         .send(errorBody("BAD_REQUEST", "Malformed request body."));
+    }
+    if (error instanceof OAuthProviderError) {
+      request.log.error("42 OAuth provider error.");
+      return reply
+        .code(502)
+        .send(errorBody("OAUTH_PROVIDER_ERROR", "42 login is unavailable."));
     }
     if (isDatabaseUnavailable(error)) {
       request.log.error("Database is unavailable.");
@@ -223,6 +247,7 @@ export async function buildApp(
   );
   registerAuthRoutes(app, getAuth);
   registerTwoFactorRoutes(app, getAuth, getTwoFactor);
+  registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers);
   registerStatsRoutes(app, getAuth, getStats);
   return app;

@@ -1,4 +1,5 @@
 import type { Database, Executor } from "../db/client.ts";
+import type { OAuth42Config } from "../core/oauth-42.ts";
 import {
   hashPassword,
   verifyAgainstDummy,
@@ -22,6 +23,8 @@ export type AuthConfig = {
   refreshTtlSeconds?: number;
   // Encrypts TOTP secrets. Without it the 2FA endpoints answer 503.
   twoFactorKey?: string;
+  // 42 Intra OAuth app. Without it the OAuth endpoints answer 503.
+  oauth42?: OAuth42Config;
 };
 
 export type TokenPair = {
