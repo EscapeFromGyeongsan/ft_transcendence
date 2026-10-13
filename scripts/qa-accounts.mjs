@@ -10,7 +10,9 @@ const nicknames = ["qa-p1", "qa-p2", "qa-p3", "qa-p4", "qa-outsider"];
 async function main() {
   const password = process.env.QA_PASSWORD;
   if (!password || password.length < 8) {
-    throw new Error("Set QA_PASSWORD (8+ characters) in .env. Keep it private.");
+    throw new Error(
+      "Set QA_PASSWORD (8+ characters) in .env. Keep it private.",
+    );
   }
   const baseUrl =
     process.env.QA_API_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3001}`;
@@ -21,12 +23,14 @@ async function main() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, password, nickname }),
     });
+    const body = await response.text();
+    const code = response.status === 409 ? JSON.parse(body).error?.code : null;
     if (response.status === 201) {
       console.log(`created  ${email}`);
-    } else if (response.status === 409) {
+    } else if (code === "EMAIL_TAKEN") {
       console.log(`exists   ${email}`);
     } else {
-      const body = await response.text();
+      // e.g. NICKNAME_TAKEN: someone else owns the QA nickname.
       throw new Error(`${email}: HTTP ${response.status} ${body}`);
     }
   }
