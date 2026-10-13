@@ -12,11 +12,19 @@ export const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
 export async function openTestDatabase() {
   if (!testDatabaseUrl) throw new Error("Set TEST_DATABASE_URL.");
-  // Tests wipe every table; never point them at the development DB.
-  if (testDatabaseUrl === process.env.DATABASE_URL) {
-    throw new Error("TEST_DATABASE_URL must differ from DATABASE_URL.");
-  }
   const database = createDatabase(testDatabaseUrl);
+  // Tests wipe every table. Check the database actually connected to, not the
+  // URL text (query strings or host aliases can point at the dev DB).
+  const result = await database.db.execute<{ name: string }>(
+    sql`SELECT current_database() AS name`,
+  );
+  const name = result.rows[0]?.name ?? "";
+  if (!name.endsWith("_test")) {
+    await database.close();
+    throw new Error(
+      `Refusing to run tests on database "${name}": its name must end with "_test".`,
+    );
+  }
   await migrate(database.db, {
     migrationsFolder: fileURLToPath(new URL("../../drizzle", import.meta.url)),
   });
