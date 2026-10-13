@@ -13,7 +13,9 @@ import { createRequireAuth } from "./auth-routes.ts";
 const gameTypeSchema = { type: "string", enum: ["gomoku", "othello"] };
 const userParams = {
   type: "object",
-  properties: { userId: { type: "integer", minimum: 1 } },
+  properties: {
+    userId: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
+  },
   required: ["userId"],
 };
 const notFound = errorSchema("존재하지 않는 사용자", ["NOT_FOUND"]);
@@ -118,7 +120,11 @@ export function registerStatsRoutes(
           type: "object",
           properties: {
             gameType: gameTypeSchema,
-            before: { type: "integer", minimum: 1 },
+            before: {
+              type: "integer",
+              minimum: 1,
+              maximum: Number.MAX_SAFE_INTEGER,
+            },
             limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
           },
         },

@@ -26,6 +26,7 @@ test("user routes declare every status code in Swagger", async () => {
     "400",
     "401",
     "409",
+    "413",
     "415",
     "422",
     "500",
@@ -115,5 +116,9 @@ describe.skipIf(!testDatabaseUrl)("user profile with PostgreSQL", () => {
     expect((await profile("999")).statusCode).toBe(404);
     expect((await profile("abc")).statusCode).toBe(422);
     expect((await profile(String(otherId), false)).statusCode).toBe(401);
+  });
+  test("ids beyond the safe integer range are rejected with 422", async () => {
+    expect((await profile("9007199254740993")).statusCode).toBe(422);
+    expect((await profile("100000000000000000000")).statusCode).toBe(422);
   });
 });

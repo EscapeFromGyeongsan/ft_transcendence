@@ -8,6 +8,7 @@ import {
   test,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { sql } from "drizzle-orm";
 import { buildApp } from "../app.ts";
 import {
   createGameCommandService,
@@ -251,5 +252,31 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
       url: "/api/leaderboard?gameType=gomoku",
     });
     expect(unauthenticated.statusCode).toBe(401);
+  });
+  test("an exactly full last page has no next page", async () => {
+    await playMatch("gomoku", 1, 2);
+    await playMatch("gomoku", 1, 2);
+    const page = (await get("/api/users/1/matches?limit=2")).json();
+    expect(page.matches).toHaveLength(2);
+    expect(page.nextBefore).toBeNull();
+  });
+
+  test("the DB refuses partial results on an unfinished match", async () => {
+    const matchId = await games.createMatch({
+      gameType: "gomoku",
+      rulesVersion: "test",
+      blackUserId: 1,
+      whiteUserId: 2,
+    });
+    await expect(
+      database.db.execute(
+        sql`UPDATE games SET outcome = 'win', winner_user_id = 1 WHERE id = ${matchId}`,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      database.db.execute(
+        sql`UPDATE games SET winner_user_id = 1 WHERE id = ${matchId}`,
+      ),
+    ).rejects.toThrow();
   });
 });

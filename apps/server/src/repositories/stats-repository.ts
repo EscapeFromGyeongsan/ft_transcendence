@@ -30,34 +30,37 @@ export function findFinishedMatches(
   userId: number,
   options: { gameType?: string; before?: number; limit: number },
 ) {
-  return db
-    .select({
-      matchId: games.id,
-      gameType: games.gameType,
-      result: gamePlayers.result,
-      reason: games.resultReason,
-      seat: gamePlayers.seat,
-      opponentId: users.id,
-      opponentNickname: users.nickname,
-      finishedAt: games.finishedAt,
-    })
-    .from(gamePlayers)
-    .innerJoin(games, eq(games.id, gamePlayers.gameId))
-    .innerJoin(
-      opponent,
-      and(eq(opponent.gameId, games.id), ne(opponent.userId, userId)),
-    )
-    .innerJoin(users, eq(users.id, opponent.userId))
-    .where(
-      and(
-        eq(gamePlayers.userId, userId),
-        eq(games.status, "finished"),
-        options.gameType ? eq(games.gameType, options.gameType) : undefined,
-        options.before ? lt(games.id, options.before) : undefined,
-      ),
-    )
-    .orderBy(desc(games.id))
-    .limit(options.limit);
+  return (
+    db
+      .select({
+        matchId: games.id,
+        gameType: games.gameType,
+        result: gamePlayers.result,
+        reason: games.resultReason,
+        seat: gamePlayers.seat,
+        opponentId: users.id,
+        opponentNickname: users.nickname,
+        finishedAt: games.finishedAt,
+      })
+      .from(gamePlayers)
+      .innerJoin(games, eq(games.id, gamePlayers.gameId))
+      .innerJoin(
+        opponent,
+        and(eq(opponent.gameId, games.id), ne(opponent.userId, userId)),
+      )
+      .innerJoin(users, eq(users.id, opponent.userId))
+      .where(
+        and(
+          eq(gamePlayers.userId, userId),
+          eq(games.status, "finished"),
+          options.gameType ? eq(games.gameType, options.gameType) : undefined,
+          options.before ? lt(games.id, options.before) : undefined,
+        ),
+      )
+      .orderBy(desc(games.id))
+      // One extra row tells whether an older page exists.
+      .limit(options.limit + 1)
+  );
 }
 
 // DEC-08 order: wins desc, win rate desc, user id asc. Void matches are not

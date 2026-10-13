@@ -36,7 +36,8 @@ export function createStatsService(db: Database) {
       options: { gameType?: string; before?: number; limit: number },
     ) {
       if (!(await repo.userExists(db, userId))) return undefined;
-      const rows = await repo.findFinishedMatches(db, userId, options);
+      const found = await repo.findFinishedMatches(db, userId, options);
+      const rows = found.slice(0, options.limit);
       return {
         matches: rows.map((row) => ({
           matchId: row.matchId,
@@ -49,7 +50,7 @@ export function createStatsService(db: Database) {
         })),
         // Pass as `before` to get the next (older) page.
         nextBefore:
-          rows.length === options.limit ? rows[rows.length - 1].matchId : null,
+          found.length > options.limit ? rows[rows.length - 1].matchId : null,
       };
     },
 

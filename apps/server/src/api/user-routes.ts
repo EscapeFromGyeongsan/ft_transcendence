@@ -105,7 +105,13 @@ export function registerUserRoutes(
         security: [{ bearerAuth: [] }],
         params: {
           type: "object",
-          properties: { userId: { type: "integer", minimum: 1 } },
+          properties: {
+            userId: {
+              type: "integer",
+              minimum: 1,
+              maximum: Number.MAX_SAFE_INTEGER,
+            },
+          },
           required: ["userId"],
         },
         response: {
