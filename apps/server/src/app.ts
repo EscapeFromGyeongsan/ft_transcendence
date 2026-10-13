@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
+import { registerStatsRoutes } from "./api/stats-routes.ts";
 import { errorBody } from "./schemas/errors.ts";
 import {
   createAuthService,
@@ -15,6 +16,10 @@ import {
   createUserService,
   type UserService,
 } from "./services/user-service.ts";
+import {
+  createStatsService,
+  type StatsService,
+} from "./services/stats-service.ts";
 
 class ServiceUnavailableError extends Error {}
 
@@ -67,6 +72,11 @@ export async function buildApp(
   const getUsers = (): UserService => {
     if (!users) throw new ServiceUnavailableError();
     return users;
+  };
+  const stats = database ? createStatsService(database.db) : undefined;
+  const getStats = (): StatsService => {
+    if (!stats) throw new ServiceUnavailableError();
+    return stats;
   };
   app.addHook("onClose", async () => {
     await database?.close();
@@ -197,5 +207,6 @@ export async function buildApp(
   );
   registerAuthRoutes(app, getAuth);
   registerUserRoutes(app, getAuth, getUsers);
+  registerStatsRoutes(app, getAuth, getStats);
   return app;
 }
