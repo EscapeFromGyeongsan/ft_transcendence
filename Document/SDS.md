@@ -11,7 +11,7 @@
 | 범위 | 오목·오델로 2인 1:1 웹 플랫폼 (SRS v0.3.1의 16점 후보) |
 | 작성 | B (yunhpark) |
 | 기술 검토 | C, D, E (문서화 명세 32장) |
-| 참조 | [SRS v0.3.1 (Draft PR #4)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/4), [contracts.md](contracts.md), [GAME_RULES.md](GAME_RULES.md), [공통 게임 계약 (Draft PR #6)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6), [오목 엔진 (Draft PR #9)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/9), [전체 앱 컨테이너 (PR #10)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/10), [backend_database_initial_design.md](backend_database_initial_design.md) |
+| 참조 | [SRS v0.3.1 (Draft PR #4)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/4), [GAME_RULES.md](GAME_RULES.md), [공통 게임 계약 (Draft PR #6)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6), [오목 엔진 (Draft PR #9)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/9), [전체 앱 컨테이너 (PR #10)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/10) |
 | 구현 기준 브랜치 | `feat/server-auth-persistence` (B, PR 예정). migration `0000`~`0003` |
 | 기준 커밋 | SRS: `codex/srs-draft` `349e9e4` (v0.3.1) / 공통 계약: PR #6 `1a33f3c` / 구현: `3d5e3a1` 이후 리뷰 수정분 포함. PR 생성 시 최종 커밋 해시를 이 칸에 기록한다 |
 
@@ -613,10 +613,10 @@ Index: `sessions(user_id)`, `refresh_tokens(session_id)`, `game_players(user_id,
 
 - **enum 대신 text + CHECK**: 값 추가가 단순한 migration으로 끝난다. 값은 `@cafe/game-contracts`와 같다.
 - **board를 저장하지 않음**: `moves`가 기준 기록이고 board는 엔진으로 재생해 만든다. 오목 최대 225수라 재생 비용이 작다.
-- **통계 테이블 없음**: 승·패·승률·진행도·순위는 `game_players` + `games`로 계산한다(2.4의 14번). 업적도 계산한다. 초기 설계의 `achievements`, `user_achievements` 테이블은 DEC-08 범위(첫 승, 10경기 진행도)에서는 필요 없어 만들지 않았다.
-- **세션과 refresh token 분리**: 세션 ID는 로그인 동안 고정되고 token만 교체된다. 초기 설계 문서의 "안정적인 세션 식별자" 미결 사항을 이 구조로 해결했다.
+- **통계 테이블 없음**: 승·패·승률·진행도·순위는 `game_players` + `games`로 계산한다(2.4의 14번). 업적(첫 승, 10경기 진행도, DEC-08)도 계산하고 테이블은 두지 않는다.
+- **세션과 refresh token 분리**: 세션 ID는 로그인 동안 고정되고 token만 교체된다.
 - **소셜 테이블**: `friendships`(E)는 `계획`. 채팅 테이블은 후속 범위라 만들지 않는다.
-- migration은 Drizzle Kit으로 생성하고 SQL을 검토한 뒤 적용한다. 공유된 migration은 수정하지 않는다(초기 설계 4장).
+- migration은 Drizzle Kit으로 생성하고 SQL을 검토한 뒤 적용한다. 공유된 migration은 수정하지 않고 수정 migration을 추가한다.
 
 #### 계획 스키마 (구현 전)
 
@@ -656,7 +656,7 @@ erDiagram
 | `users.records_public` | 전적 공개 설정 (FR-PRO-04) | B | `계획` |
 | `users.deleted_at`, email·nickname nullable 전환 | 탈퇴 후 닉네임 재사용과 경기 기록 보존 (DATA-01~05, DEC-09) | B | `계획` (DEC-09 확정 후) |
 | `game_players.nickname_snapshot` | 경기 당시 닉네임 표시. 전적 조회는 이 값을 우선 사용 | B | `계획` |
-| `friendships` | 친구 요청·수락 (FR-SOC-01~03). 초기 설계의 거절·재요청 규칙 유지 | E (스키마 리뷰 B) | `계획` |
+| `friendships` | 친구 요청·수락 (FR-SOC-01~03). 제안 규칙: 거절 시 행을 지우지 않고 `declined`로 남김, 거절당한 요청자의 재요청은 차단, 거절한 쪽의 요청은 허용, 친구 삭제는 행 삭제 후 재요청 허용 | E (스키마 리뷰 B) | `계획` |
 
 #### 14. Statistics design
 
@@ -684,7 +684,7 @@ flowchart TD
 
 #### 8. API contract
 
-상세 요청·응답·상태 코드는 [contracts.md](contracts.md) 4장이 기준이다. 모든 route는 가능한 상태 코드를 `schema.response`에 선언해 Swagger(`/docs`)에 표시한다(프로젝트 규칙).
+상세 요청·응답·상태 코드는 이 문서 2.10(기능별 처리 흐름)과 Swagger(`/docs`)가 기준이다. 모든 route는 가능한 상태 코드를 `schema.response`에 선언했다. 게임 명령·snapshot·결과 타입은 [공통 게임 계약 (PR #6)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6)의 contracts.md를 따른다.
 
 | 영역 | Endpoint | 담당 | 상태 |
 |---|---|---|---|
@@ -702,7 +702,7 @@ flowchart TD
 
 #### 9. WebSocket contract (D)
 
-`계획`. 이벤트 목록은 contracts.md 5장과 문서화 명세 19장을 따른다. 아래는 B 구현과 연결되는 부분이다.
+`계획`. 이벤트 목록은 문서화 명세 19장을 따른다. 아래는 B 구현과 연결되는 부분이다.
 
 | 방향 | 이벤트 | 서버 처리 | B 연결 지점 |
 |---|---|---|---|
@@ -1678,7 +1678,7 @@ flowchart TD
 | 결정 | 선택 | 이유 | 상태 |
 |---|---|---|---|
 | Backend framework | Fastify 5 | JSON Schema 검증과 Swagger 생성이 내장돼 상태 코드 선언 규칙을 지키기 쉬움 | `구현됨` |
-| Frontend framework | React + Vite | 팀 합의(초기 설계 1장) | 골격만 |
+| Frontend framework | React + Vite | 팀 합의 | 골격만 |
 | Database | PostgreSQL 17 | 행 잠금, UNIQUE·CHECK 제약, 트랜잭션 | `구현됨` |
 | ORM / migration | Drizzle ORM + Drizzle Kit + pg | TypeScript 스키마와 검토 가능한 SQL migration | `구현됨` |
 | ID | BIGINT identity (세션·challenge는 UUID) | 단순·순서 보장. 외부 JSON의 matchId는 string 제안(PR #6) | `구현됨` / 외부 표현 `미정` |
@@ -1711,7 +1711,7 @@ flowchart TD
 | 공통 경기와 규칙 경계 | 2.2의 4번, 2.3 | 경계 `구현됨`, 엔진 연결 `계획` |
 | 실시간 계약·복구 | 2.5의 9번, 2.6의 13번 | `계획` (D) |
 | 논리/물리 데이터 모델 | 2.4의 5번 | `구현됨` |
-| API·오류 계약 | 2.5의 8번, contracts.md | `구현됨` (B 범위) |
+| API·오류 계약 | 2.5의 8번, 2.10 | `구현됨` (B 범위) |
 | 화면·접근성 | 2.2의 2번 | `계획` (A) |
 | 테스트·성능·운영 관측 | 4.1, TEST_PLAN.md | B 범위 테스트 대응 `구현됨`, 성능·AT 연결은 5.1 |
 
@@ -1742,7 +1742,7 @@ flowchart TD
 | 메일 소유 확인·비밀번호 복구·이메일 변경 | 학교 요건 확인 후 결정 | DEC-04, DEC-11 |
 | matchId 외부 표현 | string 제안 | PR #6 |
 | GameError 코드 목록 | 세분화 제안 | PR #6 |
-| WebSocket 라이브러리·토큰 전달·heartbeat | D | contracts.md 5장 |
+| WebSocket 라이브러리·토큰 전달·heartbeat | D | 문서화 명세 19장 |
 | 준비·시작 절차, 색상 배정, 초대 유효기간 | D, A | DEC-06 |
 | 이탈 시간 저장 위치·감지 지연 | D | DEC-03, DEC-07 |
 | 아바타 저장 위치 | B (PNG/JPEG 2MiB 이하 제안) | DEC-05 |
@@ -1765,7 +1765,5 @@ SDS v0.1은 B 범위를 구현 기준으로 채웠다. 아래는 SRS가 SDS에�
 
 | 문서 위치 | 남아 있는 내용 | 맞출 기준 | 담당 |
 |---|---|---|---|
-| `contracts.md` 4.4 | 공개 대기방 목록·임의 참가 API | 자동 매칭 + 친구 초대만 (SRS FR-ROOM, DEC-06) | D |
-| `contracts.md` 5.2 | `gameId` 통일 제안 | 외부 이름 `matchId` (PR #6), string 표현 제안 | B, D |
-| `contracts.md` 6장 | 오목 전용, `OMOK`, 대문자 상태, `INVALIDATED` | PR #6 계약(소문자, `finished` + `void`, 두 게임) | B, C |
+| `contracts.md` | B의 REST API·오류 형식·endpoint별 상태 코드가 없음 | PR #6 merge 후 장을 추가해 기록 | B |
 | `GAME_RULES.md` 3~4장 | 단순 60초 복귀, 동률 순위 `nickname → userId` | 누적 60초(DEC-03), `wins → winRate → userId`(DEC-08) | C |
