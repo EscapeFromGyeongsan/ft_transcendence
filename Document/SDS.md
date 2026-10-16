@@ -12,8 +12,8 @@
 | 작성 | B (yunhpark) |
 | 기술 검토 | C, D, E (문서화 명세 32장) |
 | 참조 | [SRS v0.3.1 (Draft PR #4)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/4), [GAME_RULES.md](GAME_RULES.md), [공통 게임 계약 (Draft PR #6)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6), [오목 엔진 (Draft PR #9)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/9), [전체 앱 컨테이너 (PR #10)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/10) |
-| 구현 기준 브랜치 | `feat/server-auth-persistence` (B, PR 예정). migration `0000`~`0003` |
-| 기준 커밋 | SRS: `codex/srs-draft` `349e9e4` (v0.3.1) / 공통 계약: PR #6 `1a33f3c` / 구현: `3d5e3a1` 이후 리뷰 수정분 포함. PR 생성 시 최종 커밋 해시를 이 칸에 기록한다 |
+| 구현 기준 브랜치 | `feat/server-auth-persistence` ([PR #11](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/11)). migration `0000`~`0003` |
+| 기준 커밋 | SRS: `codex/srs-draft` `349e9e4` (v0.3.1) / 공통 계약: PR #6 `1a33f3c` / 구현: PR #11 `b30b7f2` |
 
 ### 상태 표시
 
