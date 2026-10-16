@@ -1681,7 +1681,7 @@ flowchart TD
 | Frontend framework | React + Vite | 팀 합의 | 골격만 |
 | Database | PostgreSQL 17 | 행 잠금, UNIQUE·CHECK 제약, 트랜잭션 | `구현됨` |
 | ORM / migration | Drizzle ORM + Drizzle Kit + pg | TypeScript 스키마와 검토 가능한 SQL migration | `구현됨` |
-| ID | BIGINT identity (세션·challenge는 UUID) | 단순·순서 보장. 외부 JSON의 matchId는 string 제안(PR #6) | `구현됨` / 외부 표현 `미정` |
+| ID | BIGINT identity (세션·challenge는 UUID) | 단순·순서 보장. 외부 JSON의 matchId도 number (`Number.MAX_SAFE_INTEGER` 이하) | `구현됨` |
 | 상태 값 저장 | text + CHECK | enum보다 값 추가가 쉬움, 계약과 같은 소문자 값 | `구현됨` |
 | WebSocket | 미정 (D) | Fastify 플러그인 등 D가 선택 | `미정` |
 | Authentication | JWT access 30분 + opaque refresh 7일 + 서버 세션 | 로그아웃 즉시 효력(FR-AUTH-03)을 JWT 만료에 기대지 않음 | `구현됨` |
@@ -1740,7 +1740,6 @@ flowchart TD
 | 2FA 켜기·끄기 시 기존 세션 처리 | 현재 유지. 팀 의견 | DEC-04 |
 | refresh token 전달 방식 | 현재 body. HttpOnly cookie로 바꿀지 (바꾸면 CSRF 대책 추가) | DEC-04, A |
 | 메일 소유 확인·비밀번호 복구·이메일 변경 | 학교 요건 확인 후 결정 | DEC-04, DEC-11 |
-| matchId 외부 표현 | string 제안 | PR #6 |
 | GameError 코드 목록 | 세분화 제안 | PR #6 |
 | WebSocket 라이브러리·토큰 전달·heartbeat | D | 문서화 명세 19장 |
 | 준비·시작 절차, 색상 배정, 초대 유효기간 | D, A | DEC-06 |
