@@ -14,6 +14,7 @@ describe("gomoku.createInitialState", () => {
 
   it("gives black the first turn", () => {
     expect(gomoku.createInitialState().currentPlayerColor).toBe("black");
+    expect(gomoku.createInitialState().result).toBeNull();
   });
 
   it("keeps board rows independent", () => {

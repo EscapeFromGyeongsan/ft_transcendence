@@ -1,7 +1,34 @@
-import type { Cell, PlayerColor } from "@cafe/game-contracts";
+import type {
+  Cell,
+  GameError,
+  GomokuAction,
+  PlayerColor,
+} from "@cafe/game-contracts";
 
-// 오목 규칙에 필요한 상태. 경기 ID와 전송 버전은 상위 계층에서 관리한다.
-export interface GomokuState {
-  board: Cell[][];
-  currentPlayerColor: PlayerColor;
+// 승자는 색으로 표현한다. 사용자 ID와 전송 결과는 경기 관리 계층에서 연결한다.
+export type GomokuFinish =
+  | { outcome: "win"; winner: PlayerColor; reason: "five_in_row" }
+  | { outcome: "draw"; reason: "draw" };
+
+export type GomokuState = { board: Cell[][] } & (
+  | { currentPlayerColor: PlayerColor; result: null }
+  | { currentPlayerColor: null; result: GomokuFinish }
+);
+
+export type GomokuMoveResult =
+  | { ok: true; state: GomokuState }
+  | {
+      ok: false;
+      error: GameError & { code: "INVALID_ACTION" | "GAME_FINISHED" };
+    };
+
+// PR #11의 GameRules 입력/출력과 구조적으로 호환되는 엔진 연결 지점.
+export interface GomokuRulesInput {
+  moves: readonly { row: number; col: number; stone: string }[];
+  seat: PlayerColor;
+  action: GomokuAction;
 }
+
+export type GomokuRuleDecision =
+  | { ok: false; code: "INVALID_ACTION" | "GAME_FINISHED" }
+  | { ok: true; nextTurn: PlayerColor | null; finish?: GomokuFinish };

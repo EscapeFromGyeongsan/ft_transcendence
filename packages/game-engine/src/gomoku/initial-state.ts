@@ -9,5 +9,6 @@ export function createInitialState(): GomokuState {
       Array<Cell>(GOMOKU_BOARD_SIZE).fill(null),
     ),
     currentPlayerColor: "black",
+    result: null,
   };
 }
