@@ -8,6 +8,7 @@ export type {
 } from "./common.ts";
 
 export type { PlaceAction } from "./actions/place.ts";
+export type { ResignAction } from "./actions/resign.ts";
 export type {
   PlayerColor,
   Cell,
