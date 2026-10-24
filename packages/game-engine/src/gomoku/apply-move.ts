@@ -1,4 +1,4 @@
-import type { GomokuAction, PlayerColor } from "@cafe/game-contracts";
+import type { PlaceAction, PlayerColor } from "@cafe/game-contracts";
 import { GOMOKU_BOARD_SIZE } from "./initial-state.ts";
 import type { GomokuFinish, GomokuMoveResult, GomokuState } from "./types.ts";
 
@@ -36,7 +36,7 @@ function hasFive(
 
 export function applyMove(
   state: GomokuState,
-  action: GomokuAction,
+  action: PlaceAction,
   playerColor: PlayerColor,
 ): GomokuMoveResult {
   if (state.result !== null) {

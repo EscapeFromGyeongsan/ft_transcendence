@@ -8,6 +8,24 @@ const winningMoves = Array.from({ length: 9 }, (_, i) => ({
 }));
 
 describe("gomoku server rules adapter", () => {
+  it("keeps resignation outside the rules callback", () => {
+    const moves = Object.freeze(winningMoves.slice(0, 1));
+    const before = structuredClone(moves);
+    const input = {
+      moves,
+      seat: "white" as const,
+      action: { type: "resign" as const },
+    };
+
+    // @ts-expect-error The match service handles resignation before calling rules.
+    expect(gomoku.rules(input)).toEqual({ ok: false, code: "INVALID_ACTION" });
+    expect(moves).toEqual(before);
+    expect(gomoku.restoreState(moves)).toMatchObject({
+      currentPlayerColor: "white",
+      result: null,
+    });
+  });
+
   it("matches the server's rules callback and replays history without changing it", () => {
     const moves = winningMoves.slice(0, 8);
     const before = structuredClone(moves);

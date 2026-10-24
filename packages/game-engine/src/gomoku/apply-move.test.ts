@@ -9,6 +9,22 @@ function freezeState(state: gomoku.GomokuState): void {
 }
 
 describe("gomoku.applyMove", () => {
+  it("rejects a misrouted resignation without changing the board or finishing the game", () => {
+    const state = gomoku.createInitialState();
+    const before = structuredClone(state);
+    freezeState(state);
+    const resign = { type: "resign" } as const;
+
+    // @ts-expect-error Resignation belongs to the match service, not the placement engine.
+    const result = gomoku.applyMove(state, resign, "black");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "INVALID_ACTION", message: expect.any(String) },
+    });
+    expect(state).toEqual(before);
+  });
+
   it("places one black stone without modifying the input and gives white the turn", () => {
     const state = gomoku.createInitialState();
     const before = structuredClone(state);

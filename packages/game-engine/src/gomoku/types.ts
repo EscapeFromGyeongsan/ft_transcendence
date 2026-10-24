@@ -1,7 +1,7 @@
 import type {
   Cell,
   GameError,
-  GomokuAction,
+  PlaceAction,
   PlayerColor,
 } from "@cafe/game-contracts";
 
@@ -26,7 +26,7 @@ export type GomokuMoveResult =
 export interface GomokuRulesInput {
   moves: readonly { row: number; col: number; stone: string }[];
   seat: PlayerColor;
-  action: GomokuAction;
+  action: PlaceAction;
 }
 
 export type GomokuRuleDecision =
