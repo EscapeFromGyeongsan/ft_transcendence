@@ -271,6 +271,26 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     expect(await database.db.select().from(gameCommands)).toHaveLength(0);
     expect((await service.getMatch(matchId))?.game.stateVersion).toBe(0);
   });
+  test("an unknown engine code is a server error and records nothing", async () => {
+    const leaky = createGameCommandService(database.db, {
+      gomoku: {
+        version: "gomoku-test",
+        rules: () => ({ ok: false, code: "CELL_OCCUPIED" }) as never,
+        board: stubBoard,
+      },
+    });
+    await expect(
+      leaky.apply({
+        matchId,
+        userId: black,
+        commandId: randomUUID(),
+        expectedVersion: 0,
+        action: { type: "place", row: 7, col: 7 },
+      }),
+    ).rejects.toThrow("returned unknown code CELL_OCCUPIED");
+    expect(await database.db.select().from(gameCommands)).toHaveLength(0);
+  });
+
   test("createMatch stores the registered rules version", async () => {
     expect((await service.getMatch(matchId))?.game.rulesVersion).toBe(
       "gomoku-test",

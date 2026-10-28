@@ -70,6 +70,10 @@ export type SystemFinishResult =
   { status: "finished"; stateVersion: number } | { status: "skipped" };
 
 const commandTypes = { place: "place", resign: "resign" } as const;
+const engineErrorCodes: readonly string[] = [
+  "INVALID_ACTION",
+  "GAME_FINISHED",
+] satisfies EngineErrorCode[];
 
 async function finishMatch(
   tx: Executor,
@@ -258,7 +262,15 @@ export function createGameCommandService(
             seat,
             action: command.action,
           });
-          if (!decision.ok) return reject(decision.code);
+          if (!decision.ok) {
+            // An unknown code is an engine bug, not a player error: roll back.
+            if (!engineErrorCodes.includes(decision.code)) {
+              throw new Error(
+                `Engine for ${game.gameType} returned unknown code ${decision.code}.`,
+              );
+            }
+            return reject(decision.code);
+          }
           await repo.insertMove(tx, {
             gameId: game.id,
             userId: command.userId,
