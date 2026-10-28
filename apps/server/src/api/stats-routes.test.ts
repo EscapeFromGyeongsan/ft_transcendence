@@ -71,8 +71,8 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
   beforeAll(async () => {
     database = await openTestDatabase();
     games = createGameCommandService(database.db, {
-      gomoku: winAtCorner,
-      othello: winAtCorner,
+      gomoku: { version: "test", rules: winAtCorner },
+      othello: { version: "test", rules: winAtCorner },
     });
   });
   afterAll(async () => {
@@ -112,7 +112,6 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
   ) {
     const matchId = await games.createMatch({
       gameType,
-      rulesVersion: "test",
       blackUserId,
       whiteUserId,
     });
@@ -142,7 +141,6 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
     await playMatch("othello", 1, 2); // other game type
     await games.createMatch({
       gameType: "gomoku",
-      rulesVersion: "test",
       blackUserId: 1,
       whiteUserId: 3,
     }); // still playing
@@ -264,7 +262,6 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
   test("the DB refuses partial results on an unfinished match", async () => {
     const matchId = await games.createMatch({
       gameType: "gomoku",
-      rulesVersion: "test",
       blackUserId: 1,
       whiteUserId: 2,
     });

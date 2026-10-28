@@ -21,6 +21,10 @@ export type GameRules = (input: {
   action: PlaceAction;
 }) => RuleDecision;
 
+// One engine per game type. The server, not the caller, decides which rules
+// version a new match uses, so only registered versions are ever stored.
+export type RegisteredRules = { version: string; rules: GameRules };
+
 export type GameCommand = {
   matchId: number;
   userId: number;
@@ -66,22 +70,33 @@ async function finishMatch(
   }
 }
 
+// Run once at startup, before listen. Clocks and sockets of unfinished matches
+// did not survive the restart, so they end as void in one transaction.
+// Assumes a single API instance: another running instance would lose its
+// live matches.
+export function voidUnfinishedGames(db: Database) {
+  return db.transaction((tx) => repo.voidUnfinishedGames(tx, "server_restart"));
+}
+
 export function createGameCommandService(
   db: Database,
-  rulesByGameType: Record<string, GameRules>,
+  rulesByGameType: Record<string, RegisteredRules>,
 ) {
   return {
     // Starts a two-player match directly in "playing" (matchmaking is D's part).
-    createMatch(input: {
+    async createMatch(input: {
       gameType: string;
-      rulesVersion: string;
       blackUserId: number;
       whiteUserId: number;
     }) {
+      const registered = rulesByGameType[input.gameType];
+      if (!registered) {
+        throw new Error(`No rules registered for ${input.gameType}.`);
+      }
       return db.transaction(async (tx) => {
         const game = await repo.insertGame(tx, {
           gameType: input.gameType,
-          rulesVersion: input.rulesVersion,
+          rulesVersion: registered.version,
           status: "playing",
           currentTurn: "black",
           startedAt: new Date(),
@@ -180,11 +195,18 @@ export function createGameCommandService(
           );
         } else {
           if (game.currentTurn !== seat) return reject("NOT_YOUR_TURN");
-          const rules = rulesByGameType[game.gameType];
-          if (!rules)
+          const registered = rulesByGameType[game.gameType];
+          if (!registered)
             throw new Error(`No rules registered for ${game.gameType}.`);
+          // Startup voids every unfinished match, so a mismatch means the
+          // engine changed without a restart: never apply other rules.
+          if (registered.version !== game.rulesVersion) {
+            throw new Error(
+              `Match ${game.id} uses ${game.rulesVersion}, but ${registered.version} is registered.`,
+            );
+          }
           const history = await repo.findMoves(tx, game.id);
-          const decision = rules({
+          const decision = registered.rules({
             moves: history,
             seat,
             action: command.action,

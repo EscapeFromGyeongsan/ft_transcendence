@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { gameCommands, gamePlayers, games, moves } from "../db/schema/games.ts";
 
@@ -149,4 +149,29 @@ export async function setPlayerResult(
     .update(gamePlayers)
     .set({ result })
     .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, userId)));
+}
+
+// Finishes every unfinished match as void and returns their ids.
+export async function voidUnfinishedGames(db: Executor, reason: string) {
+  const voided = await db
+    .update(games)
+    .set({
+      status: "finished",
+      outcome: "void",
+      resultReason: reason,
+      currentTurn: null,
+      finishedAt: sql`now()`,
+      stateVersion: sql`${games.stateVersion} + 1`,
+      updatedAt: sql`now()`,
+    })
+    .where(inArray(games.status, ["playing", "paused"]))
+    .returning({ id: games.id });
+  const ids = voided.map((game) => game.id);
+  if (ids.length > 0) {
+    await db
+      .update(gamePlayers)
+      .set({ result: "void" })
+      .where(inArray(gamePlayers.gameId, ids));
+  }
+  return ids;
 }

@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { buildApp } from "./app.ts";
+import { createDatabase } from "./db/client.ts";
+import { voidUnfinishedGames } from "./services/game-command-service.ts";
 
 if (existsSync(".env")) loadEnvFile(".env");
 if (!process.env.DATABASE_URL) {
@@ -55,6 +57,15 @@ try {
     throw new Error(
       "Database is unavailable. Run npm run db:up and npm run db:migrate first.",
     );
+  }
+  const startup = createDatabase(process.env.DATABASE_URL);
+  try {
+    const voided = await voidUnfinishedGames(startup.db);
+    if (voided.length > 0) {
+      console.log(`Voided ${voided.length} unfinished match(es) on restart.`);
+    }
+  } finally {
+    await startup.close();
   }
   const address = await app.listen({
     port,

@@ -9,7 +9,7 @@ import {
 } from "vitest";
 import { eq } from "drizzle-orm";
 import { users } from "../db/schema/users.ts";
-import { gameCommands, moves } from "../db/schema/games.ts";
+import { gameCommands, games, moves } from "../db/schema/games.ts";
 import {
   openTestDatabase,
   resetTestDatabase,
@@ -18,6 +18,7 @@ import {
 import {
   createGameCommandService,
   type GameRules,
+  voidUnfinishedGames,
 } from "./game-command-service.ts";
 
 // Stand-in for the real engine (C): rejects occupied cells, alternates turns,
@@ -46,7 +47,9 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
 
   beforeAll(async () => {
     database = await openTestDatabase();
-    service = createGameCommandService(database.db, { gomoku: stubRules });
+    service = createGameCommandService(database.db, {
+      gomoku: { version: "gomoku-test", rules: stubRules },
+    });
   });
   afterAll(async () => {
     await database?.close();
@@ -66,7 +69,6 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     [black, white, outsider] = rows.map((r) => r.id);
     matchId = await service.createMatch({
       gameType: "gomoku",
-      rulesVersion: "gomoku-test",
       blackUserId: black,
       whiteUserId: white,
     });
@@ -242,7 +244,7 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
   test("a failed save rolls back everything (no partial move or command)", async () => {
     const brokenRules: GameRules = () => ({ ok: true, nextTurn: "white" });
     const broken = createGameCommandService(database.db, {
-      gomoku: brokenRules,
+      gomoku: { version: "gomoku-test", rules: brokenRules },
     });
     // Row 15 violates the moves CHECK constraint inside the transaction.
     await expect(
@@ -257,5 +259,90 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     expect(await moveCount()).toBe(0);
     expect(await database.db.select().from(gameCommands)).toHaveLength(0);
     expect((await service.getMatch(matchId))?.game.stateVersion).toBe(0);
+  });
+  test("createMatch stores the registered rules version", async () => {
+    expect((await service.getMatch(matchId))?.game.rulesVersion).toBe(
+      "gomoku-test",
+    );
+    await expect(
+      service.createMatch({
+        gameType: "othello",
+        blackUserId: black,
+        whiteUserId: white,
+      }),
+    ).rejects.toThrow("No rules registered for othello.");
+  });
+
+  test("a match whose rules version is no longer registered is never applied", async () => {
+    const upgraded = createGameCommandService(database.db, {
+      gomoku: { version: "gomoku-test-v2", rules: stubRules },
+    });
+    await expect(
+      upgraded.apply({
+        matchId,
+        userId: black,
+        commandId: randomUUID(),
+        expectedVersion: 0,
+        action: { type: "place", row: 7, col: 7 },
+      }),
+    ).rejects.toThrow("uses gomoku-test, but gomoku-test-v2 is registered");
+    expect(await moveCount()).toBe(0);
+    expect((await service.getMatch(matchId))?.game.stateVersion).toBe(0);
+  });
+
+  test("restart voids playing and paused matches and leaves finished ones", async () => {
+    await place(black, 0, 7, 7);
+    const paused = await service.createMatch({
+      gameType: "gomoku",
+      blackUserId: black,
+      whiteUserId: white,
+    });
+    await database.db
+      .update(games)
+      .set({ status: "paused" })
+      .where(eq(games.id, paused));
+    const finished = await service.createMatch({
+      gameType: "gomoku",
+      blackUserId: black,
+      whiteUserId: white,
+    });
+    await service.apply({
+      matchId: finished,
+      userId: black,
+      commandId: randomUUID(),
+      expectedVersion: 0,
+      action: { type: "resign" },
+    });
+
+    expect((await voidUnfinishedGames(database.db)).sort()).toEqual(
+      [matchId, paused].sort(),
+    );
+
+    for (const [id, version] of [
+      [matchId, 2],
+      [paused, 1],
+    ]) {
+      const match = await service.getMatch(id);
+      expect(match?.game).toMatchObject({
+        status: "finished",
+        outcome: "void",
+        resultReason: "server_restart",
+        winnerUserId: null,
+        currentTurn: null,
+        stateVersion: version,
+      });
+      expect(match?.game.finishedAt).toBeInstanceOf(Date);
+      expect(match?.players.map((p) => p.result)).toEqual(["void", "void"]);
+    }
+    expect((await service.getMatch(finished))?.game).toMatchObject({
+      outcome: "win",
+      resultReason: "resign",
+      stateVersion: 1,
+    });
+    expect(await place(white, 2, 7, 8)).toMatchObject({
+      status: "rejected",
+      code: "GAME_FINISHED",
+    });
+    expect(await voidUnfinishedGames(database.db)).toEqual([]);
   });
 });
