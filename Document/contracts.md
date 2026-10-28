@@ -102,11 +102,11 @@ import type {
 
 현재 오목 예제는 `expectedVersion: 0`으로 첫 착수를 요청하고, 갱신 상태를 `stateVersion: 1`로 표현한다. PR #11의 착수·기권 성공은 상태 버전을 1 증가시키며 거절·중복 재전송은 증가시키지 않는다. 중복 처리와 검사 순서는 9.1절에 기록한다. 대기·일시정지·복귀 등 나머지 생명주기의 버전 증가는 추가 합의 대상이다. 현재 서버는 명령 기록을 경기 기록과 함께 보관하며 자동 삭제·만료를 구현하지 않는다.
 
-현재 서버(PR #11)는 게임별 엔진을 `{ version, rules }`로 등록한다. `createMatch()`는 호출자에게 규칙 버전을 받지 않고 등록 버전으로 저장한다. 착수 시 저장 버전과 등록 버전이 다르면 적용하지 않고 트랜잭션을 롤백한다. 오목 예제는 PR #12 엔진의 `gomoku-freestyle-v1`을 사용한다. 현재 서버는 게임별 한 버전을 지원하며, 공통 `rulesVersion: string` 타입은 향후 다른 게임이나 버전 등록을 허용한다. 여러 규칙 버전의 동시 운영은 이번 범위에 포함하지 않는다.
+현재 서버(PR #11)는 게임별 엔진을 `{ version, rules, board }`로 등록한다. `board(moves)`는 저장된 착수로 현재 보드를 만들어 `getSnapshot()`에 쓴다. `createMatch()`는 호출자에게 규칙 버전을 받지 않고 등록 버전으로 저장한다. 착수 시 저장 버전과 등록 버전이 다르면 적용하지 않고 트랜잭션을 롤백한다. 오목 예제는 PR #12 엔진의 `gomoku-freestyle-v1`을 사용한다. 현재 서버는 게임별 한 버전을 지원하며, 공통 `rulesVersion: string` 타입은 향후 다른 게임이나 버전 등록을 허용한다. 여러 규칙 버전의 동시 운영은 이번 범위에 포함하지 않는다.
 
 ```ts
 createGameCommandService(db, {
-  gomoku: { version: "gomoku-freestyle-v1", rules: gomoku.rules },
+  gomoku: { version: "gomoku-freestyle-v1", rules: gomoku.rules, board: gomoku.board },
 });
 ```
 

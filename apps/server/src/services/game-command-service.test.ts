@@ -8,6 +8,7 @@ import {
   test,
 } from "vitest";
 import { eq } from "drizzle-orm";
+import type { Cell } from "@cafe/game-contracts";
 import { users } from "../db/schema/users.ts";
 import { gameCommands, games, moves } from "../db/schema/games.ts";
 import {
@@ -18,6 +19,7 @@ import {
 import {
   createGameCommandService,
   type GameRules,
+  type StoredMove,
   voidUnfinishedGames,
 } from "./game-command-service.ts";
 
@@ -25,7 +27,7 @@ import {
 // and treats (14, 14) as a winning move so the finish path can be tested.
 const stubRules: GameRules = ({ moves: history, seat, action }) => {
   if (history.some((m) => m.row === action.row && m.col === action.col)) {
-    return { ok: false, code: "CELL_OCCUPIED" };
+    return { ok: false, code: "INVALID_ACTION" };
   }
   if (action.row === 14 && action.col === 14) {
     return {
@@ -35,6 +37,15 @@ const stubRules: GameRules = ({ moves: history, seat, action }) => {
     };
   }
   return { ok: true, nextTurn: seat === "black" ? "white" : "black" };
+};
+
+// Stones stay where they were placed (no captures), like Gomoku.
+const stubBoard = (history: StoredMove[]) => {
+  const board: Cell[][] = Array.from({ length: 15 }, () =>
+    Array<Cell>(15).fill(null),
+  );
+  for (const m of history) board[m.row][m.col] = m.stone as Cell;
+  return board;
 };
 
 describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
@@ -48,7 +59,7 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
   beforeAll(async () => {
     database = await openTestDatabase();
     service = createGameCommandService(database.db, {
-      gomoku: { version: "gomoku-test", rules: stubRules },
+      gomoku: { version: "gomoku-test", rules: stubRules, board: stubBoard },
     });
   });
   afterAll(async () => {
@@ -138,14 +149,14 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     });
     expect(await place(white, 1, 7, 7)).toMatchObject({
       status: "rejected",
-      code: "CELL_OCCUPIED",
+      code: "INVALID_ACTION",
     });
     const rejected = await database.db
       .select()
       .from(gameCommands)
       .where(eq(gameCommands.status, "rejected"));
     expect(rejected.map((c) => c.rejectCode).sort()).toEqual([
-      "CELL_OCCUPIED",
+      "INVALID_ACTION",
       "NOT_YOUR_TURN",
       "VERSION_CONFLICT",
     ]);
@@ -244,7 +255,7 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
   test("a failed save rolls back everything (no partial move or command)", async () => {
     const brokenRules: GameRules = () => ({ ok: true, nextTurn: "white" });
     const broken = createGameCommandService(database.db, {
-      gomoku: { version: "gomoku-test", rules: brokenRules },
+      gomoku: { version: "gomoku-test", rules: brokenRules, board: stubBoard },
     });
     // Row 15 violates the moves CHECK constraint inside the transaction.
     await expect(
@@ -275,7 +286,7 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
 
   test("a match whose rules version is no longer registered is never applied", async () => {
     const upgraded = createGameCommandService(database.db, {
-      gomoku: { version: "gomoku-test-v2", rules: stubRules },
+      gomoku: { version: "gomoku-test-v2", rules: stubRules, board: stubBoard },
     });
     await expect(
       upgraded.apply({
@@ -429,5 +440,49 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     );
     await expect(timeout([], 0)).rejects.toThrow();
     expect((await service.getMatch(matchId))?.game.status).toBe("playing");
+  });
+
+  test("getSnapshot returns the contract shape for a playing match", async () => {
+    await place(black, 0, 7, 7);
+    const snapshot = await service.getSnapshot(matchId);
+    expect(snapshot).toMatchObject({
+      matchId,
+      gameType: "gomoku",
+      rulesVersion: "gomoku-test",
+      stateVersion: 1,
+      status: "playing",
+      players: { black, white },
+      currentPlayerId: white,
+      result: null,
+    });
+    expect(snapshot?.board[7][7]).toBe("black");
+    expect(snapshot?.board.flat().filter(Boolean)).toHaveLength(1);
+    expect(await service.getSnapshot(matchId + 1000)).toBeUndefined();
+  });
+
+  test("getSnapshot carries the stored result of finished matches", async () => {
+    await place(black, 0, 14, 14);
+    expect((await service.getSnapshot(matchId))?.result).toEqual({
+      outcome: "win",
+      winnerId: black,
+      reason: "five_in_row",
+    });
+
+    const other = await service.createMatch({
+      gameType: "gomoku",
+      blackUserId: black,
+      whiteUserId: white,
+    });
+    await service.finishBySystem({
+      matchId: other,
+      reason: "disconnect_timeout",
+      absentUserIds: [black, white],
+      expectedVersion: 0,
+    });
+    expect(await service.getSnapshot(other)).toMatchObject({
+      status: "finished",
+      currentPlayerId: null,
+      result: { outcome: "void", winnerId: null, reason: "disconnect_timeout" },
+    });
   });
 });
