@@ -327,7 +327,7 @@ flowchart LR
 
 경계 규칙 (CON-04):
 
-- 게임 규칙(C)은 `GameRules` 함수 하나로 플랫폼에 연결한다. 입력은 지금까지의 착수 목록·두는 사람·행동, 출력은 거절 코드 또는 다음 차례·종료 결과다.
+- 게임 규칙(C)은 `GameRules` 함수 하나와 규칙 버전(`{ version, rules }`)으로 플랫폼에 연결한다. 입력은 지금까지의 착수 목록·두는 사람·행동, 출력은 거절 코드 또는 다음 차례·종료 결과다.
 - 잠금·버전·중복·저장(B)과 전송(D)은 게임 종류와 무관하다. 금수 같은 규칙을 추가해도 인증·방·전송·저장 코드는 바뀌지 않는다.
 - 게임 추가 시 `gameType` 값, `GameRules` 구현, 계약 타입(PR #6 절차)만 추가한다. DB의 `games_game_type_check`에 값을 더하는 migration이 함께 필요하다.
 
@@ -1005,7 +1005,7 @@ stateDiagram-v2
 | playing | 연결 끊김 | 참가자 연결 0개 | paused | 이탈 시간 측정 | status, disconnected_at | PLAYER_DISCONNECTED, GAME_PAUSED | `계획` (D) |
 | paused | 복귀 | 예산 남음, 인증·참가자 확인 | playing | snapshot 재전송 | status | PLAYER_RECONNECTED, GAME_STATE | `계획` (D) |
 | paused | 예산 만료 | 누적 60초 | finished | 한 명 부재: 상대 승리 / 둘 다: void | 결과 확정 | GAME_FINISHED | `계획` (D), 저장 경로 B |
-| playing, paused | 서버 재시작 | 미완료 경기 | finished | void (`server_restart`) | 결과 확정 | 없음 (재접속 시 표시) | `계획` |
+| playing, paused | 서버 재시작 | 미완료 경기 | finished | void (`server_restart`) | 결과 확정 | 없음 (재접속 시 표시) | `구현됨`: `voidUnfinishedGames()` |
 | finished | 새 명령 | - | finished | `GAME_FINISHED`로 거절 | game_commands (rejected) | ERROR | `구현됨` |
 | finished | 이미 처리한 commandId 재전송 | 같은 사용자 | finished | 최초 결과 반환 (2.8 순서상 상태 확인보다 중복 확인이 먼저) | 없음 | 요청자에게만 | `구현됨` |
 
@@ -1489,7 +1489,9 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    S([gameType, rulesVersion, blackUserId, whiteUserId]) --> Tx["BEGIN, games INSERT (status=playing, current_turn=black, started_at)"]
+    S([gameType, blackUserId, whiteUserId]) --> Reg{gameType에 등록된 엔진?}
+    Reg -->|아니오| Err[예외]
+    Reg -->|예| Tx["BEGIN, games INSERT (status=playing, current_turn=black, started_at)"]
     Tx --> P1[game_players INSERT black]
     P1 --> P2[game_players INSERT white]
     P2 -->|성공| C["COMMIT → matchId 반환"]
@@ -1498,6 +1500,8 @@ flowchart TD
 ```
 
 매칭·준비 단계는 D 범위라, 지금은 두 참가자가 정해지면 바로 `playing`으로 만든다.
+
+`rulesVersion`은 호출자가 넘기지 않는다. 서버가 등록된 엔진의 버전(`{ version, rules }`)으로 채워, 지원하지 않는 버전이 저장되지 않는다. `apply()`는 저장된 버전과 등록된 버전이 다르면 규칙을 적용하지 않고 예외로 끝낸다(트랜잭션 롤백). 재시작 때 미완료 경기가 모두 무효가 되므로 정상 운영에서는 일어나지 않는다.
 
 #### 2.10.20 경기 명령 `GameCommandService.apply()` (D가 호출)
 
@@ -1640,7 +1644,7 @@ flowchart TD
 - 전적 표시: `nickname_snapshot` + "(탈퇴한 사용자)". 현재 프로필 링크는 만들지 않는다. 같은 닉네임을 새 계정이 써도 과거 기록과 연결되지 않는다(불변 user id 기준).
 - 보존 기간·백업 반영·탈퇴자 리더보드 처리는 DEC-09 결정 전이라 미정(5장).
 
-#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, `계획`)
+#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 `계획`, 서버 재시작 `구현됨`)
 
 현재 `apply()`는 사용자 명령(`place`, `resign`)만 받는다. 이탈 만료와 재시작 무효는 사용자가 아닌 서버가 일으키므로 별도 진입점을 둔다.
 
@@ -1660,12 +1664,13 @@ flowchart TD
     end
     subgraph restart["서버 재시작 (index.ts, listen 전)"]
         R0([기동]) --> R1["UPDATE games SET status=finished, outcome=void, reason=server_restart, finished_at=now(), stateVersion+1 WHERE status IN (playing, paused)"]
-        R1 --> R2["game_players.result = void"]
+        R1 --> R2["game_players.result = void (R1과 같은 트랜잭션)"]
         R2 --> R3["대기 상태(waiting) 정리 (D)"]
         R3 --> R4[listen]
     end
 ```
 
+- 서버 재시작 무효는 `index.ts`가 DB 확인 뒤 listen 전에 `voidUnfinishedGames()`로 처리한다. 진행 중 경기의 시계·연결은 재시작 후 남지 않기 때문이다. API 인스턴스가 하나라는 전제다. 여러 개를 띄우면 다른 인스턴스의 진행 중 경기까지 무효가 된다. 대기 상태 정리(D)는 `계획`이다.
 - 복귀와 만료가 겹치면 경기 행 잠금이 순서를 정한다. 먼저 commit한 쪽이 이기고, 나중 쪽은 버전 불일치나 종료 상태로 아무것도 하지 않는다.
 - `Finish` 타입에 `void`를 추가하고, 결과 사유에 `disconnect_timeout`, `server_restart`를 허용한다(계약 PR #6의 `TwoPlayerResult`와 같음).
 
