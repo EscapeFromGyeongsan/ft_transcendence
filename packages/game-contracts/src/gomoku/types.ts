@@ -1,9 +1,10 @@
 import type { PlaceAction } from "../actions/place.ts";
+import type { ResignAction } from "../actions/resign.ts";
 import type { GameCommandBase, GameSnapshotBase, PlayerId } from "../common.ts";
 import type { Cell, TwoColorPlayers } from "../shared/two-color-board.ts";
 import type { TwoPlayerResult } from "../shared/two-player-result.ts";
 
-export type GomokuAction = PlaceAction;
+export type GomokuAction = PlaceAction | ResignAction;
 export type GomokuResult = TwoPlayerResult<"five_in_row">;
 
 export interface GomokuCommand extends GameCommandBase {

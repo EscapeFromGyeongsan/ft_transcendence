@@ -1,9 +1,10 @@
 import type { PlaceAction } from "../actions/place.ts";
+import type { ResignAction } from "../actions/resign.ts";
 import type { GameCommandBase, GameSnapshotBase, PlayerId } from "../common.ts";
 import type { Cell, TwoColorPlayers } from "../shared/two-color-board.ts";
 import type { TwoPlayerResult } from "../shared/two-player-result.ts";
 
-export type OthelloAction = PlaceAction;
+export type OthelloAction = PlaceAction | ResignAction;
 export type OthelloResult = TwoPlayerResult<"disc_count">;
 
 export interface OthelloCommand extends GameCommandBase {
