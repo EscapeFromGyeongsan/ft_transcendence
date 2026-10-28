@@ -345,4 +345,89 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     });
     expect(await voidUnfinishedGames(database.db)).toEqual([]);
   });
+
+  const timeout = (absentUserIds: number[], expectedVersion: number) =>
+    service.finishBySystem({
+      matchId,
+      reason: "disconnect_timeout",
+      absentUserIds,
+      expectedVersion,
+    });
+
+  test("disconnect timeout of one player gives the win to the other", async () => {
+    await place(black, 0, 7, 7);
+    expect(await timeout([white], 1)).toEqual({
+      status: "finished",
+      stateVersion: 2,
+    });
+    const match = await service.getMatch(matchId);
+    expect(match?.game).toMatchObject({
+      status: "finished",
+      outcome: "win",
+      resultReason: "disconnect_timeout",
+      winnerUserId: black,
+      currentTurn: null,
+      stateVersion: 2,
+    });
+    expect(
+      Object.fromEntries(match!.players.map((p) => [p.userId, p.result])),
+    ).toEqual({ [black]: "win", [white]: "loss" });
+    expect(await place(white, 2, 7, 8)).toMatchObject({
+      status: "rejected",
+      code: "GAME_FINISHED",
+    });
+  });
+
+  test("disconnect timeout of both players voids the match", async () => {
+    expect(await timeout([black, white], 0)).toMatchObject({
+      status: "finished",
+    });
+    const match = await service.getMatch(matchId);
+    expect(match?.game).toMatchObject({
+      outcome: "void",
+      resultReason: "disconnect_timeout",
+      winnerUserId: null,
+    });
+    expect(match?.players.map((p) => p.result)).toEqual(["void", "void"]);
+  });
+
+  test("disconnect timeout does nothing after a move, a finish or for a missing match", async () => {
+    await place(black, 0, 7, 7);
+    expect(await timeout([white], 0)).toEqual({ status: "skipped" });
+    expect((await service.getMatch(matchId))?.game.status).toBe("playing");
+
+    await place(white, 1, 14, 14);
+    expect(await timeout([black], 2)).toEqual({ status: "skipped" });
+    expect((await service.getMatch(matchId))?.game).toMatchObject({
+      resultReason: "five_in_row",
+      winnerUserId: white,
+    });
+
+    expect(
+      await service.finishBySystem({
+        matchId: matchId + 1000,
+        reason: "disconnect_timeout",
+        absentUserIds: [black],
+        expectedVersion: 0,
+      }),
+    ).toEqual({ status: "skipped" });
+  });
+
+  test("disconnect timeout and a move on the same version: exactly one wins", async () => {
+    const [command, finish] = await Promise.all([
+      place(black, 0, 7, 7),
+      timeout([black], 0),
+    ]);
+    const applied = command.status === "applied";
+    expect(applied).toBe(finish.status === "skipped");
+    expect((await service.getMatch(matchId))?.game.stateVersion).toBe(1);
+  });
+
+  test("disconnect timeout rejects absent users who are not participants", async () => {
+    await expect(timeout([outsider], 0)).rejects.toThrow(
+      "absentUserIds must be participants",
+    );
+    await expect(timeout([], 0)).rejects.toThrow();
+    expect((await service.getMatch(matchId))?.game.status).toBe("playing");
+  });
 });

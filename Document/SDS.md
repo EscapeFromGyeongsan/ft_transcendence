@@ -1644,7 +1644,7 @@ flowchart TD
 - 전적 표시: `nickname_snapshot` + "(탈퇴한 사용자)". 현재 프로필 링크는 만들지 않는다. 같은 닉네임을 새 계정이 써도 과거 기록과 연결되지 않는다(불변 user id 기준).
 - 보존 기간·백업 반영·탈퇴자 리더보드 처리는 DEC-09 결정 전이라 미정(5장).
 
-#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 `계획`, 서버 재시작 `구현됨`)
+#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 저장 `구현됨`·시계 `계획`(D), 서버 재시작 `구현됨`)
 
 현재 `apply()`는 사용자 명령(`place`, `resign`)만 받는다. 이탈 만료와 재시작 무효는 사용자가 아닌 서버가 일으키므로 별도 진입점을 둔다.
 
@@ -1672,7 +1672,9 @@ flowchart TD
 
 - 서버 재시작 무효는 `index.ts`가 DB 확인 뒤 listen 전에 `voidUnfinishedGames()`로 처리한다. 진행 중 경기의 시계·연결은 재시작 후 남지 않기 때문이다. API 인스턴스가 하나라는 전제다. 여러 개를 띄우면 다른 인스턴스의 진행 중 경기까지 무효가 된다. 대기 상태 정리(D)는 `계획`이다.
 - 복귀와 만료가 겹치면 경기 행 잠금이 순서를 정한다. 먼저 commit한 쪽이 이기고, 나중 쪽은 버전 불일치나 종료 상태로 아무것도 하지 않는다.
-- `Finish` 타입에 `void`를 추가하고, 결과 사유에 `disconnect_timeout`, `server_restart`를 허용한다(계약 PR #6의 `TwoPlayerResult`와 같음).
+- `Finish` 타입에 `void`를 추가했다. 결과 사유 `disconnect_timeout`, `server_restart`는 계약 PR #6의 `TwoPlayerResult`와 같다.
+- `finishBySystem()`은 `{ status: "finished", stateVersion }` 또는 `{ status: "skipped" }`를 돌려준다. `finished`일 때만 D가 `GAME_FINISHED`를 보낸다. 없는 경기, 이미 종료, 버전 불일치는 `skipped`다.
+- `absentUserIds`가 비었거나 참가자가 아닌 사용자가 있으면 예외를 던진다. D의 호출 오류이므로 사용자에게 보낼 오류 코드가 아니다.
 
 ---
 
