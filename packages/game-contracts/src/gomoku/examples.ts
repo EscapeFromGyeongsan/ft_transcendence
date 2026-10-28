@@ -7,7 +7,7 @@ function createEmptyBoard(): Cell[][] {
 export const initialSnapshot = {
   gameType: "gomoku",
   matchId: 1,
-  rulesVersion: "gomoku-temp-ver",
+  rulesVersion: "gomoku-freestyle-v1",
   stateVersion: 0,
   status: "playing",
   players: {

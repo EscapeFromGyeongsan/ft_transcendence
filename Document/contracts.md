@@ -1,7 +1,7 @@
 # 게임 공통 계약
 
-- 문서 버전: 0.3 / 작성일: 2026-10-08 / 수정일: 2026-10-24 (KST)
-- 상태: PR #6 서버 리뷰 반영 — 팀 재검토 대기
+- 문서 버전: 0.3.1 / 작성일: 2026-10-08 / 수정일: 2026-10-28 (KST)
+- 상태: PR #6 B의 계약 구조 승인 및 후속 문서 보완 — 미결정 항목은 10절 참조
 - 관련 이슈: [#5 공통 계약 초안](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/5)
 - 작성 책임: dong-hki / 문서 작성 지원: Codex
 - 공통 기반: [common.ts](../packages/game-contracts/src/common.ts)
@@ -100,9 +100,15 @@ import type {
 
 `gameType`은 공통 기본 인터페이스의 필드가 아니라 각 게임 명령·상태에 추가하는 고정된 구분 값이다.
 
-현재 오목 예제는 `expectedVersion: 0`으로 첫 착수를 요청하고, 갱신 상태를 `stateVersion: 1`로 표현한다. PR #11의 착수·기권 성공은 상태 버전을 1 증가시키며 거절·중복 재전송은 증가시키지 않는다. 중복 처리와 검사 순서는 9.1절에 기록한다. 대기·일시정지·복귀 등 나머지 생명주기의 버전 증가와 명령 보관 기간은 추가 합의 대상이다.
+현재 오목 예제는 `expectedVersion: 0`으로 첫 착수를 요청하고, 갱신 상태를 `stateVersion: 1`로 표현한다. PR #11의 착수·기권 성공은 상태 버전을 1 증가시키며 거절·중복 재전송은 증가시키지 않는다. 중복 처리와 검사 순서는 9.1절에 기록한다. 대기·일시정지·복귀 등 나머지 생명주기의 버전 증가는 추가 합의 대상이다. 현재 서버는 명령 기록을 경기 기록과 함께 보관하며 자동 삭제·만료를 구현하지 않는다.
 
-`rulesVersion: "gomoku-temp-ver"`는 예제용 임시 값이다. 후속 PR #12는 `gomoku-freestyle-v1`을 제안한다. 서버의 지원 버전 검사·엔진 선택과 버전 관리 방식은 팀 검토 대상이다.
+현재 서버(PR #11)는 게임별 엔진을 `{ version, rules }`로 등록한다. `createMatch()`는 호출자에게 규칙 버전을 받지 않고 등록 버전으로 저장한다. 착수 시 저장 버전과 등록 버전이 다르면 적용하지 않고 트랜잭션을 롤백한다. 오목 예제는 PR #12 엔진의 `gomoku-freestyle-v1`을 사용한다. 현재 서버는 게임별 한 버전을 지원하며, 공통 `rulesVersion: string` 타입은 향후 다른 게임이나 버전 등록을 허용한다. 여러 규칙 버전의 동시 운영은 이번 범위에 포함하지 않는다.
+
+```ts
+createGameCommandService(db, {
+  gomoku: { version: "gomoku-freestyle-v1", rules: gomoku.rules },
+});
+```
 
 ## 4. 게임별 명령과 행동
 
@@ -135,7 +141,7 @@ import type {
 
 서버 경기 관리 계층은 `action.type`으로 분기하여 기권을 처리하고 `place`만 규칙 엔진에 전달한다. PR #11의 `GameRules`도 `PlaceAction`을 받는다. 클라이언트 계약에 기권을 추가했다고 순수 착수 엔진이 기권·인증·저장을 맡는 것은 아니다. 기권 시 보드는 유지되며, 종료 결과는 착수 기록만 재생하지 않고 저장된 경기 결과에서 복원한다.
 
-후속 PR #12에 이 계약을 반영할 때는 `applyMove`와 `GomokuRulesInput.action`의 착수 전용 입력을 `PlaceAction`으로 좁혀야 한다. 현재 #12의 `applyMove`는 `GomokuAction`에서 `row/col`을 행동 구분 전에 꺼내므로, 기권이 추가된 유니언과 그대로 합치면 타입 오류가 발생한다. 관련 착수 테스트의 입력 타입과 엔진 README도 함께 확인한다.
+PR #12의 `4971d30`에서 `applyMove`와 `GomokuRulesInput.action`을 착수 전용 `PlaceAction`으로 좁혔다. 전송 행동은 서버에서 분기하고 착수만 엔진으로 전달한다. 최신 서버의 `{ version, rules }` 등록과 실제 DB 통합 검증은 #25에서 인수한다.
 
 ## 5. 게임별 snapshot
 
@@ -189,7 +195,7 @@ import type {
 {
   "gameType": "gomoku",
   "matchId": 1,
-  "rulesVersion": "gomoku-temp-ver",
+  "rulesVersion": "gomoku-freestyle-v1",
   "stateVersion": 0,
   "status": "playing",
   "players": {
@@ -244,7 +250,7 @@ import type {
 {
   "gameType": "gomoku",
   "matchId": 1,
-  "rulesVersion": "gomoku-temp-ver",
+  "rulesVersion": "gomoku-freestyle-v1",
   "stateVersion": 1,
   "status": "playing",
   "players": {
@@ -302,7 +308,7 @@ import type {
 {
   "gameType": "gomoku",
   "matchId": 1,
-  "rulesVersion": "gomoku-temp-ver",
+  "rulesVersion": "gomoku-freestyle-v1",
   "stateVersion": 2,
   "status": "finished",
   "players": {
@@ -362,7 +368,7 @@ import type {
 }
 ```
 
-현재 오류 객체에는 `matchId`, `commandId`나 최신 snapshot이 없다. 요청 연결·재동기화·전송 envelope는 후속 검토 대상이며, 현재 서버 서비스의 검사 우선순위는 9.1절을 따른다. 서버는 차례 위반을 엔진 호출 전에 `NOT_YOUR_TURN`으로 거절한다. 엔진이 반환하는 추가 코드의 공개 여부와 미등록 코드의 매핑은 B/C/D 재검토 항목이다.
+현재 오류 객체에는 `matchId`, `commandId`나 최신 snapshot이 없다. 요청 연결·재동기화·전송 envelope는 후속 검토 대상이며, 현재 서버 서비스의 검사 우선순위는 9.1절을 따른다. 서버는 차례 위반을 엔진 호출 전에 `NOT_YOUR_TURN`으로 거절한다. 현재 오목 엔진은 공개 코드 중 `INVALID_ACTION`, `GAME_FINISHED`만 반환한다. B는 엔진 오류를 공개 코드의 부분집합으로 제한하고 미등록 코드는 서버 오류로 처리하도록 제안했다. 현재 서버의 `RuleDecision.code`는 아직 `string`이며 타입 제한과 미등록 코드 방어는 B의 #6 병합 후 작업이다. #29·#31에서 소비자 확인을 추적한다.
 
 PR #11의 내부 `CommandResult`는 `status`, `duplicate`와 성공 시 `stateVersion`, 실패 시 `code`를 반환한다. 이것을 전송용 `GameError`로 변환하는 계층에서 `message`와 요청 연결 정보를 구성해야 한다. 클라이언트는 표시용 `message`가 아니라 `code`로 분기한다.
 
@@ -374,30 +380,30 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 ### 9.1 서버 명령 처리 순서와 중복 재전송
 
-[PR #6의 서버 리뷰](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6#issuecomment-6215364436)와 [PR #11 서비스의 고정 커밋](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/f8efcc06cb7d66327af9f5c520c398c02834c28b/apps/server/src/services/game-command-service.ts)을 기준으로 연결한다. 인증·외부 JSON 검증을 마친 호출자가 서버에서 확인한 `userId`와 명령을 서비스에 전달한다. 클라이언트의 사용자 ID 주장을 신뢰하지 않는다.
+[PR #6의 서버 리뷰](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6#issuecomment-6215364436)와 [PR #11 서비스의 고정 커밋](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/c6f202a9bb534fe74363f28e1498d9a6634ff38d/apps/server/src/services/game-command-service.ts)을 기준으로 연결한다. 인증·외부 JSON 검증을 마친 호출자가 서버에서 확인한 `userId`와 명령을 서비스에 전달한다. 클라이언트의 사용자 ID 주장을 신뢰하지 않는다.
 
 1. 트랜잭션에서 경기 행을 잠근다. 경기가 없으면 `NOT_FOUND`이다.
 2. 인증된 사용자가 참가자인지 확인한다. 아니면 `NOT_PARTICIPANT`이다.
 3. 같은 경기의 `commandId` 기록을 조회한다. 다른 사용자의 기록이면 `COMMAND_ID_CONFLICT`, 같은 사용자의 기록이면 최초 성공/거절 결과를 `duplicate: true`로 재전송한다.
 4. 새 명령에 대해 종료 여부(`GAME_FINISHED`), 그 외 비활성 상태(`GAME_NOT_ACTIVE`)를 검사한다.
 5. `expectedVersion`을 현재 버전과 비교한다. 다르면 `VERSION_CONFLICT`이다.
-6. 기권이면 경기 관리 계층에서 상대 승리를 확정한다. 착수이면 차례(`NOT_YOUR_TURN`)를 검사한 뒤 게임 규칙에 전달한다.
+6. 기권이면 경기 관리 계층에서 상대 승리를 확정한다. 착수이면 차례(`NOT_YOUR_TURN`)를 검사한 뒤 등록 엔진과 저장된 규칙 버전의 일치를 확인하고 게임 규칙에 전달한다. 엔진 미등록·버전 불일치는 예외로 롤백하며 명령 거절 기록을 남기지 않는다.
 7. 착수 기록(기권에는 없음), 경기 상태·버전, 명령 처리 기록 및 종료 결과를 같은 트랜잭션에 저장하고 commit한다. 4~6단계의 거절도 명령 결과로 저장하되 착수·상태 버전은 변경하지 않는다.
 8. 서비스가 성공적으로 반환된 뒤 응답·snapshot을 전송한다. commit 전에 방송하지 않는다.
 
 중복 판정은 상태·기대 버전 검사보다 먼저다. 따라서 종료를 만든 명령을 재전송해도 최초 성공을 돌려주며, 이후 다른 착수가 진행됐어도 중복 응답의 `stateVersion`은 **최초 적용 버전**이다. 이를 최신 snapshot 버전으로 해석하지 않는다. 거절된 명령도 같은 ID로 다시 보내면 최초 거절이 재전송되므로, 상태를 갱신하고 새 행동을 할 때는 새로운 `commandId`를 사용한다.
 
-현재 서버는 같은 참가자가 같은 경기·`commandId`로 **다른 payload를 보내도 최초 결과를 재전송**한다. `COMMAND_ID_CONFLICT`는 현재 다른 사용자의 ID 재사용에만 해당한다. payload 해시 비교와 불일치 거절을 추가할지는 B/C/D 합의 대기로 남긴다. 이번 계약 수정에서는 서버 동작을 변경하지 않는다.
+현재 서버는 같은 참가자가 같은 경기·`commandId`로 **다른 payload를 보내도 최초 결과를 재전송**한다. `COMMAND_ID_CONFLICT`는 현재 다른 사용자의 ID 재사용에만 해당한다. 새 행동에는 항상 새 `commandId`를 만들고 동일 요청 재전송에만 기존 값을 사용해야 한다. B는 최초 결과 재전송 유지와 해시 비교 미도입을 제안했다. #29에서 다른 소비자의 확인을 추적하며, 이번 문서 보완은 서버 동작을 변경하지 않는다.
 
 ## 10. 요청자 및 팀 검토 항목
 
 - [x] 요청자가 필드 설명과 초기 상태 → 착수 → 갱신 예제 흐름을 검토했다(2026-10-08).
 - [x] 요청자가 0부터 시작하는 `row/col` 기준과 같은 기준의 SRS 반영을 확인했다(2026-10-08).
 - [x] 오목·오델로 명령·상태·결과를 게임별로 분리하고 공개 유니언을 구성했다(2026-10-12). 구현 초안은 팀 검토 대상이다.
-- [ ] `rulesVersion`의 실제 값과 관리 방식을 어떻게 정할 것인가?
-- [x] 서버 리뷰의 숫자 ID·기권 행동·오류 코드와 실제 명령 처리 순서를 코드·예제·문서에 반영했다(2026-10-24). 팀 재검토 대기이다.
-- [ ] 같은 경기·참가자·commandId의 다른 payload를 최초 결과 재전송으로 유지할지, 해시 비교로 거절할지 결정한다. 명령 기록 보관 기간도 합의한다.
-- [ ] 엔진의 추가 거절 코드를 공개할지, 공통 오류 코드로 매핑할지 결정한다.
+- [x] 현재 서버의 등록 버전 저장·착수 시 일치 검사와 오목 `gomoku-freestyle-v1`을 반영했다(2026-10-28).
+- [x] 서버 리뷰의 숫자 ID·기권 행동·오류 코드와 실제 명령 처리 순서를 코드·예제·문서에 반영했다(2026-10-24). B가 계약 구조를 승인했다(2026-10-28).
+- [ ] #29: 현재 최초 결과 재전송·명령 기록 자동 만료 없음과 B의 유지 제안을 소비자가 확인한다.
+- [ ] #29·#31: 공개 코드 부분집합 정책을 소비자가 확인하고 B가 서버 타입·미등록 코드 방어를 구현한다.
 - [ ] 대기 중 참가자 미배정, 일시정지·종료 시 차례, 종료 결과의 필드 조합을 어떻게 제한할 것인가?
 - [ ] 종료 결과 명칭과 게임별 사유를 `GAME_RULES.md` 및 SRS와 어떻게 통일할 것인가?
 - [ ] 오류의 요청 연결, 재동기화 방식, REST·WebSocket 전달 형식을 어떻게 정할 것인가?
