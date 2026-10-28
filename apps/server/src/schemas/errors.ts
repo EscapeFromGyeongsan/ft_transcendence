@@ -1,4 +1,4 @@
-// Shared error body: { error: { code, message, details? } } (contracts.md 3장).
+// Shared error body: { error: { code, message, details? } } (contracts.md 11장).
 export function errorSchema(description: string, codes: string[]) {
   return {
     description,
