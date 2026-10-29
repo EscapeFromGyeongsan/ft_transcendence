@@ -7,7 +7,7 @@
 | 항목 | 내용 |
 |---|---|
 | 작성일 | 2026-10-13 |
-| 상태 | 초안. B 담당 영역은 구현 기준으로 작성했고, 나머지는 담당자가 채운다. 팀 승인 전이다. |
+| 상태 | 초안. B 담당 영역은 구현 기준으로 작성했다. 다른 담당 영역(A·C·D·E)은 B가 SRS·계약·이슈 기준으로 초안을 채웠고 `B 초안`으로 표시했다. 담당자가 확인·수정한다. 팀 승인 전이다. |
 | 범위 | 오목·오델로 2인 1:1 웹 플랫폼 (SRS v0.3.1의 16점 후보) |
 | 작성 | B (yunhpark) |
 | 기술 검토 | C, D, E (문서화 명세 32장) |
@@ -22,6 +22,7 @@
 | `구현됨` | 코드와 테스트가 있고 실제 PostgreSQL에서 통과 (문서화 명세 34장의 "구현됨"과 달리 비작성자 재현·통합 전) |
 | `계획` | 설계만 있고 코드 없음 |
 | `미정` | 팀 결정 필요 |
+| `B 초안` | 다른 담당 영역을 B가 먼저 설계한 것. 담당자 확인 전 |
 
 ### 용어
 
@@ -38,6 +39,7 @@
 | 버전 | 날짜 | 내용 |
 |---|---|---|
 | 0.1 | 2026-10-13 | 초안. B 구현(인증·2FA·OAuth·프로필·경기 저장·통계) 반영, 전체 다이어그램 작성. 기능별 모든 분기 흐름(2.10) 추가. Codex 코드 리뷰 15건 수정분과 SDS 누락 분석 반영: B 계획 기능(아바타·전적 공개·탈퇴·시스템 종료) 설계, 테스트 대응표, 담당자별 작성 필요 항목 |
+| 0.2 | 2026-10-29 | 다른 담당 영역 B 초안: 화면 구성·전이(A), WebSocket 이벤트(D, #16~#20 이름 기준), 참가 위치 FSM(D), 재접속 감지·기기 전환(D), 친구 API(E), 오델로 엔진 연결(C), 배포의 아바타 volume·WSS(E, #28). 경기 기록 영구 보존 제안, 5.2 해결 항목 정리 |
 
 ---
 
@@ -226,6 +228,78 @@ flowchart TD
 - 2FA: 로그인 응답에 `twoFactorRequired`가 있으면 코드 입력 화면으로 보내고 `POST /api/auth/2fa/verify`를 호출한다.
 - 승률은 `played`가 0이면 `-`로 표시한다(DEC-08).
 
+##### 화면 목록 (`B 초안`, A 확인)
+
+Stitch 시안(데스크톱, 2026-10-28 export, 22개 화면) 기준이다. 표시 언어는 한국어다(SRS NFR, README는 영어).
+
+| 화면 | 경로 (제안) | 인증 | 사용하는 API·이벤트 |
+|---|---|---|---|
+| 로그인 | `/login` | 비로그인 | `POST /api/auth/login`, 42 로그인 시작 |
+| 회원가입 | `/signup` | 비로그인 | `POST /api/auth/register` |
+| 2FA 로그인 | `/login/2fa` | challenge | `POST /api/auth/2fa/verify` |
+| OAuth callback | `/oauth/42/callback` | 비로그인 | `POST /api/auth/oauth/42/callback` |
+| 홈·로비 (게임 선택, 매칭 시작) | `/` | 필요 | `GET /api/users/me`, `queue.join` |
+| 매칭 대기 | `/matching` | 필요 | `queue.leave`, `queue.matched` |
+| 오목·오델로 대국 | `/match/:matchId` | 참가자 | `match.subscribe`, `match.snapshot`, `game.command`, `game.updated`, `game.error` |
+| 오목·오델로 결과 | `/match/:matchId` (종료 상태) | 참가자 | `match.snapshot.result` |
+| 리더보드 | `/leaderboard` | 필요 | `GET /api/leaderboard` |
+| 내 프로필 | `/me` | 필요 | `GET/PATCH /api/users/me`, 아바타, stats, matches |
+| 다른 사용자 프로필 | `/users/:userId` | 필요 | `GET /api/users/{userId}`, stats, matches (비공개면 403 표시) |
+| 친구 (채팅 제외) | `/friends` | 필요 | 친구 API(E), `presence` |
+| 친구 초대 모달 | 로비 위 모달 | 필요 | `invite.send`, `invite.received`, `invite.accept/decline/cancel` |
+| 2FA 설정 | `/settings/2fa` | 필요 | `GET /api/auth/2fa`, `setup`, `enable`, `disable` |
+| 계정 메뉴·로그아웃 모달 | 헤더 | 필요 | `POST /api/auth/logout` |
+| 알림·토스트 | 전역 | 필요 | 초대·연결 상태 이벤트 |
+| 이용약관·개인정보처리방침 | `/terms`, `/privacy` | 없음 | 정적 (NFR-PRIV-01, 비로그인 접근 가능) |
+| 404·500 | `*`, 오류 경계 | 없음 | 없음 |
+
+Stitch의 친구 화면은 채팅 영역을 포함한다. 채팅은 후속 범위라 구현 화면에서는 뺀다.
+
+##### 화면 전이 (`B 초안`)
+
+```mermaid
+flowchart TD
+    Start([접속]) --> HasToken{refresh token 있음?}
+    HasToken -->|아니오| Login[로그인]
+    HasToken -->|예| Refresh["POST /api/auth/refresh"]
+    Refresh -->|200| Lobby[홈·로비]
+    Refresh -->|401| Login
+    Login -->|회원가입| Signup[회원가입] -->|201| Login
+    Login -->|"200, twoFactorRequired"| TwoFA[2FA 로그인] -->|200| Lobby
+    Login -->|200| Lobby
+    Login -->|42 로그인| Intra[42 인증] --> Callback[OAuth callback] -->|"200 (2FA 계정이면 2FA 로그인)"| Lobby
+    Lobby -->|게임 선택 후 매칭| Matching[매칭 대기]
+    Matching -->|취소| Lobby
+    Matching -->|queue.matched| Match[대국]
+    Lobby -->|친구 초대 수락| Match
+    Match -->|"종료 (snapshot.result)"| Result[결과]
+    Result -->|로비로| Lobby
+    Lobby --> Leaderboard[리더보드]
+    Lobby --> Me[내 프로필]
+    Lobby --> Friends[친구]
+    Friends --> Other[다른 사용자 프로필]
+    Leaderboard --> Other
+    Me --> Settings2FA[2FA 설정]
+    Lobby -->|로그아웃 확인| Login
+```
+
+- 진행 중 경기가 있는 사용자가 로그인·새로고침하면 로비 대신 `/match/:matchId`로 보낸다(재접속, 2.6의 13번). 진행 중 경기 조회 방법은 D와 정한다(제안: 연결 인증 응답 `auth.ok`에 `activeMatchId` 포함).
+
+##### 표시 규칙 (`B 초안`)
+
+| 상황 | 표시 |
+|---|---|
+| 로딩 | 데이터 영역에 skeleton, 버튼은 비활성 |
+| 빈 데이터 | 전적·리더보드·친구 0건 안내 문구 |
+| REST 오류 | `error.code`로 분기. 401은 refresh 1회 후 로그인 화면, 403 `RECORDS_PRIVATE`는 "비공개 전적", 429는 잠시 후 재시도, 5xx는 500 화면 또는 토스트 |
+| 게임 오류 | `game.error`의 `code`로 분기. `VERSION_CONFLICT`는 최신 snapshot으로 다시 그림, 그 외는 토스트 |
+| 연결 끊김 | 대국 화면 상단 배너 "재연결 중", 입력 비활성. 상대 끊김은 남은 유예 시간 배너 |
+| 오래된 갱신 | 받은 `stateVersion`이 현재보다 작거나 같으면 무시 |
+| 위험 동작 (기권·로그아웃·2FA 해제) | 확인 모달. 버튼은 outline, 확인 단계에서만 강조색 |
+
+- 토큰 보관(제안): access token은 메모리에만 두고, refresh token은 `localStorage`에 둔다(로그인 유지). XSS 시 탈취 위험이 있으므로 CSP와 입력 escape를 같이 적용한다. HttpOnly cookie로 바꾸면 CSRF 대책이 필요하다(5장 미결정).
+- 접근성(최소): 모든 버튼에 텍스트 또는 `aria-label`, 대국판 칸에 `aria-label="row, col"`, 키보드 포커스 표시. 반응형은 데스크톱 우선이다.
+
 #### 3. Backend architecture (B)
 
 `구현됨`. 디렉터리와 책임은 다음과 같다.
@@ -331,13 +405,30 @@ flowchart LR
 - 잠금·버전·중복·저장(B)과 전송(D)은 게임 종류와 무관하다. 금수 같은 규칙을 추가해도 인증·방·전송·저장 코드는 바뀌지 않는다.
 - 게임 추가 시 `gameType` 값, `GameRules` 구현, 계약 타입(PR #6 절차)만 추가한다. DB의 `games_game_type_check`에 값을 더하는 migration이 함께 필요하다.
 
+##### 게임 엔진 연결 (`B 초안`, C 확인)
+
+| 항목 | 오목 (`gomoku-freestyle-v1`) | 오델로 (`othello-standard-v1`, 제안 이름) |
+|---|---|---|
+| 판 | 15×15, `row/col` 0..14 | 8×8, `row/col` 0..7 |
+| 시작 | 빈 판, 흑 먼저 | 가운데 4칸: (3,3)·(4,4) 백, (3,4)·(4,3) 흑. 흑 먼저 |
+| 합법 착수 | 빈 교차점 | 빈 칸이고 8방향 중 하나 이상에서 상대 돌을 끼움 |
+| `board(moves)` | 착수 순서대로 돌을 놓음 | 착수마다 뒤집기를 적용해 재생 (엔진만 가능) |
+| 다음 차례 (`nextTurn`) | 항상 상대 | 상대에게 합법 수가 없으면 같은 사람(자동 패스). 패스는 착수 기록을 만들지 않는다 |
+| 종료 | 5목 이상 → `five_in_row` 승. 판이 차면 `draw` | 양쪽 모두 둘 곳이 없거나 판이 차면 돌 수 비교 → `disc_count` 승 또는 `draw` |
+| 거절 | `INVALID_ACTION` (범위 밖, 이미 돌 있음), `GAME_FINISHED` | 같음 (끼우지 못하는 칸도 `INVALID_ACTION`) |
+| 등록 | `{ version, rules, board }` | 같음 |
+
+- 자동 패스는 엔진이 `nextTurn`으로만 표현한다. 서버는 `currentTurn`을 그 값으로 저장하므로 별도 패스 명령이 없다. 클라이언트는 같은 사람의 차례가 이어지는 것을 보고 "상대 패스"를 표시한다.
+- 오델로는 `seat`에 해당하는 돌 색을 엔진이 판 재생으로 판단한다. 저장 `moves.stone`은 착수한 사람의 색이다.
+- 규칙 버전은 서버 시작 시 등록된 한 개만 쓴다. 금수·장목 같은 변형은 새 버전 이름으로 등록한다(CON-04).
+
 ---
 
 ### 2.3 Logical viewpoint
 
 #### 6. Class design
 
-TypeScript 모듈을 클래스처럼 표시했다. 핵심 관계만 넣고 DTO·유틸리티는 뺐다. `<<planned>>`는 아직 코드가 없는 D 모듈, `<<engine>>`은 C의 게임 엔진(PR #9)이다.
+TypeScript 모듈을 클래스처럼 표시했다. 핵심 관계만 넣고 DTO·유틸리티는 뺐다. `<<planned>>`는 아직 코드가 없는 D·E 모듈(`B 초안`), `<<engine>>`은 C의 게임 엔진(PR #9)이다.
 
 ```mermaid
 classDiagram
@@ -355,8 +446,25 @@ classDiagram
     <<api>> StatsRoutes
     class GameWebSocketHandler
     <<planned>> GameWebSocketHandler
-    class GameSessionManager
-    <<planned>> GameSessionManager
+    class GameSessionManager {
+        <<planned>>
+        positions Map~userId, Position~
+        absence Map~matchId, Clock~
+        joinQueue(userId, gameType)
+        sendInvite(from, to, gameType)
+        subscribe(conn, matchId)
+        onDisconnect(conn)
+    }
+    class FriendRoutes
+    <<planned>> FriendRoutes
+    class FriendService {
+        <<planned>>
+        request(from, to)
+        accept(userId, requestId)
+        decline(userId, requestId)
+        remove(userId, friendId)
+        list(userId)
+    }
 
     class AuthService {
         register(input) RegisterResult
@@ -391,7 +499,9 @@ classDiagram
     class GameCommandService {
         createMatch(input) matchId
         apply(command) CommandResult
+        finishBySystem(input) SystemFinishResult
         getMatch(matchId)
+        getSnapshot(matchId) GameSnapshot
     }
     class GameRules {
         <<interface>>
@@ -434,6 +544,8 @@ classDiagram
     GameWebSocketHandler --> AuthService : authenticate
     GameWebSocketHandler --> GameSessionManager
     GameSessionManager --> GameCommandService
+    GameSessionManager --> FriendService : 초대 대상 확인
+    FriendRoutes --> FriendService
 
     AuthService --> AuthRepository
     AuthService --> TwoFactorRepository
@@ -697,23 +809,48 @@ flowchart TD
 | 전적 공개 설정 | `PATCH /api/users/me`의 `recordsPublic`, stats·matches의 403 (2.10.26) | B | `계획` |
 | 탈퇴 | `DELETE /api/users/me` (2.10.27) | B | `계획` |
 | Statistics | `GET /api/users/{userId}/stats`, `GET /api/users/{userId}/matches`, `GET /api/leaderboard` | B | `구현됨` |
-| 매칭·초대·방 | 미정 | D | `계획` |
-| 친구 | 미정 | E | `계획` |
+| 매칭·초대 | REST 없음. WebSocket `queue.*`, `invite.*` (9번) | D | `B 초안` |
+| 친구 | `GET /api/friends`, `POST /api/friends/requests`, `POST /api/friends/requests/{id}/accept`, `.../decline`, `DELETE /api/friends/{userId}`, `GET /api/users?nickname=` (2.10.29) | E | `B 초안` |
 
 #### 9. WebSocket contract (D)
 
-`계획`. 이벤트 목록은 문서화 명세 19장을 따른다. 아래는 B 구현과 연결되는 부분이다.
+`B 초안` (D 확인). 이벤트 이름은 이슈 #16~#20을 따른다. 문서화 명세 19장의 대문자 이름(`PLACE_STONE` 등)은 쓰지 않는다. payload 타입은 [contracts.md](contracts.md)(PR #6)를 그대로 쓴다.
 
-| 방향 | 이벤트 | 서버 처리 | B 연결 지점 |
-|---|---|---|---|
-| C→S | 연결 | JWT 검증 + 서버 세션 확인 후 `userId` 바인딩 | `AuthService.authenticate()` |
-| C→S | `SUBSCRIBE_ROOM` | 참가자인지 확인 | `GameCommandService.getMatch()` |
-| C→S | `PLACE_STONE`, `RESIGN` | 명령 처리 | `GameCommandService.apply()` |
-| C→S | `RECONNECT` | snapshot 재전송 | `getMatch()` + 엔진 재생 |
-| S→C | `STONE_PLACED`, `GAME_FINISHED` | **commit 후** broadcast | `apply()` 결과 |
-| S→C | `ERROR` | 거절 코드 전달 | `CommandResult.code` |
+Endpoint: `wss://<host>/api/ws` (Nginx가 upgrade 전달, #28).
 
-미정: 토큰 전달 방식(첫 메시지 AUTH 권장, query string은 로그에 남음), 세션 폐기 시 기존 연결 처리, heartbeat·감지 지연.
+모든 메시지는 같은 envelope를 쓴다.
+
+```ts
+type Envelope<T> = {
+  type: string;        // 아래 이벤트 이름
+  requestId?: string;  // 클라이언트 요청에만. 서버 응답·오류가 같은 값을 돌려줌
+  payload: T;
+};
+```
+
+| 방향 | 이벤트 | payload | 서버 처리 | B 연결 지점 |
+|---|---|---|---|---|
+| C→S | `auth` | `{ accessToken }` | 연결 후 5초 안에 첫 메시지로 받음. 없거나 실패면 close 4401. URL query에 토큰을 넣지 않음(로그 노출) | `AuthService.authenticate()` |
+| S→C | `auth.ok` | `{ userId, activeMatchId: number \| null }` | 진행 중 경기가 있으면 화면이 대국으로 이동 | 참가 위치 (아래 FSM) |
+| C→S | `ping` / S→C `pong` | `{}` | 10초마다. 20초 동안 아무 메시지가 없으면 서버가 끊긴 것으로 처리 | - |
+| C→S | `queue.join` / `queue.leave` | `{ gameType }` / `{}` | 참가 위치가 없을 때만 대기열 등록 | - |
+| S→C | `queue.matched` | `{ matchId, gameType }` | 두 명 성립 시 양쪽에 전송 | `createMatch()` |
+| C→S | `invite.send` | `{ friendUserId, gameType }` | 수락된 친구, 둘 다 참가 위치 없음 | 친구 확인(E) |
+| S→C | `invite.received` | `{ inviteId, fromUserId, gameType, expiresAt }` | 받는 사람의 모든 연결에 전송 | - |
+| C→S | `invite.accept` / `invite.decline` / `invite.cancel` | `{ inviteId }` | 수락 시 경기 생성. 만료·취소·이미 참가 중이면 `invite.error` | `createMatch()` |
+| S→C | `invite.updated` | `{ inviteId, status }` | 보낸 사람·받은 사람 모두 | - |
+| C→S | `match.subscribe` / `match.unsubscribe` | `{ matchId }` | 참가자만 구독. 구독 즉시 snapshot 전송 | `getMatch()`, `getSnapshot()` |
+| S→C | `match.snapshot` | `GomokuSnapshot \| OthelloSnapshot` | 구독·재접속·`VERSION_CONFLICT` 때 | `getSnapshot()` |
+| C→S | `game.command` | `GomokuCommand \| OthelloCommand` (`userId` 없음) | 런타임 검증 후 인증된 `userId`를 붙여 호출 | `apply()` |
+| S→C | `game.updated` | 최신 snapshot | **commit 후**, `applied`이고 `duplicate: false`일 때만 구독자 전체에 | `apply()` 결과 |
+| S→C | `game.error` | `GameError` + `{ matchId, commandId }` | 요청자에게만. 중복 재전송의 최초 결과도 요청자에게만 | `CommandResult.code` |
+| S→C | `player.disconnected` / `player.reconnected` | `{ matchId, userId, remainingMs }` | 상대에게 | - |
+| S→C | `presence` | `{ userId, online }` | 친구에게 (사용자의 연결 수 0 ↔ 1 이상 변화 때) | 친구 목록(E) |
+| S→C | `session.replaced` | `{ matchId }` | 같은 사용자의 새 연결이 경기 제어를 가져가면 이전 연결에 전송 | - |
+
+- 세션 폐기(로그아웃·refresh 재사용 감지) 시: 해당 세션으로 인증된 연결을 close 4401로 닫는다. 연결마다 `sessionId`를 들고 있고, 로그아웃 처리 후 `GameSessionManager`에 알린다.
+- 같은 사용자의 연결이 여러 개(탭·기기)여도 경기 명령을 보낼 수 있는 연결은 하나다(FR-MATCH-02). 마지막으로 `match.subscribe`한 연결이 제어권을 가진다. 이전 연결은 `session.replaced`를 받고 입력을 비활성화한다. 이 연결이 보낸 `game.command`는 거절한다. 두 연결 모두 같은 사용자이므로 이탈 시간은 연결이 하나라도 있으면 흐르지 않는다.
+- 이벤트 단위 재전송은 하지 않는다. 누락은 snapshot으로 복구한다(#19).
 
 ---
 
@@ -891,7 +1028,7 @@ sequenceDiagram
     actor O as Opponent
 
     P->>W: 칸 선택
-    W->>WS: PLACE_STONE (matchId, commandId, expectedVersion, row, col)
+    W->>WS: game.command (matchId, commandId, expectedVersion, action)
     WS->>G: apply(command, userId)
     G->>DB: BEGIN
     G->>DB: games SELECT ... FOR UPDATE
@@ -915,16 +1052,16 @@ sequenceDiagram
         G-->>WS: CommandResult
     end
     alt 적용 (duplicate 아님)
-        WS-->>P: STONE_PLACED (commit 후)
-        WS-->>O: STONE_PLACED (commit 후, 종료면 이어서 GAME_FINISHED)
+        WS-->>P: game.updated (commit 후)
+        WS-->>O: game.updated (commit 후, 종료면 result 포함)
     else 같은 commandId 재전송
         WS-->>P: 최초 결과를 다시 전달 (상대에게는 보내지 않음)
     else 거절
-        WS-->>P: ERROR (VERSION_CONFLICT면 getMatch()로 만든 최신 snapshot 포함)
+        WS-->>P: game.error (VERSION_CONFLICT면 이어서 getSnapshot()의 match.snapshot)
     end
 ```
 
-전송 순서(D 구현 시 지킬 것): 같은 경기의 broadcast는 commit 순서(= stateVersion 순서)로 보낸다. 종료 착수는 `STONE_PLACED` 다음 `GAME_FINISHED`. 재접속 snapshot의 `stateVersion`보다 작거나 같은 이벤트는 클라이언트가 버린다.
+전송 순서(D 구현 시 지킬 것): 같은 경기의 broadcast는 commit 순서(= stateVersion 순서)로 보낸다. 종료 착수는 `result`가 채워진 `game.updated` 하나로 보낸다. 재접속 snapshot의 `stateVersion`보다 작거나 같은 이벤트는 클라이언트가 버린다.
 
 처리 원칙:
 
@@ -935,7 +1072,18 @@ flowchart LR
 
 #### 13. Reconnection design (D)
 
-`계획`. DEC-03(사용자별 경기 내 누적 이탈 60초)과 DEC-07(재시작 시 미완료 경기 무효)을 따른다.
+`B 초안` (D 확인). DEC-03(사용자별 경기 내 누적 이탈 60초)과 DEC-07(재시작 시 미완료 경기 무효)을 따른다. 저장 경로 `finishBySystem()`은 `구현됨`(2.10.28).
+
+| 항목 | 설계 |
+|---|---|
+| 끊김 감지 | WebSocket close 이벤트는 즉시. close 없이 끊긴 경우는 20초 동안 메시지(`ping` 포함)가 없으면 끊김으로 본다. 최대 감지 지연 20초 |
+| 이탈 판정 단위 | 사용자. 그 경기에 대한 사용자의 연결이 0개가 되는 순간 이탈 시작, 1개 이상이 되는 순간 이탈 끝 |
+| 누적 시계 저장 | 메모리 (`GameSessionManager`, 경기별 `Map<userId, { usedMs, since }>`). 재시작하면 경기가 void가 되므로 DB에 둘 필요 없음 |
+| 만료 시각 | `since + (60000 - usedMs)`에 타이머. 복귀하면 타이머 취소, `usedMs`에 더함 |
+| 상태 전환 | 한 명이라도 이탈 중이면 `paused`, 모두 복귀하면 `playing`. 전환은 `stateVersion`을 올리지 않는다(5장 미결정에서 제안) |
+| 양쪽 부재 | 각자 시계가 따로 흐른다. 먼저 만료된 시점에 아직 상대도 부재면 `absentUserIds`에 둘 다 넣어 void |
+| 만료와 착수·복귀 경합 | `finishBySystem({ expectedVersion })`이 경기 행 잠금 후 버전을 비교한다. 먼저 commit된 쪽이 이기고 나머지는 `skipped` |
+| 기기 전환 | 새 연결이 `match.subscribe`하면 그 연결이 제어권을 받는다(9번). 이전 연결이 살아 있어도 이탈은 없음 |
 
 ```mermaid
 sequenceDiagram
@@ -946,29 +1094,32 @@ sequenceDiagram
     participant DB as PostgreSQL
     actor O as Opponent
 
-    Note over P,WS: 연결 끊김
-    WS->>M: disconnect 감지
-    M->>DB: 상태 paused, game_players.disconnected_at (계획)
-    M-->>O: PLAYER_DISCONNECTED, GAME_PAUSED
-    M->>M: 이 사용자의 누적 이탈 시간 측정 시작 (60초 예산)
+    Note over P,WS: 연결 끊김 (close 또는 20초 무응답)
+    WS->>M: 이 사용자의 경기 연결 0개
+    M->>DB: games.status = paused
+    M-->>O: player.disconnected (remainingMs)
+    M->>M: 누적 이탈 시계 시작, 만료 타이머 설정
     alt 예산 안에 복귀
-        P->>WS: 새 연결 + 인증 (JWT + 세션 확인)
-        WS->>M: RECONNECT (matchId)
-        M->>G: getMatch() 참가자 확인
-        G->>DB: games, players, moves 조회
-        M->>M: 엔진으로 moves 재생해 snapshot 생성
-        M-->>P: GAME_STATE (stateVersion 포함)
-        M->>DB: 상태 playing (사용한 이탈 시간은 유지)
-        M-->>O: PLAYER_RECONNECTED
+        P->>WS: 새 연결 + auth (JWT + 세션 확인)
+        WS-->>P: auth.ok (activeMatchId)
+        P->>WS: match.subscribe (matchId)
+        WS->>M: 구독 요청
+        M->>G: getSnapshot(matchId) (참가자 확인 포함)
+        G->>DB: games, players, moves 조회 (REPEATABLE READ)
+        M-->>P: match.snapshot (stateVersion 포함)
+        M->>M: 타이머 취소, 사용한 시간 누적
+        M->>DB: games.status = playing (상대도 접속 중일 때)
+        M-->>O: player.reconnected
     else 예산 만료
-        M->>G: 종료 처리 (한 명 부재: 부재자 패배, 둘 다 부재: void)
-        G->>DB: 결과 1회 확정 트랜잭션
-        M-->>O: GAME_FINISHED (disconnect_timeout)
+        M->>G: finishBySystem(matchId, disconnect_timeout, absentUserIds, expectedVersion)
+        G->>DB: 경기 행 잠금, 결과 1회 확정 (한 명 부재: 상대 승리, 둘 다: void)
+        G-->>M: finished 또는 skipped
+        M-->>O: game.updated (finished일 때만)
     end
 ```
 
 - 종료 경로도 착수와 같은 경기 행 잠금을 쓴다. 이탈 만료와 마지막 착수가 겹쳐도 결과는 하나만 확정된다.
-- 미정: 감지 방식·최대 지연, 누적 시간을 DB에 둘지 메모리에 둘지(서버 재시작 시 어차피 무효), 기기 전환 처리.
+- `paused` 전환을 `games.status`에 저장하는 이유: 그 사이 들어온 착수를 `apply()`가 `GAME_NOT_ACTIVE`로 거절하게 하기 위해서다. 이 갱신에 필요한 repository 함수(상태만 바꾸는 `setStatus`)는 B가 추가한다.
 
 ---
 
@@ -995,19 +1146,55 @@ stateDiagram-v2
 
 | 현재 | 이벤트 | 조건 | 다음 | 서버 동작 | 저장 | Broadcast | 상태 |
 |---|---|---|---|---|---|---|---|
-| (없음) | 매칭 성립 | 두 사용자 모두 활성 참가 위치 없음 | waiting 또는 playing | 경기 생성, 좌석 배정 | games, game_players INSERT | GAME_STARTED / ROOM_STATE | `구현됨`: `createMatch()`는 바로 playing (준비 단계는 D) |
+| (없음) | 매칭 성립 | 두 사용자 모두 활성 참가 위치 없음 | waiting 또는 playing | 경기 생성, 좌석 배정 | games, game_players INSERT | `queue.matched` 또는 `invite.updated` | `구현됨`: `createMatch()`는 바로 playing (준비 단계는 D) |
 | waiting | 준비 완료 | 두 명 모두 준비 | playing | 흑 차례로 시작 | status, started_at | GAME_STARTED | `계획` (D) |
-| waiting | 초대 대기방 생성자 퇴장, 매칭 취소 | 아직 시작 전 | (종료, 경기 아님) | 참가 위치 해제, 초대 무효화 | 대기 경기 행 삭제 또는 취소 표시 (D와 결정) | ROOM_STATE (남은 사람), 초대 취소 알림 | `계획` (D) |
-| playing | PLACE_STONE | 참가자, 내 차례, 버전 일치, 규칙 통과 | playing | 착수 반영, 차례 전환 | moves, games, game_commands | STONE_PLACED | `구현됨` (전송은 D) |
-| playing | PLACE_STONE | 위 조건 + 규칙상 종료 | finished | 결과 확정 | + outcome, reason, winner, finished_at, game_players.result | STONE_PLACED, GAME_FINISHED | `구현됨` |
-| playing | 거절되는 명령 | 버전 불일치, 차례 아님, 규칙 위반 | playing | 거절 코드 반환 | game_commands (rejected) | ERROR (요청자만) | `구현됨` |
-| playing | RESIGN | 참가자, 버전 일치 | finished | 상대 승리 (`resign`) | 결과 확정 | GAME_FINISHED | `구현됨` |
-| playing | 연결 끊김 | 참가자 연결 0개 | paused | 이탈 시간 측정 | status, disconnected_at | PLAYER_DISCONNECTED, GAME_PAUSED | `계획` (D) |
-| paused | 복귀 | 예산 남음, 인증·참가자 확인 | playing | snapshot 재전송 | status | PLAYER_RECONNECTED, GAME_STATE | `계획` (D) |
-| paused | 예산 만료 | 누적 60초 | finished | 한 명 부재: 상대 승리 / 둘 다: void | 결과 확정 | GAME_FINISHED | `계획` (D), 저장 경로 B |
+| waiting | 초대 대기방 생성자 퇴장, 매칭 취소 | 아직 시작 전 | (종료, 경기 아님) | 참가 위치 해제, 초대 무효화 | 대기 경기 행 삭제 또는 취소 표시 (D와 결정) | `invite.updated` (cancelled) | `계획` (D) |
+| playing | `game.command` place | 참가자, 내 차례, 버전 일치, 규칙 통과 | playing | 착수 반영, 차례 전환 | moves, games, game_commands | `game.updated` | `구현됨` (전송은 D) |
+| playing | `game.command` place | 위 조건 + 규칙상 종료 | finished | 결과 확정 | + outcome, reason, winner, finished_at, game_players.result | `game.updated` (result 포함) | `구현됨` |
+| playing | 거절되는 명령 | 버전 불일치, 차례 아님, 규칙 위반 | playing | 거절 코드 반환 | game_commands (rejected) | `game.error` (요청자만) | `구현됨` |
+| playing | `game.command` resign | 참가자, 버전 일치 | finished | 상대 승리 (`resign`) | 결과 확정 | `game.updated` (result 포함) | `구현됨` |
+| playing | 연결 끊김 | 참가자 연결 0개 | paused | 이탈 시간 측정 | status | `player.disconnected` | `B 초안` (D) |
+| paused | 복귀 | 예산 남음, 인증·참가자 확인 | playing | snapshot 재전송 | status | `player.reconnected`, `match.snapshot` | `B 초안` (D) |
+| paused | 예산 만료 | 누적 60초 | finished | 한 명 부재: 상대 승리 / 둘 다: void | 결과 확정 (`finishBySystem`) | `game.updated` (result 포함) | 시계 `B 초안` (D), 저장 `구현됨` |
 | playing, paused | 서버 재시작 | 미완료 경기 | finished | void (`server_restart`) | 결과 확정 | 없음 (재접속 시 표시) | `구현됨`: `voidUnfinishedGames()` |
-| finished | 새 명령 | - | finished | `GAME_FINISHED`로 거절 | game_commands (rejected) | ERROR | `구현됨` |
+| finished | 새 명령 | - | finished | `GAME_FINISHED`로 거절 | game_commands (rejected) | `game.error` | `구현됨` |
 | finished | 이미 처리한 commandId 재전송 | 같은 사용자 | finished | 최초 결과 반환 (2.8 순서상 상태 확인보다 중복 확인이 먼저) | 없음 | 요청자에게만 | `구현됨` |
+
+- 현재 `createMatch()`는 `waiting`을 건너뛰고 바로 `playing`으로 만든다. 준비 단계를 두지 않는 것을 제안한다(B 초안): 매칭 성립·초대 수락이 곧 시작이다. 그러면 위 `waiting` 두 줄은 쓰지 않는다. D가 준비 단계를 두기로 하면 `createMatch()`에 시작 상태 인자를 추가한다.
+- 색상 배정(제안): 자동 매칭은 무작위, 친구 초대는 초대한 사람이 흑. 두 게임 모두 같다(DEC-06).
+
+#### 7.1 사용자 참가 위치 FSM (`B 초안`, D 확인)
+
+FR-MATCH-02: 한 사용자의 활성 참가 위치는 매칭 대기·초대 대기·진행 경기 중 하나다. 공개방은 없다. 자동 매칭과 친구 초대 두 경로만 있다.
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> queued: queue.join
+    queued --> idle: queue.leave / 연결 0개
+    queued --> in_match: queue.matched (createMatch)
+    idle --> inviting: invite.send
+    inviting --> idle: invite.cancel / 거절 / 만료 / 보낸 사람 연결 0개
+    inviting --> in_match: 상대 invite.accept (createMatch)
+    idle --> in_match: 받은 초대 invite.accept
+    in_match --> idle: 경기 finished
+```
+
+| 현재 | 이벤트 | 조건 | 다음 | 거절 시 |
+|---|---|---|---|---|
+| idle | `queue.join` | - | queued | - |
+| queued | 상대 성립 | 같은 `gameType` 대기열 앞 두 명 | in_match (둘 다) | - |
+| queued | `queue.leave`, 연결 0개 | - | idle | - |
+| idle | `invite.send` | 수락된 친구, 친구가 idle | inviting | `invite.error` (`NOT_FRIEND`, `TARGET_BUSY`) |
+| idle (받는 사람) | `invite.accept` | 초대가 pending, 보낸 사람이 아직 inviting | in_match (둘 다) | `invite.error` (`INVITE_EXPIRED`, `INVITE_CANCELLED`) |
+| inviting | 취소·거절·만료(60초)·연결 0개 | - | idle | - |
+| in_match | 경기 finished | - | idle | - |
+| queued·inviting·in_match | 다른 참가 요청 | - | 그대로 | `ALREADY_ACTIVE` |
+
+- 저장: 메모리(`GameSessionManager`의 `Map<userId, Position>`), API 인스턴스 1개 전제(2.10.28과 같음). 재시작하면 대기열·초대가 사라지고 진행 경기는 void가 되므로 유령 참가가 남지 않는다(FR-RT-05).
+- 경합: 참가 위치 변경은 사용자 ID 순서로 두 사용자의 위치를 함께 바꾼다. 단일 Node 프로세스라 같은 tick 안의 동기 코드로 처리하면 별도 잠금이 필요 없다. `createMatch()` 실패 시 두 사람을 idle로 되돌린다.
+- `in_match`는 진행 중 경기 행(`games.status in (playing, paused)`)과 같은 뜻이다. 재시작 후에는 `voidUnfinishedGames()`가 모두 끝내므로 메모리와 DB가 어긋나지 않는다.
+- 초대 유효기간 60초는 제안값이다(DEC-06).
 
 ---
 
@@ -1149,6 +1336,25 @@ flowchart TD
 - **PR #10 병합 시 합칠 것**: 현재 `index.ts`는 `127.0.0.1`에 고정 listen한다. PR #10은 `API_HOST`로 listen 주소를 받는다. 병합할 때 `API_HOST`와 위 인증·프록시 환경 변수를 함께 반영한다.
 - 비밀번호는 Compose secret 파일로 전달한다. B 구현으로 추가된 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`도 secret 또는 env 파일로 전달해야 한다(PR #10 병합 후 반영 필요).
 - 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
+
+##### PR #10 병합 후 추가할 것 (`B 초안`, E 확인, #28)
+
+| 대상 | 추가 내용 | 이유 |
+|---|---|---|
+| api 컨테이너 | named volume `avatars`를 `AVATAR_DIR`(예: `/data/avatars`)에 연결 | PR #15는 아바타 파일을 `AVATAR_DIR`에 저장한다. volume이 없으면 컨테이너 재생성 시 사라진다(NFR-OPS-01) |
+| Nginx | `location /api/ws`에 `proxy_http_version 1.1`, `Upgrade`, `Connection "upgrade"` 헤더, `proxy_read_timeout 60s` | WSS 연결 유지. 서버 heartbeat(10초)보다 길어야 한다 |
+| Nginx | `/api/media/avatars/`는 api로 전달 (정적 서빙 안 함) | 파일 이름 검증을 API가 한다 |
+| Nginx | `client_max_body_size 3m` | 아바타 2 MiB + multipart 여유. API 제한(413)보다 먼저 막지 않게 |
+| `.env.example` | `AVATAR_DIR`, `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY` | 비작성자가 설정만 보고 실행 |
+
+```mermaid
+flowchart LR
+    B[브라우저] -->|"wss://host/api/ws"| N[Nginx web]
+    N -->|"Upgrade: websocket"| A["api: /api/ws (D)"]
+    B -->|"https://host/api/media/avatars/x.png"| N
+    N --> A
+    A --- V[(avatars volume)]
+```
 
 ### 2.10 기능별 처리 흐름 (모든 분기)
 
@@ -1644,7 +1850,8 @@ flowchart TD
 ```
 
 - 전적 표시: `nickname_snapshot` + "(탈퇴한 사용자)". 현재 프로필 링크는 만들지 않는다. 같은 닉네임을 새 계정이 써도 과거 기록과 연결되지 않는다(불변 user id 기준).
-- 보존 기간·백업 반영·탈퇴자 리더보드 처리는 DEC-09 결정 전이라 미정(5장).
+- 경기 기록 보존 기간(B 제안): **영구 보존**. `games`, `game_players`(`nickname_snapshot` 포함), `moves`는 탈퇴 후에도 지우지 않는다. 개인정보(email, 비밀번호 해시, OAuth·2FA 비밀, 아바타)는 탈퇴 즉시 삭제한다. 개인정보처리방침에 같은 내용을 적는다(NFR-PRIV-01).
+- 백업 반영·탈퇴자 리더보드 처리는 DEC-09 결정 전이라 미정(5장). 리더보드 제안: 탈퇴자는 제외한다.
 
 #### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 저장 `구현됨`·시계 `계획`(D), 서버 재시작 `구현됨`)
 
@@ -1680,6 +1887,39 @@ flowchart TD
 
 ---
 
+#### 2.10.29 친구 (E, `B 초안`, FR-SOC-01~03)
+
+스키마는 2.4 계획 스키마의 `friendships`를 쓴다. 두 사용자 쌍은 `(user_low_id, user_high_id)` 한 행이라 A→B, B→A 요청이 동시에 와도 UNIQUE가 하나만 남긴다.
+
+| Endpoint | 성공 | 오류 |
+|---|---|---|
+| `GET /api/users?nickname=` | 200 닉네임 접두사 일치 최대 20명 (탈퇴자 제외, email 미포함) | 401, 422, 429 |
+| `GET /api/friends` | 200 `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }` | 401 |
+| `POST /api/friends/requests` `{ userId }` | 201 | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
+| `POST /api/friends/requests/{id}/accept` | 200 | 401, 403 (받는 사람 아님), 404, 409 (pending 아님) |
+| `POST /api/friends/requests/{id}/decline` | 204 | 401, 403, 404, 409 |
+| `DELETE /api/friends/{userId}` | 204 | 401, 404 |
+
+```mermaid
+flowchart TD
+    S(["POST /api/friends/requests { userId }"]) --> Self{자기 자신?}
+    Self -->|예| R422[422]
+    Self -->|아니오| Exists{대상 활성 사용자?}
+    Exists -->|아니오| R404[404 USER_NOT_FOUND]
+    Exists -->|예| Row{"(low, high) 행 있음? (FOR UPDATE)"}
+    Row -->|없음| Ins["INSERT pending, requested_by = 나"] --> R201[201]
+    Row -->|accepted| R409a[409 ALREADY_FRIENDS]
+    Row -->|"pending, 내가 보냄"| R409b[409 REQUEST_PENDING]
+    Row -->|"pending, 상대가 보냄"| Acc["accepted로 변경 (맞요청은 수락으로 처리)"] --> R200[200]
+    Row -->|"declined, 내가 보냈다가 거절당함"| R409c[409 REQUEST_DECLINED]
+    Row -->|"declined, 내가 거절했었음"| Re["pending, requested_by = 나로 갱신"] --> R201
+    Ins -.->|"UNIQUE 위반 (동시 요청)"| Row
+```
+
+- 온라인 상태는 DB에 저장하지 않는다. D의 연결 관리가 사용자별 연결 수를 세고, 0 ↔ 1 이상 변할 때 그 사용자의 친구들에게 `presence`를 보낸다. `GET /api/friends`의 `online`도 같은 메모리 값을 읽는다.
+- 탈퇴 시 그 사용자의 `friendships` 행을 모두 지운다(2.10.27).
+- 상태 코드는 구현 시 `schema.response`와 contracts.md 11장에 함께 기록한다(프로젝트 규칙).
+
 ## 3. Design rationale
 
 ### 17. Technical decisions
@@ -1713,15 +1953,15 @@ flowchart TD
 
 | SRS 설계 항목 | 이 문서 | 상태 |
 |---|---|---|
-| 시스템 구성·실행/배포 | 2.1의 1번, 2.9 | `계획` (PR #10) |
+| 시스템 구성·실행/배포 | 2.1의 1번, 2.9 | `계획` (PR #10), 아바타 volume·WSS `B 초안` |
 | 인증·권한·프로필 | 1.1, 2.6의 11번, 2.5의 8번 | `구현됨` (아바타·전적 비공개·탈퇴 제외) |
-| 친구·온라인 상태 | 2.1 use case | `계획` (E, D) |
-| 방·매칭 상태 전이 | 2.7 | `계획` (D) |
-| 공통 경기와 규칙 경계 | 2.2의 4번, 2.3 | 경계 `구현됨`, 엔진 연결 `계획` |
-| 실시간 계약·복구 | 2.5의 9번, 2.6의 13번 | `계획` (D) |
+| 친구·온라인 상태 | 2.1 use case, 2.10.29, 2.5의 9번 `presence` | `B 초안` (E, D) |
+| 방·매칭 상태 전이 | 2.7의 7번, 7.1 | `B 초안` (D) |
+| 공통 경기와 규칙 경계 | 2.2의 4번, 2.3 | 경계 `구현됨`, 엔진 연결 `B 초안` (C) |
+| 실시간 계약·복구 | 2.5의 9번, 2.6의 13번 | `B 초안` (D), 저장 경로 `구현됨` |
 | 논리/물리 데이터 모델 | 2.4의 5번 | `구현됨` |
 | API·오류 계약 | 2.5의 8번, 2.10 | `구현됨` (B 범위) |
-| 화면·접근성 | 2.2의 2번 | `계획` (A) |
+| 화면·접근성 | 2.2의 2번 | `B 초안` (A) |
 | 테스트·성능·운영 관측 | 4.1, TEST_PLAN.md | B 범위 테스트 대응 `구현됨`, 성능·AT 연결은 5.1 |
 
 ### 4.1 B 범위 테스트 대응 (`구현됨`)
@@ -1747,19 +1987,18 @@ flowchart TD
 | 항목 | 결정 필요 | 관련 |
 |---|---|---|
 | 2FA 켜기·끄기 시 기존 세션 처리 | 현재 유지. 팀 의견 | DEC-04 |
-| refresh token 전달 방식 | 현재 body. HttpOnly cookie로 바꿀지 (바꾸면 CSRF 대책 추가) | DEC-04, A |
+| refresh token 전달 방식 | 현재 body. B 초안은 클라이언트 `localStorage` 보관(2.2). HttpOnly cookie로 바꿀지 (바꾸면 CSRF 대책 추가) | DEC-04, A |
 | 메일 소유 확인·비밀번호 복구·이메일 변경 | 학교 요건 확인 후 결정 | DEC-04, DEC-11 |
-| GameError 코드 목록 | 세분화 제안 | PR #6 |
-| WebSocket 라이브러리·토큰 전달·heartbeat | D | 문서화 명세 19장 |
-| 준비·시작 절차, 색상 배정, 초대 유효기간 | D, A | DEC-06 |
-| 이탈 시간 저장 위치·감지 지연 | D | DEC-03, DEC-07 |
+| WebSocket 라이브러리 | D (`@fastify/websocket` 제안). 토큰 전달·heartbeat·이벤트는 B 초안(2.5의 9번) | 문서화 명세 19장 |
+| 준비·시작 절차, 색상 배정, 초대 유효기간 | B 초안: 준비 단계 없음, 매칭 무작위·초대는 보낸 사람 흑, 초대 60초 (2.7). D, A 확인 | DEC-06 |
+| 이탈 시간 저장 위치·감지 지연 | B 초안: 메모리, 최대 20초 (2.6의 13번). D 확인. `paused`·복귀 전환 시 `stateVersion`을 올릴지 | DEC-03, DEC-07 |
 | 아바타 저장 위치 | B (PNG/JPEG 2MiB 이하 제안) | DEC-05 |
-| 전적 비공개, 탈퇴 표시·닉네임 스냅샷 | B, A | DEC-05, DEC-09 |
+| 전적 비공개, 탈퇴 표시·닉네임 스냅샷, 경기 기록 보존 기간 | B, A. 보존 기간은 B 제안 영구 보존(2.10.27) | DEC-05, DEC-09 |
 | 같은 commandId·다른 payload | payload 해시 저장 후 불일치 거절할지 | B, C, D |
 
 ### 5.1 담당자별 작성 필요 항목
 
-SDS v0.1은 B 범위를 구현 기준으로 채웠다. 아래는 SRS가 SDS에서 답하라고 한 질문 중 다른 담당자의 결정이 필요한 것이다. 담당자가 해당 절을 채운다.
+SDS v0.1은 B 범위를 구현 기준으로 채웠다. 아래는 SRS가 SDS에서 답하라고 한 질문 중 다른 담당자의 결정이 필요한 것이다. v0.2에서 B가 각 위치에 `B 초안`을 채웠다. 담당자는 초안을 확인하고 바꿀 부분을 고친다. 아직 B 초안이 없는 항목은 키보드 상세 동작(A), 요구사항 ID별 추적 레코드와 성능 측정 지점(A, B)이다.
 
 | 담당 | 채울 내용 | SRS 근거 | SDS 위치 |
 |---|---|---|---|
@@ -1773,5 +2012,4 @@ SDS v0.1은 B 범위를 구현 기준으로 채웠다. 아래는 SRS가 SDS에�
 
 | 문서 위치 | 남아 있는 내용 | 맞출 기준 | 담당 |
 |---|---|---|---|
-| `contracts.md` | B의 REST API·오류 형식·endpoint별 상태 코드가 없음 | PR #6 merge 후 장을 추가해 기록 | B |
 | `GAME_RULES.md` 3~4장 | 단순 60초 복귀, 동률 순위 `nickname → userId` | 누적 60초(DEC-03), `wins → winRate → userId`(DEC-08) | C |
