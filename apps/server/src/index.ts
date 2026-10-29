@@ -43,11 +43,12 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 // peer is a trusted proxy. Default: loopback (local dev proxy). Behind the
 // Docker Nginx set TRUST_PROXY=uniquelocal (private network addresses).
 const trustProxy = process.env.TRUST_PROXY || "loopback";
-const app = await buildApp({ trustProxy }, process.env.DATABASE_URL, {
-  jwtSecret,
-  twoFactorKey,
-  oauth42,
-});
+const app = await buildApp(
+  { trustProxy },
+  process.env.DATABASE_URL,
+  { jwtSecret, twoFactorKey, oauth42 },
+  process.env.AVATAR_DIR || "data/avatars",
+);
 try {
   const databaseHealth = await app.inject({
     method: "GET",

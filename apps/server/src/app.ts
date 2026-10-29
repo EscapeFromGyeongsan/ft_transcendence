@@ -2,10 +2,12 @@ import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
 import { registerStatsRoutes } from "./api/stats-routes.ts";
+import { registerAvatarRoutes } from "./api/avatar-routes.ts";
 import { errorBody } from "./schemas/errors.ts";
 import {
   createAuthService,
@@ -33,6 +35,11 @@ import {
   createStatsService,
   type StatsService,
 } from "./services/stats-service.ts";
+import {
+  avatarMaxBytes,
+  createAvatarService,
+  type AvatarService,
+} from "./services/avatar-service.ts";
 
 const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
 
@@ -64,6 +71,8 @@ export async function buildApp(
   options: FastifyServerOptions = {},
   databaseUrl?: string,
   authConfig?: AuthConfig,
+  // Directory for uploaded avatars. Without it the avatar endpoints answer 503.
+  avatarDir?: string,
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -111,6 +120,14 @@ export async function buildApp(
   const getStats = (): StatsService => {
     if (!stats) throw new ServiceUnavailableError();
     return stats;
+  };
+  const avatars =
+    database && avatarDir
+      ? createAvatarService(database.db, avatarDir)
+      : undefined;
+  const getAvatars = (): AvatarService => {
+    if (!avatars) throw new ServiceUnavailableError();
+    return avatars;
   };
   app.addHook("onClose", async () => {
     await database?.close();
@@ -170,6 +187,9 @@ export async function buildApp(
   // JSON-only API: other bodies get 415 instead of failing validation as text.
   app.removeContentTypeParser("text/plain");
   await app.register(rateLimit, { global: false });
+  await app.register(multipart, {
+    limits: { fileSize: avatarMaxBytes, files: 1 },
+  });
   await app.register(swagger, {
     openapi: {
       info: { title: "Cyber Board Cafe API", version: "0.1.0" },
@@ -255,5 +275,6 @@ export async function buildApp(
   registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers);
   registerStatsRoutes(app, getAuth, getStats);
+  registerAvatarRoutes(app, getAuth, getAvatars);
   return app;
 }
