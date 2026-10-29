@@ -16,6 +16,10 @@ A turn-based online board game platform offering Omok (15 × 15, free rules). Pl
 
 ## Instructions
 
+Choose the local development workflow below, or the separate [full application HTTPS workflow](Document/runtime.md). Full-app startup, failure handling and persistence have been locally validated; see the remaining checks in the validation record.
+
+### Local development
+
 Start Docker Desktop (or your Docker engine). Install dependencies from the repository root, create `.env` from `.env.example` if it does not exist, and set the local PostgreSQL credentials and matching `DATABASE_URL`. Keep existing credentials if `.env` already exists.
 
 ```sh
@@ -39,7 +43,7 @@ Only the connection test table is implemented. `npm run db:check` verifies an in
 
 `infra/compose.yaml` runs only the local development database, bound to `127.0.0.1:5432` by default. Data persists in a Docker volume. `npm run db:stop` stops the database without deleting that volume. Full application containers and HTTPS/WSS are not provided by this development setup. PostgreSQL initialization credentials apply to a new volume; editing `.env` does not change credentials inside an existing database.
 
-Both servers listen on `127.0.0.1` only. Vite forwards `/api` requests to the API server. Swagger UI is served by the API server only and is not reachable through the web port. The API server does not watch source changes; restart `npm run dev` after changing server code.
+By default the local development servers listen on `127.0.0.1`. The API listen address can be overridden with `API_HOST`. Vite forwards `/api` requests to the API server. Swagger UI is served by the API server only and is not reachable through the web port. The API server does not watch source changes; restart `npm run dev` after changing server code.
 
 Other commands:
 
@@ -53,10 +57,24 @@ npx playwright install chromium
 npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:up and db:migrate first)
 ```
 
+### Full application containers
+
+Prepare `.env.full` from `.env.full.example`, the password file, and certificates as described in [the full execution guide](Document/runtime.md). Then:
+
+```sh
+docker compose --env-file .env.full --project-directory . \
+  -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
+```
+
+Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
+
+The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. WebSocket upgrade forwarding is prepared under `/api/`; actual WSS validation requires the real endpoint. See [the validation record](Document/runtime-validation.md).
+
 ## Environment variables
 
 The API server, Vite configuration, migration configuration and DB check load `.env` from the repository root. Do not commit it.
 
+- `API_HOST`: API listen address (default `127.0.0.1`; full-app Compose explicitly sets `0.0.0.0`).
 - `PORT`: API port (default `3001`), an integer between 1 and 65535. The Vite proxy (dev and preview) uses the same value.
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: local database initialization settings.
 - `POSTGRES_PORT`: local database port (default `5432`).
@@ -84,7 +102,10 @@ config/
   vitest.config.ts      Unit test settings
   playwright.config.ts E2E test settings
 infra/
-  compose.yaml     Local PostgreSQL container
+  compose.yaml          Local PostgreSQL container
+  compose.full.yaml     Separate full-app execution
+  Dockerfile            Workspace/server/web image targets
+  nginx/                HTTPS/API/WebSocket proxy configuration
 tests/              Playwright E2E tests
 scripts/
   dev.mjs          Starts the API and Vite together
@@ -102,4 +123,6 @@ Tool-specific settings live in `config/`, and local infrastructure settings live
 - [Game rules](Document/GAME_RULES.md)
 - [Test plan](Document/TEST_PLAN.md)
 - [Documentation spec](Document/cyber_boardgame_documentation_spec.md): documents the project will produce (SRS, SDS, contracts, diagrams, test plan)
+- [Full application execution](Document/runtime.md): HTTPS preparation, startup, lifecycle and isolated verification
+- [Runtime validation record](Document/runtime-validation.md): actual checks and pending evidence
 - [Contribution rules](CONTRIBUTING.md): issue, branch, commit and PR workflow
