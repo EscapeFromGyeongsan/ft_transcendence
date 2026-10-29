@@ -17,6 +17,9 @@ COPY infra/nginx/api-proxy.conf /etc/nginx/snippets/api-proxy.conf
 # existing Drizzle Kit migration, so its tooling is intentionally retained.
 FROM workspace AS server
 ENV NODE_ENV=production
+ENV AVATAR_DIR=/data/avatars
+# A fresh named volume inherits this directory's owner and permissions.
+RUN install -d -o node -g node -m 0750 /data/avatars
 USER node
 ENTRYPOINT ["node", "--experimental-strip-types", "scripts/container-start.mjs"]
 CMD ["api"]

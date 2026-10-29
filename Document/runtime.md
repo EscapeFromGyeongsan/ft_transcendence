@@ -1,6 +1,6 @@
 # 이슈 #7 전체 앱 실행 안내
 
-상태: 구현 초안. Docker·빌드·브라우저·통합 검증과 작성자 외 팀원의 재현은 대기 중이다. PR은 생성하지 않았다. [작업 계획](runtime-plan.md)과 [검증 기록](runtime-validation.md)을 함께 확인한다.
+PR #10의 전체 실행 구성과 #28의 서버·아바타 연결 설정을 설명한다. 기존 실행 검증은 [검증 기록](runtime-validation.md), #11·#15 통합 시의 추가 검증은 [#28 검증 기록](runtime-issue-28-validation.md)을 확인한다. 작성자 외 팀원의 재현과 실제 WSS 검증은 별도로 필요하다.
 
 ## 구성과 책임 범위
 
@@ -25,7 +25,7 @@ flowchart LR
 
 기존 개발용 진입점은 `infra/compose.yaml`이며 프로젝트 이름은 `cyber-board-cafe`다. 전체 앱 실행은 `infra/compose.full.yaml`과 `cyber-board-cafe-full` 프로젝트를 사용하고, 별도의 기본 named volume에 데이터를 저장한다. 검증에는 이름이 다른 추가 프로젝트를 사용한다. 개발 환경과 공유하는 외부 볼륨이나 고정 볼륨 이름을 지정하지 않는다.
 
-이번 작업에서는 도메인 스키마, 게임·인증·소셜 코드, 실제 WebSocket endpoint를 추가하지 않는다. 현재 DB에는 연결 확인용 `connection_probe` 테이블만 구현돼 있다.
+인증·아바타 API는 별도 PR #11·#15가 제공한다. 이 문서의 연결 설정을 사용하려면 해당 서버 코드가 작업 사본에 함께 있어야 한다. 실행 환경 보완에서는 도메인 스키마, 게임·인증·소셜 코드, 실제 WebSocket endpoint를 추가하지 않는다.
 
 ## 실행 전 준비
 
@@ -44,6 +44,10 @@ flowchart LR
 cp -n .env.full.example .env.full
 chmod 600 .env.full
 ~~~
+
+`.env.full`의 `JWT_SECRET`에는 `openssl rand -hex 32` 등으로 생성한 32자 이상의 개인 값을 설정한다. 빈 값이면 Compose가 기동 전에 오류를 반환한다. 값을 교체하면 기존 access token 검증에 영향을 주므로 매번 새로 생성하지 않는다.
+
+`TWO_FACTOR_KEY`는 선택 사항이다. 빈 값이면 컨테이너 시작 스크립트가 미설정으로 처리하고, 서버의 2FA 기능만 비활성화한다. 설정할 때는 32자 이상이어야 하며 기존 키를 바꾸면 저장된 2FA 설정을 복호화할 수 없다. `FT_OAUTH_CLIENT_ID`, `FT_OAUTH_CLIENT_SECRET`, `FT_OAUTH_REDIRECT_URI`는 세 값을 모두 설정하거나 모두 비워 둔다. 이 설정도 호스트 파일·로그·검증 증거에서 비공개로 관리한다.
 
 비밀번호 파일이 없으면 별도로 생성한다.
 
@@ -133,6 +137,24 @@ workspace 이미지는 커밋된 루트 잠금 파일을 기준으로 `npm ci`�
 
 데이터 보존은 같은 Docker volume을 유지하는 조건이다. 프로젝트 이름·volume 매핑을 바꾸면 다른 DB를 선택할 수 있으므로 변경 시 데이터 인계를 함께 계획한다. DB 백업·복원은 별도로 관리한다.
 
+### 아바타 저장소
+
+전체 실행 API는 `AVATAR_DIR=/data/avatars`로 고정하고 프로젝트별 named volume `avatars`를 같은 경로에 연결한다. 이미지가 해당 디렉터리를 `node` 소유, 권한 `0750`으로 미리 생성하므로 새 volume은 쓰기 가능한 소유권을 상속한다. API 실행 사용자는 계속 `node`다. Nginx에는 이 volume을 연결하지 않으며 파일은 API의 `/api/media/avatars/` 경로로 제공한다(PR #15).
+
+이전에 수동 생성해 권한이 다른 volume을 연결했다면 기존 파일을 지우지 말고 디렉터리 권한을 확인한다. 같은 프로젝트·환경 파일을 선택해 API를 중지한 뒤 다음과 같이 디렉터리 소유권만 바로잡을 수 있다.
+
+~~~sh
+docker compose --env-file .env.full --project-directory . \
+  -p cyber-board-cafe-full -f infra/compose.full.yaml stop api
+docker compose --env-file .env.full --project-directory . \
+  -p cyber-board-cafe-full -f infra/compose.full.yaml run --rm --no-deps \
+  --user root --entrypoint sh api -c 'chown node:node /data/avatars'
+~~~
+
+그 뒤 평소 `up -d --wait` 명령으로 기동한다. 이 일회성 명령은 해당 아바타 volume의 디렉터리에만 적용한다. 파일 자체의 권한이 다른 경우에는 파일 보존 상태를 확인한 뒤 따로 조정한다. 기존 파일·volume을 삭제해 해결하지 않는다.
+
+`down`·API 재생성 시 DB와 아바타 volume을 함께 유지한다. `down -v`는 두 volume을 모두 삭제하므로 실제 데이터가 있는 프로젝트에서 사용하지 않는다. Nginx의 `/api/` 본문 제한은 multipart 여유를 둔 `3m`이며, 파일 자체의 2 MiB 제한은 API가 검사한다.
+
 자체 검증 결과는 PR 리뷰를 받을 단계다. 작성자 외 팀원의 재현과 실제 클라이언트 인증서 신뢰 확인 후 병합을 권장한다. 실제 WSS는 endpoint 제공 후 후속 통합 검증으로 진행한다.
 
 ## 환경 변수 우선순위와 내부 주소
@@ -145,6 +167,10 @@ workspace 이미지는 커밋된 루트 잠금 파일을 기준으로 `npm ci`�
 | `BIND_ADDRESS` / `HTTP_PORT` / `HTTPS_PORT` | Compose 변수 치환에 사용. 기본값은 `127.0.0.1` / `8080` / `8443` |
 | 전체 앱 API의 `API_HOST` / `PORT` | 서비스 설정에서 `0.0.0.0` / `3001`로 명시 |
 | 전체 앱 API·migration의 `DATABASE_URL` | 비밀번호 파일과 DB 초기 설정으로 생성. 주소는 항상 `db:5432` |
+| 전체 앱 API의 `JWT_SECRET` | 필수. `.env.full`·셸에서 Compose의 api 환경으로 전달. 32자 이상 |
+| `TWO_FACTOR_KEY` / `FT_OAUTH_*` | 선택. 2FA 키의 빈 값은 컨테이너에서 미설정으로 정규화. OAuth 세 값은 모두 설정하거나 모두 비움 |
+| 전체 앱 API의 `TRUST_PROXY` | 기본 `uniquelocal`. Nginx가 클라이언트의 `X-Forwarded-For`를 버리고 직접 연결된 주소로 덮어쓴 뒤 전달 |
+| 전체 앱 API의 `AVATAR_DIR` | `/data/avatars`로 고정. `avatars` volume의 target과 함께 관리 |
 | 로컬 개발의 `API_HOST` | 선택 사항. 기본값은 `127.0.0.1` |
 | 로컬 개발·preview의 `PORT` | 기존 루트 `.env`·프로세스 환경과 Vite 프록시 동작을 유지 |
 
@@ -155,6 +181,8 @@ Compose의 `--env-file`은 설정값을 치환하는 입력이다. 모든 변수
 내부 `DATABASE_URL`을 생성하기 전에 사용자명·비밀번호·DB 이름을 URI 인코딩한다. 브라우저는 같은 origin의 `/api` 경로로 요청한다. 내부 서비스 이름인 `api`·`db`를 브라우저에서 조회하려고 하면 안 된다. 컨테이너 내부에서 `0.0.0.0`에 listen하는 것 자체가 호스트 포트를 공개하는 것은 아니다.
 
 Nginx 템플릿에서는 `PUBLIC_HTTPS_PORT`만 치환한다. `$host`·`$request_uri`·`$http_upgrade` 같은 Nginx 변수는 그대로 남긴다. `/api`·`/docs`는 접두어를 제거하지 않고 전달한다. 변수 기반 upstream에서 Docker DNS를 조회하므로 API 컨테이너가 교체된 뒤에도 주소를 다시 찾을 수 있도록 구성한다.
+
+공개 진입점은 이 Nginx 하나이므로 클라이언트가 보낸 `X-Forwarded-For` 체인을 신뢰하지 않고 `$remote_addr`로 교체한다. Docker의 사설 Nginx 주소를 신뢰하도록 API를 설정해도 외부 클라이언트가 임의의 IP를 전달해 요청 제한을 우회하지 않도록 하기 위한 설정이다. 외부 프록시를 추가하는 경우에는 해당 프록시의 주소와 실제 클라이언트 IP 전달 정책을 함께 재검토한다.
 
 ## 준비 상태·migration·기동과 종료
 

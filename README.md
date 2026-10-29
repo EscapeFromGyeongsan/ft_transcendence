@@ -61,6 +61,12 @@ npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:u
 
 Prepare `.env.full` from `.env.full.example`, the password file, and certificates as described in [the full execution guide](Document/runtime.md). Then:
 
+Set a private `JWT_SECRET` of at least 32 characters in `.env.full`. Compose passes
+authentication settings explicitly and mounts a separate `avatars` volume at
+`/data/avatars`, writable by the API's `node` user. These settings prepare the
+server/avatar integration; the corresponding server routes must be included in
+the checkout to use them. An empty `TWO_FACTOR_KEY` disables the optional 2FA key.
+
 ```sh
 docker compose --env-file .env.full --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
