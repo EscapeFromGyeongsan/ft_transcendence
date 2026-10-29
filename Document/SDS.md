@@ -743,7 +743,7 @@ erDiagram
         bigint id PK
         boolean records_public "계획, NOT NULL DEFAULT true (DEC-05)"
         timestamptz deleted_at "계획, NULL = 활성 (DEC-09)"
-        text avatar_url "기존 컬럼, 업로드 시 /media/avatars/{id}-{rand}.png|jpg"
+        text avatar_url "기존 컬럼, 업로드 시 /api/media/avatars/{id}-{rand}.png|jpg (PR #15)"
         varchar_254 email "탈퇴 시 NULL 또는 익명값으로 교체 (UNIQUE 해제)"
         varchar_32 nickname "탈퇴 시 NULL로 비워 재사용 허용"
     }
@@ -1341,11 +1341,15 @@ flowchart TD
 
 | 대상 | 추가 내용 | 이유 |
 |---|---|---|
-| api 컨테이너 | named volume `avatars`를 `AVATAR_DIR`(예: `/data/avatars`)에 연결 | PR #15는 아바타 파일을 `AVATAR_DIR`에 저장한다. volume이 없으면 컨테이너 재생성 시 사라진다(NFR-OPS-01) |
-| Nginx | `location /api/ws`에 `proxy_http_version 1.1`, `Upgrade`, `Connection "upgrade"` 헤더, `proxy_read_timeout 60s` | WSS 연결 유지. 서버 heartbeat(10초)보다 길어야 한다 |
+| api 컨테이너 | named volume `avatars`를 `AVATAR_DIR`(예: `/data/avatars`)와 같은 경로에 연결하고 실행 사용자 `node`의 쓰기 권한을 준비 | PR #15는 아바타 파일을 `AVATAR_DIR`에 저장한다. 컨테이너 재생성 후 파일 보존과 첫 업로드 성공을 함께 확인한다(NFR-OPS-01) |
+| Nginx | 기존 `location /api/`와 공통 `api-proxy.conf`의 HTTP/1.1, `Upgrade`, `Connection`, read/send timeout 75초를 `/api/ws`에도 재사용 | PR #10에 이미 포함된 설정이다. 별도 location·60초 timeout 추가를 필수로 두지 않고, #16 endpoint 인계 후 실제 WSS를 검증한다 |
 | Nginx | `/api/media/avatars/`는 api로 전달 (정적 서빙 안 함) | 파일 이름 검증을 API가 한다 |
 | Nginx | `client_max_body_size 3m` | 아바타 2 MiB + multipart 여유. API 제한(413)보다 먼저 막지 않게 |
-| `.env.example` | `AVATAR_DIR`, `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY` | 비작성자가 설정만 보고 실행 |
+| 환경 변수 예시·전달 | 개발용 `.env.example`과 전체 실행용 `.env.full.example`에 `AVATAR_DIR`, `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY`를 설명하고, `infra/compose.full.yaml`의 api 환경에 실제 연결 | Compose의 `--env-file`은 설정 치환에 쓰인다. 예시에 값을 추가하는 것만으로 api 컨테이너 환경에 전달되지는 않는다 |
+
+- 인증 설정은 api의 `environment` 또는 명시적 `env_file`로 전달한다. secret 파일 방식을 쓰면 애플리케이션 환경에 값을 연결하는 읽기 처리도 필요하다. PR #10의 `container-start.mjs`가 현재 읽는 secret은 PostgreSQL 비밀번호뿐이다.
+- PR #11은 `JWT_SECRET`이 없거나 32자 미만이면 기동을 중단한다. `TWO_FACTOR_KEY`는 미설정이면 2FA만 비활성화하지만 빈 문자열이면 기동 검사에서 실패한다. `FT_OAUTH_*` 세 값은 모두 설정하거나 모두 미설정으로 둔다. 전체 실행 예시와 Compose 전달 시 이 구분을 유지한다.
+- 위 항목의 실제 Compose·volume·권한·업로드·WSS 구현과 검증은 #28에서 진행한다.
 
 ```mermaid
 flowchart LR
@@ -1787,7 +1791,7 @@ flowchart TD
 
 #### 2.10.25 아바타 업로드·삭제 `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (B, `계획`, 10/24)
 
-DEC-05 제안(PNG/JPEG, 2 MiB 이하, 실제 형식 검사, 기본 이미지)을 따른다. `@fastify/multipart`로 받는다.
+DEC-05 제안(PNG/JPEG, 2 MiB 이하, 실제 형식 검사, 기본 이미지)을 따른다. `@fastify/multipart`로 받는다. 아바타 제공 경로·저장 방식은 별도 PR #15의 구현에 맞춘다. 이 절의 구현 상태와 상세 흐름은 #15 병합 시 함께 갱신한다.
 
 ```mermaid
 flowchart TD
@@ -1801,14 +1805,15 @@ flowchart TD
     Magic -->|아니오| R415
     Magic -->|예| Dim{"이미지 치수 상한 이내? (DEC-05 미정, 제안 1024×1024)"}
     Dim -->|아니오| R422
-    Dim -->|예| Write["새 이름(/media/avatars/{userId}-{난수}.{png,jpg})으로 임시 파일 저장 후 rename"]
+    Dim -->|예| Write["새 이름({userId}-{난수}.{png,jpg})으로 임시 파일 저장 후 rename"]
     Write --> Up["users.avatar_url UPDATE"]
     Up -->|성공| Old[이전 파일 삭제] --> R200[200 갱신된 내 정보]
     Up -->|실패| Clean[새 파일 삭제, 이전 avatar_url 유지] --> R5xx[500 / 503]
     S2([DELETE, requireAuth 통과]) --> Null["avatar_url = NULL (UI는 기본 이미지)"] --> Del[이전 파일 삭제] --> R204[204]
 ```
 
-- 저장 위치: api 컨테이너의 volume(`avatar_data`)을 Nginx가 `/media/`로 읽기 전용 제공(E와 PR #10 후속 협의). DB에는 경로만 저장한다.
+- 저장 위치: `AVATAR_DIR`(PR #15 기본값 `data/avatars`). 컨테이너에서는 api에 named volume `avatars`를 연결하고, `AVATAR_DIR`을 같은 마운트 경로로 설정한다(2.9, #28). DB에는 `/api/media/avatars/{name}` URL만 저장한다.
+- 제공: PR #15의 API가 `GET /api/media/avatars/{name}`으로 파일을 제공한다. Nginx는 기존 `/api/` 프록시로 전달하며 아바타 volume을 직접 읽거나 공유하지 않는다.
 - 교체 실패 시 기존 파일과 URL을 유지한다. 탈퇴 시 파일을 삭제한다(2.10.27).
 
 #### 2.10.26 전적 공개 설정 (B, `계획`)
@@ -1895,7 +1900,7 @@ flowchart TD
 |---|---|---|
 | `GET /api/users?nickname=` | 200 닉네임 접두사 일치 최대 20명 (탈퇴자 제외, email 미포함) | 401, 422, 429 |
 | `GET /api/friends` | 200 `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }` | 401 |
-| `POST /api/friends/requests` `{ userId }` | 201 | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
+| `POST /api/friends/requests` `{ userId }` | 201 (pending 생성), 200 (상대가 보낸 pending 요청에 맞요청하여 수락) | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
 | `POST /api/friends/requests/{id}/accept` | 200 | 401, 403 (받는 사람 아님), 404, 409 (pending 아님) |
 | `POST /api/friends/requests/{id}/decline` | 204 | 401, 403, 404, 409 |
 | `DELETE /api/friends/{userId}` | 204 | 401, 404 |
