@@ -24,6 +24,9 @@ process.env.DATABASE_URL = createContainerDatabaseUrl(
 );
 
 if (mode === "api") {
+  // Compose uses an empty value for an optional, disabled 2FA key. The local
+  // API startup still validates every non-empty configured key.
+  if (process.env.TWO_FACTOR_KEY === "") delete process.env.TWO_FACTOR_KEY;
   // Import in this process so SIGTERM reaches the existing Fastify shutdown.
   await import("../apps/server/src/index.ts");
 } else {

@@ -27,6 +27,8 @@ server {
     set $api_origin http://api:3001;
 
     location /api/ {
+        # Allow multipart overhead; the API limits each avatar file to 2 MiB.
+        client_max_body_size 3m;
         include /etc/nginx/snippets/api-proxy.conf;
     }
 
