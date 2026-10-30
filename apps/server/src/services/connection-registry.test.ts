@@ -17,41 +17,74 @@ describe("connection registry", () => {
     registry.add("s2", a2);
     registry.add("s3", b1);
     registry.add("s4", idle);
-    registry.subscribe(10, a1);
-    registry.subscribe(10, a2);
-    registry.subscribe(20, b1);
+    registry.subscribe(10, 1, a1);
+    registry.subscribe(10, 2, a2);
+    registry.subscribe(20, 3, b1);
 
-    registry.broadcast(10, { type: "game.updated", payload: { matchId: 10 } });
+    registry.broadcastUpdate(10, 1, { type: "game.updated" });
 
-    const sent = JSON.stringify({
-      type: "game.updated",
-      payload: { matchId: 10 },
-    });
+    const sent = JSON.stringify({ type: "game.updated" });
     expect(a1.send).toHaveBeenCalledExactlyOnceWith(sent);
     expect(a2.send).toHaveBeenCalledExactlyOnceWith(sent);
     expect(b1.send).not.toHaveBeenCalled();
     expect(idle.send).not.toHaveBeenCalled();
   });
 
+  test("updates never go backwards within a match", () => {
+    const registry = createConnectionRegistry();
+    const socket = fakeSocket();
+    registry.subscribe(10, 1, socket);
+
+    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(true);
+    expect(registry.broadcastUpdate(10, 1, { v: 1 })).toBe(false);
+    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(false);
+    expect(registry.broadcastUpdate(10, 3, { v: 3 })).toBe(true);
+    expect(socket.send.mock.calls).toEqual([
+      [JSON.stringify({ v: 2 })],
+      [JSON.stringify({ v: 3 })],
+    ]);
+  });
+
+  test("the last subscribing socket of a user controls the match", () => {
+    const registry = createConnectionRegistry();
+    const [tab1, tab2, opponent] = [1, 2, 3].map(fakeSocket);
+
+    expect(registry.subscribe(10, 1, tab1)).toBeUndefined();
+    expect(registry.subscribe(10, 2, opponent)).toBeUndefined();
+    expect(registry.subscribe(10, 1, tab2)).toBe(tab1);
+    expect(registry.subscribe(10, 1, tab2)).toBeUndefined();
+
+    expect(registry.isController(10, 1, tab1)).toBe(false);
+    expect(registry.isController(10, 1, tab2)).toBe(true);
+    expect(registry.isController(10, 2, opponent)).toBe(true);
+    // The replaced socket keeps watching.
+    expect(registry.isSubscribed(10, tab1)).toBe(true);
+
+    registry.unsubscribe(10, tab2);
+    expect(registry.isController(10, 1, tab2)).toBe(false);
+    expect(registry.isController(10, 2, opponent)).toBe(true);
+  });
+
   test("unsubscribe and socket removal stop further messages", () => {
     const registry = createConnectionRegistry();
     const [left, closed, stays] = [1, 2, 3].map(fakeSocket);
-    for (const socket of [left, closed, stays]) {
+    for (const [i, socket] of [left, closed, stays].entries()) {
       registry.add("s", socket);
-      registry.subscribe(10, socket);
+      registry.subscribe(10, i + 1, socket);
     }
-    registry.subscribe(20, closed);
+    registry.subscribe(20, 2, closed);
 
     registry.unsubscribe(10, left);
     registry.remove("s", closed);
-    registry.broadcast(10, { type: "x" });
-    registry.broadcast(20, { type: "x" });
+    registry.broadcastUpdate(10, 1, { type: "x" });
+    registry.broadcastUpdate(20, 1, { type: "x" });
 
     expect(left.send).not.toHaveBeenCalled();
     expect(closed.send).not.toHaveBeenCalled();
     expect(stays.send).toHaveBeenCalledOnce();
     expect(registry.isSubscribed(10, left)).toBe(false);
     expect(registry.isSubscribed(20, closed)).toBe(false);
+    expect(registry.isController(20, 2, closed)).toBe(false);
     expect(registry.isSubscribed(10, stays)).toBe(true);
   });
 
