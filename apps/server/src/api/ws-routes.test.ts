@@ -9,7 +9,12 @@ import {
 } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
+import type { Cell } from "@cafe/game-contracts";
 import { buildApp } from "../app.ts";
+import {
+  createGameCommandService,
+  type RegisteredRules,
+} from "../services/game-command-service.ts";
 import { parseEnvelope } from "./ws-routes.ts";
 import {
   openTestDatabase,
@@ -18,10 +23,22 @@ import {
 } from "../test-support/database.ts";
 
 const jwtSecret = "test-secret-test-secret-test-secret";
-const account = {
-  email: "p1@example.com",
-  password: "password-123",
-  nickname: "p1",
+const password = "password-123";
+
+// Stand-in for the real engine (C): only the board is needed to show a match.
+const stubGomoku: RegisteredRules = {
+  version: "stub-1",
+  rules: ({ seat }) => ({
+    ok: true,
+    nextTurn: seat === "black" ? "white" : "black",
+  }),
+  board: (history) => {
+    const board: Cell[][] = Array.from({ length: 15 }, () =>
+      Array<Cell>(15).fill(null),
+    );
+    for (const m of history) board[m.row][m.col] = m.stone as Cell;
+    return board;
+  },
 };
 
 // Listeners must be attached before the message that triggers the reply.
@@ -123,23 +140,33 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
   beforeEach(async () => {
     await resetTestDatabase(database);
     await app?.close();
-    app = await buildApp({}, testDatabaseUrl, { jwtSecret });
+    app = await buildApp(
+      {},
+      testDatabaseUrl,
+      { jwtSecret },
+      {},
+      {
+        gomoku: stubGomoku,
+      },
+    );
   });
   afterAll(async () => {
     await app?.close();
     await database?.close();
   });
 
-  async function loginToken() {
+  // Registers and logs in user p<n>; ids follow registration order.
+  async function loginToken(n = 1) {
+    const email = `p${n}@example.com`;
     await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: account,
+      payload: { email, password, nickname: `p${n}` },
     });
     const response = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: account.email, password: account.password },
+      payload: { email, password },
     });
     return response.json().accessToken as string;
   }
@@ -204,5 +231,106 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     const retryClose = closed(retry);
     sendJson(retry, { type: "auth", payload: { accessToken: token } });
     expect((await retryClose).code).toBe(4401);
+  });
+
+  describe("match subscription", () => {
+    let sockets: WebSocket[];
+    let matchA: number;
+    let matchB: number;
+
+    // p1 (black) vs p2 in match A, p3 (black) vs p4 in match B.
+    beforeEach(async () => {
+      const tokens = [];
+      for (const n of [1, 2, 3, 4]) tokens.push(await loginToken(n));
+      const games = createGameCommandService(database.db, {
+        gomoku: stubGomoku,
+      });
+      matchA = await games.createMatch({
+        gameType: "gomoku",
+        blackUserId: 1,
+        whiteUserId: 2,
+      });
+      matchB = await games.createMatch({
+        gameType: "gomoku",
+        blackUserId: 3,
+        whiteUserId: 4,
+      });
+      sockets = [];
+      for (const token of tokens) {
+        sockets.push((await authenticated(token)).socket);
+      }
+    });
+    afterEach(() => {
+      for (const socket of sockets) socket.terminate();
+    });
+
+    function request(socket: WebSocket, type: string, payload: object) {
+      const reply = nextMessage(socket);
+      sendJson(socket, { type, requestId: "r1", payload });
+      return reply;
+    }
+
+    test("a participant receives the match snapshot", async () => {
+      expect(
+        await request(sockets[0], "match.subscribe", { matchId: matchA }),
+      ).toEqual({
+        type: "match.snapshot",
+        requestId: "r1",
+        payload: expect.objectContaining({
+          matchId: matchA,
+          gameType: "gomoku",
+          rulesVersion: "stub-1",
+          stateVersion: 0,
+          status: "playing",
+          players: { black: 1, white: 2 },
+          currentPlayerId: 1,
+          result: null,
+        }),
+      });
+    });
+
+    test("players of two matches each get only their own snapshot", async () => {
+      const replies = await Promise.all(
+        sockets.map((socket, i) =>
+          request(socket, "match.subscribe", {
+            matchId: i < 2 ? matchA : matchB,
+          }),
+        ),
+      );
+      expect(
+        replies.map(
+          (r) => (r as { payload: { matchId: number } }).payload.matchId,
+        ),
+      ).toEqual([matchA, matchA, matchB, matchB]);
+    });
+
+    test("a non-participant, unknown or invalid match is refused", async () => {
+      expect(
+        await request(sockets[2], "match.subscribe", { matchId: matchA }),
+      ).toMatchObject({
+        type: "error",
+        requestId: "r1",
+        payload: { code: "NOT_PARTICIPANT", matchId: matchA },
+      });
+      expect(
+        await request(sockets[0], "match.subscribe", { matchId: 9999 }),
+      ).toMatchObject({ payload: { code: "NOT_FOUND", matchId: 9999 } });
+      for (const matchId of [String(matchA), 0, -1, 1.5, null]) {
+        expect(
+          await request(sockets[0], "match.subscribe", { matchId }),
+        ).toMatchObject({ payload: { code: "INVALID_MESSAGE" } });
+      }
+    });
+
+    test("unsubscribe is acknowledged", async () => {
+      await request(sockets[0], "match.subscribe", { matchId: matchA });
+      expect(
+        await request(sockets[0], "match.unsubscribe", { matchId: matchA }),
+      ).toEqual({
+        type: "match.unsubscribed",
+        requestId: "r1",
+        payload: { matchId: matchA },
+      });
+    });
   });
 });

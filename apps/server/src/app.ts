@@ -3,6 +3,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
+import type { GameType } from "@cafe/game-contracts";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
@@ -35,6 +36,11 @@ import {
   type StatsService,
 } from "./services/stats-service.ts";
 import { createConnectionRegistry } from "./services/connection-registry.ts";
+import {
+  createGameCommandService,
+  type GameCommandService,
+  type RegisteredRules,
+} from "./services/game-command-service.ts";
 import {
   closeCodes,
   registerRealtimeRoutes,
@@ -72,6 +78,9 @@ export async function buildApp(
   databaseUrl?: string,
   authConfig?: AuthConfig,
   realtimeConfig?: RealtimeConfig,
+  // Game engines (C) by game type; a match of an unregistered type cannot be
+  // created or shown.
+  rulesByGameType: Partial<Record<GameType, RegisteredRules>> = {},
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -136,6 +145,13 @@ export async function buildApp(
   const getStats = (): StatsService => {
     if (!stats) throw new ServiceUnavailableError();
     return stats;
+  };
+  const games = database
+    ? createGameCommandService(database.db, rulesByGameType)
+    : undefined;
+  const getGames = (): GameCommandService => {
+    if (!games) throw new ServiceUnavailableError();
+    return games;
   };
   app.addHook("onClose", async () => {
     await database?.close();
@@ -281,6 +297,6 @@ export async function buildApp(
   registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers);
   registerStatsRoutes(app, getAuth, getStats);
-  registerRealtimeRoutes(app, getAuth, connections, realtimeConfig);
+  registerRealtimeRoutes(app, getAuth, getGames, connections, realtimeConfig);
   return app;
 }

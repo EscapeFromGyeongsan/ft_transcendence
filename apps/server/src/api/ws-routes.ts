@@ -3,6 +3,7 @@ import type { WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
 import type { AuthService } from "../services/auth-service.ts";
 import type { ConnectionRegistry } from "../services/connection-registry.ts";
+import type { GameCommandService } from "../services/game-command-service.ts";
 
 // IF-03 draft (SDS 2.5의 9번): every message is one JSON envelope. The server
 // echoes requestId on the reply to a client request.
@@ -59,13 +60,82 @@ function send(
   socket.send(JSON.stringify({ type, requestId, payload }));
 }
 
+function sendError(
+  socket: WebSocket,
+  requestId: string | undefined,
+  code: string,
+  message: string,
+  details: object = {},
+) {
+  send(socket, "error", { code, message, ...details }, requestId);
+}
+
+// Same bound as the REST API: BIGINT ids travel as safe JSON integers.
+function isMatchId(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
 export function registerRealtimeRoutes(
   app: FastifyInstance,
   getAuth: () => AuthService,
+  getGames: () => GameCommandService,
   connections: ConnectionRegistry,
   config: RealtimeConfig = {},
 ) {
   const authTimeoutMs = config.authTimeoutMs ?? 5000;
+
+  // Only participants may subscribe. The socket joins the match before the
+  // snapshot is read, so an update committed in between is still delivered;
+  // clients drop updates whose stateVersion is not newer than their snapshot.
+  async function subscribe(
+    socket: WebSocket,
+    userId: number,
+    { requestId, payload }: Envelope,
+  ) {
+    const { matchId } = payload;
+    if (!isMatchId(matchId)) {
+      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid matchId.");
+      return;
+    }
+    const games = getGames();
+    const match = await games.getMatch(matchId);
+    if (!match) {
+      sendError(socket, requestId, "NOT_FOUND", "Match not found.", {
+        matchId,
+      });
+      return;
+    }
+    if (!match.players.some((player) => player.userId === userId)) {
+      sendError(
+        socket,
+        requestId,
+        "NOT_PARTICIPANT",
+        "Only players of this match can subscribe.",
+        { matchId },
+      );
+      return;
+    }
+    // Closed while the match was read: the close handler already ran.
+    if (socket.readyState !== socket.OPEN) return;
+    connections.subscribe(matchId, socket);
+    try {
+      const snapshot = await games.getSnapshot(matchId);
+      send(socket, "match.snapshot", snapshot!, requestId);
+    } catch (error) {
+      connections.unsubscribe(matchId, socket);
+      throw error;
+    }
+  }
+
+  function unsubscribe(socket: WebSocket, { requestId, payload }: Envelope) {
+    const { matchId } = payload;
+    if (!isMatchId(matchId)) {
+      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid matchId.");
+      return;
+    }
+    connections.unsubscribe(matchId, socket);
+    send(socket, "match.unsubscribed", { matchId }, requestId);
+  }
 
   // The access token arrives in the first message, never in the URL, so it
   // does not end up in proxy or access logs.
@@ -133,20 +203,33 @@ export function registerRealtimeRoutes(
           return;
         }
 
-        switch (message.type) {
-          case "ping":
-            send(socket, "pong", {}, message.requestId);
-            return;
-          default:
-            send(
-              socket,
-              "error",
-              {
-                code: "UNSUPPORTED_MESSAGE",
-                message: `Unsupported message type: ${message.type.slice(0, 64)}`,
-              },
-              message.requestId,
-            );
+        try {
+          switch (message.type) {
+            case "ping":
+              send(socket, "pong", {}, message.requestId);
+              return;
+            case "match.subscribe":
+              await subscribe(socket, claims.userId, message);
+              return;
+            case "match.unsubscribe":
+              unsubscribe(socket, message);
+              return;
+            default:
+              sendError(
+                socket,
+                message.requestId,
+                "UNSUPPORTED_MESSAGE",
+                `Unsupported message type: ${message.type.slice(0, 64)}`,
+              );
+          }
+        } catch (error) {
+          request.log.error({ err: error }, "WebSocket message failed.");
+          sendError(
+            socket,
+            message.requestId,
+            "INTERNAL_ERROR",
+            "Internal server error.",
+          );
         }
       });
     },
