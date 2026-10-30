@@ -103,3 +103,4 @@ Tool-specific settings live in `config/`, and local infrastructure settings live
 - [Test plan](Document/TEST_PLAN.md)
 - [Documentation spec](Document/cyber_boardgame_documentation_spec.md): documents the project will produce (SRS, SDS, contracts, diagrams, test plan)
 - [Contribution rules](CONTRIBUTING.md): issue, branch, commit and PR workflow
+- [TSDoc coding conventions](Document/code-conventions.md): TypeScript/React documentation comment rules
