@@ -15,6 +15,7 @@
     "db:generate": "drizzle-kit generate --config=config/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=config/drizzle.config.ts",
     "db:check": "node --experimental-strip-types scripts/check-db.mjs",
+    "qa:accounts": "node scripts/qa-accounts.mjs",
     "build": "tsc --noEmit && npm run build --workspace @cafe/web",
     "test": "vitest run --config=config/vitest.config.ts",
     "test:watch": "vitest --config=config/vitest.config.ts",
@@ -38,6 +39,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.1",
     "@fastify/swagger": "^9.9.0",
     "@fastify/swagger-ui": "^6.1.1",
     "argon2": "^0.45.1",
