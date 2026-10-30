@@ -2,6 +2,7 @@ import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
+import websocket from "@fastify/websocket";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
@@ -33,6 +34,12 @@ import {
   createStatsService,
   type StatsService,
 } from "./services/stats-service.ts";
+import { createConnectionRegistry } from "./services/connection-registry.ts";
+import {
+  closeCodes,
+  registerRealtimeRoutes,
+  type RealtimeConfig,
+} from "./api/ws-routes.ts";
 
 const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
 
@@ -64,6 +71,7 @@ export async function buildApp(
   options: FastifyServerOptions = {},
   databaseUrl?: string,
   authConfig?: AuthConfig,
+  realtimeConfig?: RealtimeConfig,
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -89,6 +97,23 @@ export async function buildApp(
   const getAuth = (): AuthService => {
     if (!auth) throw new ServiceUnavailableError();
     return auth;
+  };
+  const connections = createConnectionRegistry();
+  // Logout also closes the WebSocket connections opened with that session.
+  const routeAuth: AuthService | undefined = auth && {
+    ...auth,
+    async logout(sessionId: string) {
+      await auth.logout(sessionId);
+      connections.closeSession(
+        sessionId,
+        closeCodes.unauthenticated,
+        "Session ended.",
+      );
+    },
+  };
+  const getRouteAuth = (): AuthService => {
+    if (!routeAuth) throw new ServiceUnavailableError();
+    return routeAuth;
   };
   const oauth =
     auth && authConfig?.oauth42
@@ -170,6 +195,7 @@ export async function buildApp(
   // JSON-only API: other bodies get 415 instead of failing validation as text.
   app.removeContentTypeParser("text/plain");
   await app.register(rateLimit, { global: false });
+  await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
   await app.register(swagger, {
     openapi: {
       info: { title: "Cyber Board Cafe API", version: "0.1.0" },
@@ -250,10 +276,11 @@ export async function buildApp(
       }
     },
   );
-  registerAuthRoutes(app, getAuth);
+  registerAuthRoutes(app, getRouteAuth);
   registerTwoFactorRoutes(app, getAuth, getTwoFactor);
   registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers);
   registerStatsRoutes(app, getAuth, getStats);
+  registerRealtimeRoutes(app, getAuth, connections, realtimeConfig);
   return app;
 }
