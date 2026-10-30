@@ -79,3 +79,7 @@ flowchart LR
 2. 팀원이 이슈에서 피드백한다.
 3. 반영이 끝나면 PR로 merge하고 이슈를 close한다.
 4. merge된 문서는 Notion에도 올린다. 공유는 GitHub, 열람은 Notion에서 한다 (문서화 명세서 5장).
+
+## TypeScript/React 코드 문서화 주석
+
+공개 함수·타입·컴포넌트 및 복잡한 로직에는 [TSDoc 작성 규칙](Document/code-conventions.md)을 적용한다. 모든 내부 함수에 주석을 강제하지 않으며, 실제 코드의 책임·제약·오류 조건을 중심으로 설명한다. 기존 Swagger/OpenAPI와 게임 계약 문서의 역할을 유지한다.
