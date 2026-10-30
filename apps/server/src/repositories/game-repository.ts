@@ -1,8 +1,9 @@
+import type { PlayerColor } from "@cafe/game-contracts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { gameCommands, gamePlayers, games, moves } from "../db/schema/games.ts";
 
-export type Seat = "black" | "white";
+export type Seat = PlayerColor;
 
 export async function insertGame(
   db: Executor,

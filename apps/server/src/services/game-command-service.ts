@@ -1,43 +1,79 @@
+import type {
+  Cell,
+  GameCommandBase,
+  GameError,
+  GameSnapshot,
+  GameStatus,
+  GameType,
+  PlaceAction,
+  ResignAction,
+} from "@cafe/game-contracts";
 import type { Database, Executor } from "../db/client.ts";
 import * as repo from "../repositories/game-repository.ts";
 import type { Seat } from "../repositories/game-repository.ts";
 
-export type PlaceAction = { type: "place"; row: number; col: number };
-export type GameAction = PlaceAction | { type: "resign" };
+export type GameAction = PlaceAction | ResignAction;
+export type ErrorCode = GameError["code"];
+// Engines report only rule outcomes; every other code is decided here (IF-01).
+export type EngineErrorCode = Extract<
+  ErrorCode,
+  "INVALID_ACTION" | "GAME_FINISHED"
+>;
 
 export type Finish =
   | { outcome: "win"; winner: Seat; reason: string }
-  | { outcome: "draw"; reason: "draw" };
+  | { outcome: "draw"; reason: "draw" }
+  | { outcome: "void"; reason: string };
 
 // Decision returned by a game engine for one placement. The engine owns the
 // rules (C); this service owns locking, versioning and persistence (B).
 export type RuleDecision =
-  | { ok: false; code: string }
+  | { ok: false; code: EngineErrorCode }
   | { ok: true; nextTurn: Seat | null; finish?: Finish };
 
+export type StoredMove = { row: number; col: number; stone: string };
+
 export type GameRules = (input: {
-  moves: { row: number; col: number; stone: string }[];
+  moves: StoredMove[];
   seat: Seat;
   action: PlaceAction;
 }) => RuleDecision;
 
 // One engine per game type. The server, not the caller, decides which rules
 // version a new match uses, so only registered versions are ever stored.
-export type RegisteredRules = { version: string; rules: GameRules };
+// board() rebuilds the position from stored moves (Othello flips need rules).
+export type RegisteredRules = {
+  version: string;
+  rules: GameRules;
+  board: (moves: StoredMove[]) => Cell[][];
+};
 
-export type GameCommand = {
-  matchId: number;
+// The contract command plus the actor, which comes from authentication and
+// never from the client payload (IF-02).
+export type GameCommand = GameCommandBase & {
   userId: number;
-  commandId: string;
-  expectedVersion: number;
   action: GameAction;
 };
 
 export type CommandResult =
   | { status: "applied"; stateVersion: number; duplicate: boolean }
-  | { status: "rejected"; code: string; duplicate: boolean };
+  | { status: "rejected"; code: ErrorCode; duplicate: boolean };
+
+export type SystemFinish = {
+  matchId: number;
+  reason: "disconnect_timeout";
+  absentUserIds: number[];
+  expectedVersion: number;
+};
+
+export type SystemFinishResult =
+  { status: "finished"; stateVersion: number } | { status: "skipped" };
 
 const commandTypes = { place: "place", resign: "resign" } as const;
+const engineErrorCodes: readonly string[] = [
+  "INVALID_ACTION",
+  "GAME_FINISHED",
+] satisfies EngineErrorCode[];
 
 async function finishMatch(
   tx: Executor,
@@ -61,8 +97,8 @@ async function finishMatch(
   });
   for (const player of players) {
     const result =
-      finish.outcome === "draw"
-        ? "draw"
+      finish.outcome !== "win"
+        ? finish.outcome
         : player.userId === winnerUserId
           ? "win"
           : "loss";
@@ -80,19 +116,36 @@ export function voidUnfinishedGames(db: Database) {
 
 export function createGameCommandService(
   db: Database,
-  rulesByGameType: Record<string, RegisteredRules>,
+  rulesByGameType: Partial<Record<GameType, RegisteredRules>>,
 ) {
+  const registeredFor = (gameType: string) => {
+    const registered = rulesByGameType[gameType as GameType];
+    if (!registered) throw new Error(`No rules registered for ${gameType}.`);
+    return registered;
+  };
+
+  // One REPEATABLE READ snapshot, so stateVersion, players and moves always
+  // describe the same moment even if a command commits in between.
+  const getMatch = (matchId: number) =>
+    db.transaction(
+      async (tx) => {
+        const game = await repo.findGame(tx, matchId);
+        if (!game) return undefined;
+        const players = await repo.findPlayers(tx, matchId);
+        const history = await repo.findMoves(tx, matchId);
+        return { game, players, moves: history };
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
+
   return {
     // Starts a two-player match directly in "playing" (matchmaking is D's part).
     async createMatch(input: {
-      gameType: string;
+      gameType: GameType;
       blackUserId: number;
       whiteUserId: number;
     }) {
-      const registered = rulesByGameType[input.gameType];
-      if (!registered) {
-        throw new Error(`No rules registered for ${input.gameType}.`);
-      }
+      const registered = registeredFor(input.gameType);
       return db.transaction(async (tx) => {
         const game = await repo.insertGame(tx, {
           gameType: input.gameType,
@@ -151,7 +204,7 @@ export function createGameCommandService(
               }
             : {
                 status: "rejected",
-                code: previous.rejectCode!,
+                code: previous.rejectCode! as ErrorCode,
                 duplicate: true,
               };
         }
@@ -163,7 +216,7 @@ export function createGameCommandService(
           commandType: commandTypes[command.action.type],
           expectedVersion: command.expectedVersion,
         };
-        const reject = async (code: string): Promise<CommandResult> => {
+        const reject = async (code: ErrorCode): Promise<CommandResult> => {
           await repo.insertCommand(tx, {
             ...record,
             status: "rejected",
@@ -195,9 +248,7 @@ export function createGameCommandService(
           );
         } else {
           if (game.currentTurn !== seat) return reject("NOT_YOUR_TURN");
-          const registered = rulesByGameType[game.gameType];
-          if (!registered)
-            throw new Error(`No rules registered for ${game.gameType}.`);
+          const registered = registeredFor(game.gameType);
           // Startup voids every unfinished match, so a mismatch means the
           // engine changed without a restart: never apply other rules.
           if (registered.version !== game.rulesVersion) {
@@ -211,7 +262,15 @@ export function createGameCommandService(
             seat,
             action: command.action,
           });
-          if (!decision.ok) return reject(decision.code);
+          if (!decision.ok) {
+            // An unknown code is an engine bug, not a player error: roll back.
+            if (!engineErrorCodes.includes(decision.code)) {
+              throw new Error(
+                `Engine for ${game.gameType} returned unknown code ${decision.code}.`,
+              );
+            }
+            return reject(decision.code);
+          }
           await repo.insertMove(tx, {
             gameId: game.id,
             userId: command.userId,
@@ -249,21 +308,82 @@ export function createGameCommandService(
       });
     },
 
-    // Data the match layer (D) needs to build a GameSnapshot; board comes from
-    // replaying moves with the engine.
-    // One REPEATABLE READ snapshot, so stateVersion, players and moves always
-    // describe the same moment even if a command commits in between.
-    getMatch(matchId: number) {
-      return db.transaction(
-        async (tx) => {
-          const game = await repo.findGame(tx, matchId);
-          if (!game) return undefined;
-          const players = await repo.findPlayers(tx, matchId);
-          const history = await repo.findMoves(tx, matchId);
-          return { game, players, moves: history };
-        },
-        { isolationLevel: "repeatable read", accessMode: "read only" },
-      );
+    // Called by the match layer (D) when a disconnect budget runs out. Takes
+    // the same match lock as apply(), so a return or a last move that commits
+    // first wins and this call does nothing (status or version moved on).
+    finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
+      return db.transaction(async (tx) => {
+        const game = await repo.findGameForUpdate(tx, input.matchId);
+        if (!game) return { status: "skipped" };
+        const players = await repo.findPlayers(tx, game.id);
+        const absent = new Set(input.absentUserIds);
+        if (
+          absent.size === 0 ||
+          [...absent].some((id) => !players.some((p) => p.userId === id))
+        ) {
+          throw new Error(
+            `absentUserIds must be participants of match ${game.id}.`,
+          );
+        }
+        if (game.status !== "playing" && game.status !== "paused") {
+          return { status: "skipped" };
+        }
+        if (game.stateVersion !== input.expectedVersion) {
+          return { status: "skipped" };
+        }
+
+        const present = players.filter((p) => !absent.has(p.userId));
+        const finish: Finish =
+          present.length === 1
+            ? {
+                outcome: "win",
+                winner: present[0].seat as Seat,
+                reason: input.reason,
+              }
+            : { outcome: "void", reason: input.reason };
+        const nextVersion = game.stateVersion + 1;
+        await finishMatch(tx, game.id, players, finish, nextVersion);
+        return { status: "finished", stateVersion: nextVersion };
+      });
+    },
+
+    // Raw rows for checks that need them (participants, history).
+    getMatch,
+
+    // Server-confirmed state in the shared contract shape, for match.snapshot,
+    // reconnects and VERSION_CONFLICT details (IF-01, IF-05).
+    async getSnapshot(matchId: number): Promise<GameSnapshot | undefined> {
+      const match = await getMatch(matchId);
+      if (!match) return undefined;
+      const { game, players, moves } = match;
+      const userIdOf = (seat: string) =>
+        players.find((p) => p.seat === seat)!.userId;
+      const result =
+        game.status !== "finished"
+          ? null
+          : game.outcome === "win"
+            ? {
+                outcome: "win",
+                winnerId: game.winnerUserId,
+                reason: game.resultReason,
+              }
+            : {
+                outcome: game.outcome,
+                winnerId: null,
+                reason: game.resultReason,
+              };
+      // Values come from CHECK-constrained columns that mirror the contract.
+      return {
+        matchId: game.id,
+        gameType: game.gameType,
+        rulesVersion: game.rulesVersion,
+        stateVersion: game.stateVersion,
+        status: game.status as GameStatus,
+        players: { black: userIdOf("black"), white: userIdOf("white") },
+        board: registeredFor(game.gameType).board(moves),
+        currentPlayerId: game.currentTurn ? userIdOf(game.currentTurn) : null,
+        result,
+      } as GameSnapshot;
     },
   };
 }
