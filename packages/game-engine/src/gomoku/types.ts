@@ -22,7 +22,7 @@ export type GomokuMoveResult =
       error: GameError & { code: "INVALID_ACTION" | "GAME_FINISHED" };
     };
 
-// PR #11의 GameRules 입력/출력과 구조적으로 호환되는 엔진 연결 지점.
+// 서버 GameRules(game-command-service.ts) 입력/출력과 구조적으로 호환되는 엔진 연결 지점.
 export interface GomokuRulesInput {
   moves: readonly { row: number; col: number; stone: string }[];
   seat: PlayerColor;

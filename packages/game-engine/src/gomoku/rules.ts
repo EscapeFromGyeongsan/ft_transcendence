@@ -1,3 +1,4 @@
+import type { Cell } from "@cafe/game-contracts";
 import { applyMove } from "./apply-move.ts";
 import { createInitialState } from "./initial-state.ts";
 import type {
@@ -30,7 +31,14 @@ export function restoreState(moves: GomokuRulesInput["moves"]): GomokuState {
   return state;
 }
 
-// createGameCommandService(db, { gomoku: gomoku.rules })에 직접 등록한다.
+// 서버 snapshot의 판. 저장된 이력을 재생하므로 손상된 이력이면
+// restoreState와 같은 예외를 던진다.
+export function board(moves: GomokuRulesInput["moves"]): Cell[][] {
+  return restoreState(moves).board;
+}
+
+// 서버에는 board와 함께 등록한다:
+// createGameCommandService(db, { gomoku: { version, rules, board } })
 export function rules(input: GomokuRulesInput): GomokuRuleDecision {
   const result = applyMove(restoreState(input.moves), input.action, input.seat);
   if (!result.ok) return { ok: false, code: result.error.code };

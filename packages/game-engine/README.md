@@ -53,19 +53,25 @@ PR #6의 `769f809`는 전송용 `GomokuAction`에 기권(`ResignAction`)을 추�
 
 ## 팀 서버 저장 서비스 연결
 
-[PR #11](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/11)의 서비스가 있는 checkout에서 다음과 같이 등록한다.
+[PR #33](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/33)의 서비스(`RegisteredRules = { version, rules, board }`)가 있는 checkout에서 다음과 같이 등록한다.
 
 ```ts
 import { gomoku } from "@cafe/game-engine";
 import { createGameCommandService } from "./game-command-service.ts";
 
-const service = createGameCommandService(db, { gomoku: gomoku.rules });
-// createMatch의 rulesVersion에는 gomoku.GOMOKU_RULES_VERSION을 전달한다.
+const service = createGameCommandService(db, {
+  gomoku: {
+    version: gomoku.GOMOKU_RULES_VERSION,
+    rules: gomoku.rules,
+    board: gomoku.board,
+  },
+});
+// createMatch에는 rulesVersion을 넘기지 않는다. 서버가 등록된 version을 저장한다.
 ```
 
-`gomoku.rules({ moves, seat, action })`는 저장된 `{ row, col, stone }` 이력을 순서대로 재생하고 현재 착수를 처리한다. `GomokuRulesInput.action`도 `PlaceAction`이며 PR #11의 `GameRules` 입력과 호환된다. 성공 시 `{ ok: true, nextTurn, finish? }`, 실패 시 `{ ok: false, code }`를 반환한다. 호출자가 기록 순서와 인증된 참가자의 `seat`를 제공한다. 규칙 버전은 `gomoku-freestyle-v1`이며 호출 계층에서 지원 버전 여부를 확인한다.
+`gomoku.rules({ moves, seat, action })`는 저장된 `{ row, col, stone }` 이력을 순서대로 재생하고 현재 착수를 처리한다. `GomokuRulesInput.action`도 `PlaceAction`이며 서버의 `GameRules` 입력과 호환된다. 성공 시 `{ ok: true, nextTurn, finish? }`, 실패 시 `{ ok: false, code }`를 반환한다. 호출자가 기록 순서와 인증된 참가자의 `seat`를 제공한다. 규칙 버전은 `gomoku-freestyle-v1`이며 호출 계층에서 지원 버전 여부를 확인한다.
 
-`gomoku.restoreState(moves)`는 보드·차례·규칙상 종료 결과를 복원한다. 색·순서·좌표·중복 칸·종료 후 추가 착수가 잘못된 이력에는 예외를 던진다. 손상된 저장 이력을 현재 사용자의 불법 착수로 저장하지 않고 트랜잭션을 중단하기 위한 동작이다. 두 함수 모두 입력 이력을 수정하지 않는다.
+`gomoku.restoreState(moves)`는 보드·차례·규칙상 종료 결과를 복원한다. 색·순서·좌표·중복 칸·종료 후 추가 착수가 잘못된 이력에는 예외를 던진다. 손상된 저장 이력을 현재 사용자의 불법 착수로 저장하지 않고 트랜잭션을 중단하기 위한 동작이다. `gomoku.board(moves)`는 같은 재생 결과의 15×15 판만 돌려주며 서버 `getSnapshot`의 `board`로 쓰인다. 손상된 이력이면 같은 예외를 던진다. 세 함수 모두 입력 이력을 수정하지 않는다.
 
 기권·이탈·재시작 종료는 착수 기록만으로 복원할 수 없으므로 snapshot 구성 시 저장된 경기 상태·결과와 함께 사용해야 한다. 엔진 승자 색은 서버가 사용자 ID로 연결한다. PR #6의 `769f809`에서 전송 계약도 숫자 ID로 맞췄으며, 선행 PR 병합 후 해당 계약을 이 브랜치에 반영해야 한다. 엔진은 사용자·경기 ID를 다루지 않는다. 실제 WebSocket·UI 연결은 별도 통합 작업이다.
 
@@ -82,7 +88,7 @@ npm run build
 
 기권이 엔진에 잘못 전달되었을 때 상태를 보존하며 거절하는지도 두 입구에서 검사한다. 해당 테스트의 `@ts-expect-error`는 `npm run build`에서 기권 전달이 타입 오류인지 확인한다. 새 계약과의 호환성 실행 방법·결과는 [검증 기록](../../Document/gomoku-validation.md)의 2026-10-24 항목을 참조한다.
 
-PR #11의 저장 서비스·migration이 있는 checkout과 별도 `*_test` PostgreSQL DB를 준비한 뒤 실행한다. 현재 연결된 DB 이름도 검사하며, 기존 테이블을 비우지 않고 고유 QA 계정과 경기를 추가한다. `.env`는 자동으로 읽지 않는다.
+PR #33의 저장 서비스·migration이 있는 checkout과 별도 `*_test` PostgreSQL DB를 준비한 뒤 실행한다. 현재 연결된 DB 이름도 검사하며, 기존 테이블을 비우지 않고 고유 QA 계정과 경기를 추가한다. `.env`는 자동으로 읽지 않는다.
 
 ```bash
 TEST_DATABASE_URL='postgres://<user>:<password>@127.0.0.1:<port>/gomoku_engine_test' \

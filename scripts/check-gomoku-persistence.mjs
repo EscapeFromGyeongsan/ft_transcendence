@@ -1,4 +1,5 @@
-// Run against a checkout of PR #11 (or this repository after it is merged).
+// Run against a checkout of PR #33 (or this repository after it is merged);
+// its engine registration needs { version, rules, board }.
 // Uses a dedicated *_test database; creates uniquely named users and matches.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,7 @@ const servicePath = resolve(
   "apps/server/src/services/game-command-service.ts",
 );
 if (!existsSync(servicePath)) {
-  throw new Error("Pass the checkout path of PR #11 as the first argument.");
+  throw new Error("Pass the checkout path of PR #33 as the first argument.");
 }
 if (!process.env.TEST_DATABASE_URL)
   throw new Error("Set TEST_DATABASE_URL to a dedicated *_test database.");
@@ -41,7 +42,11 @@ try {
     migrationsFolder: resolve(serverRoot, "apps/server/drizzle"),
   });
   const service = createGameCommandService(database.db, {
-    gomoku: gomoku.rules,
+    gomoku: {
+      version: gomoku.GOMOKU_RULES_VERSION,
+      rules: gomoku.rules,
+      board: gomoku.board,
+    },
   });
   const ids = await database.db
     .insert(users)
@@ -57,7 +62,6 @@ try {
   const createMatch = () =>
     service.createMatch({
       gameType: "gomoku",
-      rulesVersion: gomoku.GOMOKU_RULES_VERSION,
       blackUserId: black,
       whiteUserId: white,
     });
@@ -127,6 +131,15 @@ try {
       "GAME_FINISHED",
     );
     await assertFinished(matchId, "win", 9, black);
+    const snapshot = await service.getSnapshot(matchId);
+    assert.equal(snapshot.rulesVersion, gomoku.GOMOKU_RULES_VERSION);
+    assert.deepEqual(snapshot.result, {
+      outcome: "win",
+      winnerId: black,
+      reason: "five_in_row",
+    });
+    assert.deepEqual(snapshot.board[0].slice(0, 5), Array(5).fill("black"));
+    assert.equal(snapshot.board.flat().filter(Boolean).length, 9);
   });
 
   await test("real engine: white win and restored winner color", async () => {

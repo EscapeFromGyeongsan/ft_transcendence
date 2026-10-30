@@ -95,6 +95,31 @@ describe("gomoku server rules adapter", () => {
     ).toEqual({ ok: false, code: "GAME_FINISHED" });
   });
 
+  it("rebuilds the snapshot board from stored moves", () => {
+    expect(gomoku.board([])).toEqual(
+      Array.from({ length: 15 }, () => Array(15).fill(null)),
+    );
+
+    const moves = Object.freeze(winningMoves.slice(0, 2));
+    const before = structuredClone(moves);
+    const board = gomoku.board(moves);
+    expect(board).toHaveLength(15);
+    expect(board.every((line) => line.length === 15)).toBe(true);
+    expect(board[0][0]).toBe("black");
+    expect(board[14][0]).toBe("white");
+    expect(board.flat().filter((cell) => cell !== null)).toHaveLength(2);
+    expect(moves).toEqual(before);
+  });
+
+  it("refuses to draw a board from corrupt history", () => {
+    expect(() =>
+      gomoku.board([
+        { row: 0, col: 0, stone: "black" },
+        { row: 0, col: 0, stone: "white" },
+      ]),
+    ).toThrow("Invalid gomoku history at move 2");
+  });
+
   it.each([
     [{ row: 0, col: 0, stone: "white" }],
     [{ row: 0, col: 0, stone: "other" }],
