@@ -20,7 +20,9 @@ flowchart LR
 
 ## 이슈
 
-포함 항목 (`Document/cyber_boardgame_documentation_spec.md` 26장):
+작은 단위의 작업은 [작업 이슈 템플릿](.github/ISSUE_TEMPLATE/task.md)을 사용한다. **작업 하나당 이슈 하나**를 원칙으로 하며, 제목은 `[영역] 할 일` 형식으로 작성한다. 본문에는 배경, 체크리스트 형태의 작업 내용, 선행 이슈를 적는다. 해당 항목이 없으면 `없음`으로 표시한다.
+
+큰 작업이나 마일스톤·요구사항 추적이 필요한 이슈에는 `Document/cyber_boardgame_documentation_spec.md` 26장의 상세 항목을 사용한다.
 
 - Title
 - Owner (assignee)
@@ -34,6 +36,7 @@ flowchart LR
 
 - 다른 팀원이 해야 할 작업을 발견하면 그 팀원을 assignee로 지정해 이슈를 만들어 넘긴다.
 - 막힌 점, 필요한 것도 이슈로 올린다.
+- 큰 작업은 상위 이슈로 두고, 실제 실행할 작업을 작은 하위 이슈로 연결한다.
 
 ## 마일스톤
 
@@ -47,7 +50,7 @@ flowchart LR
 
 ## PR
 
-포함 항목 (문서화 명세서 26장):
+PR 작성 시 [PR 템플릿](.github/pull_request_template.md)을 사용한다. 포함 항목 (문서화 명세서 26장):
 
 - Related Issue
 - Implementation Summary: 무엇을 개발했는지 알 수 있게 적는다
