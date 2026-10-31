@@ -80,7 +80,9 @@ describe("/api/ws without a database", () => {
   });
 
   test("closes 4401 when no auth message arrives in time", async () => {
-    app = await buildApp({}, undefined, { jwtSecret }, { authTimeoutMs: 50 });
+    app = await buildApp({}, undefined, { jwtSecret }, undefined, {
+      authTimeoutMs: 50,
+    });
     const socket = await connect(app);
     expect(await closed(socket)).toEqual({
       code: 4401,
