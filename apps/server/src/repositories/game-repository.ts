@@ -56,7 +56,11 @@ export function findPlayers(db: Executor, gameId: number) {
     .where(eq(gamePlayers.gameId, gameId));
 }
 
-// The user's unfinished match, if any (FR-MATCH-02: one active match each).
+/**
+ * 사용자가 참가한 끝나지 않은 경기 하나의 ID를 찾습니다. 없으면 `undefined`입니다.
+ *
+ * @remarks FR-MATCH-02에 따라 사용자당 진행 중 경기는 하나입니다.
+ */
 export async function findActiveGameIdForUser(db: Executor, userId: number) {
   const [row] = await db
     .select({ id: games.id })

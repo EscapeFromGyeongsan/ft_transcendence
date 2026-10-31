@@ -207,6 +207,9 @@ const rejectMessages: Record<ErrorCode, string> = {
  * commit하고 돌아온 뒤에만 전송합니다. 적용되면 요청자에게 `game.ack`, 구독자
  * 전체에 `game.updated`를 보내고, 거절되면 요청자에게만 `game.error`를
  * 보냅니다. 같은 `commandId` 재전송은 요청자에게만 응답합니다.
+ *
+ * `queue.join`/`queue.leave`는 자동 매칭 대기열({@link createMatchmaking})로
+ * 넘기고, 연결이 닫히면 그 연결의 대기 항목을 뺍니다.
  */
 export function registerRealtimeRoutes(
   app: FastifyInstance,
