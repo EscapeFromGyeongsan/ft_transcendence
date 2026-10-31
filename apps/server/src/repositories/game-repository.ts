@@ -56,6 +56,22 @@ export function findPlayers(db: Executor, gameId: number) {
     .where(eq(gamePlayers.gameId, gameId));
 }
 
+// The user's unfinished match, if any (FR-MATCH-02: one active match each).
+export async function findActiveGameIdForUser(db: Executor, userId: number) {
+  const [row] = await db
+    .select({ id: games.id })
+    .from(gamePlayers)
+    .innerJoin(games, eq(games.id, gamePlayers.gameId))
+    .where(
+      and(
+        eq(gamePlayers.userId, userId),
+        inArray(games.status, ["waiting", "playing", "paused"]),
+      ),
+    )
+    .limit(1);
+  return row?.id;
+}
+
 export function findMoves(db: Executor, gameId: number) {
   return db
     .select({

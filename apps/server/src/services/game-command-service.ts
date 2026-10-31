@@ -350,6 +350,11 @@ export function createGameCommandService(
     // Raw rows for checks that need them (participants, history).
     getMatch,
 
+    // Unfinished match of the user, for matchmaking and reconnects (D).
+    findActiveMatchId(userId: number) {
+      return repo.findActiveGameIdForUser(db, userId);
+    },
+
     // Server-confirmed state in the shared contract shape, for match.snapshot,
     // reconnects and VERSION_CONFLICT details (IF-01, IF-05).
     async getSnapshot(matchId: number): Promise<GameSnapshot | undefined> {

@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
+import type { GameType } from "@cafe/game-contracts";
 import type { WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
 import type { AuthService } from "../services/auth-service.ts";
 import type { ConnectionRegistry } from "../services/connection-registry.ts";
+import { createMatchmaking } from "../services/matchmaking.ts";
 import type {
   ErrorCode,
   GameAction,
@@ -81,6 +83,10 @@ function isMatchId(value: unknown): value is number {
 }
 
 const gameTypes: readonly unknown[] = ["gomoku", "othello"];
+
+function isGameType(value: unknown): value is GameType {
+  return gameTypes.includes(value);
+}
 // game_commands.command_id is a uuid column.
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -109,7 +115,7 @@ export function parseCommand(
   const action = parseAction(payload.action);
   if (
     !isMatchId(matchId) ||
-    !gameTypes.includes(gameType) ||
+    !isGameType(gameType) ||
     typeof commandId !== "string" ||
     !uuidPattern.test(commandId) ||
     !Number.isSafeInteger(expectedVersion) ||
@@ -145,6 +151,51 @@ export function registerRealtimeRoutes(
   config: RealtimeConfig = {},
 ) {
   const authTimeoutMs = config.authTimeoutMs ?? 5000;
+  const matchmaking = createMatchmaking({
+    getGames,
+    send: (socket, type, payload) => send(socket, type, payload),
+    onError: (error) => app.log.error({ err: error }, "Matchmaking failed."),
+  });
+
+  async function joinQueue(
+    socket: WebSocket,
+    userId: number,
+    { requestId, payload }: Envelope,
+  ) {
+    const { gameType } = payload;
+    if (!isGameType(gameType)) {
+      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid gameType.");
+      return;
+    }
+    const result = await matchmaking.join(userId, socket, gameType);
+    if (result === "joined") {
+      send(socket, "queue.joined", { gameType }, requestId);
+    } else if (result === "ALREADY_ACTIVE") {
+      sendError(
+        socket,
+        requestId,
+        "ALREADY_ACTIVE",
+        "Already queued or playing a match.",
+      );
+    }
+  }
+
+  function leaveQueue(
+    socket: WebSocket,
+    userId: number,
+    { requestId }: Envelope,
+  ) {
+    if (matchmaking.leave(userId) === "ALREADY_MATCHED") {
+      sendError(
+        socket,
+        requestId,
+        "ALREADY_MATCHED",
+        "A match is being created for you.",
+      );
+      return;
+    }
+    send(socket, "queue.left", {}, requestId);
+  }
 
   // Only participants may subscribe. The socket joins the match before the
   // snapshot is read, so an update committed in between is still delivered;
@@ -284,6 +335,7 @@ export function registerRealtimeRoutes(
 
       socket.on("close", () => {
         clearTimeout(authTimer);
+        matchmaking.removeSocket(socket);
         if (claims) connections.remove(claims.sessionId, socket);
       });
 
@@ -347,6 +399,12 @@ export function registerRealtimeRoutes(
               return;
             case "game.command":
               await command(socket, claims.userId, message);
+              return;
+            case "queue.join":
+              await joinQueue(socket, claims.userId, message);
+              return;
+            case "queue.leave":
+              leaveQueue(socket, claims.userId, message);
               return;
             default:
               sendError(
