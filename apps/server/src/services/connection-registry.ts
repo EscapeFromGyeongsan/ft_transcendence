@@ -12,9 +12,15 @@ function deleteFrom<K, V>(map: Map<K, Set<V>>, key: K, value: V) {
   if (values?.size === 0) map.delete(key);
 }
 
-// Authenticated WebSocket connections by server session, so revoking a
-// session (logout) can close every socket opened with its tokens, and by
-// match, so a match's messages reach only the sockets subscribed to it.
+/**
+ * 인증된 WebSocket 연결을 서버 세션별·경기별로 보관하는 목록을 만듭니다.
+ *
+ * @remarks
+ * 세션별 목록은 세션이 폐기될 때(로그아웃) 그 세션의 연결을 모두 닫는 데,
+ * 경기별 목록은 경기 메시지를 그 경기를 구독한 연결에만 보내는 데 씁니다.
+ * 경기·사용자별 입력 권한 연결과 경기별 마지막 전송 버전도 함께 관리합니다.
+ * 메모리에만 있으며 API 인스턴스 1개를 전제합니다.
+ */
 export function createConnectionRegistry() {
   const bySession = new Map<string, Set<WebSocket>>();
   const byMatch = new Map<number, Set<WebSocket>>();
@@ -37,11 +43,15 @@ export function createConnectionRegistry() {
   }
 
   return {
+    /** 인증에 성공한 연결을 세션에 등록합니다. */
     add(sessionId: string, socket: WebSocket) {
       addTo(bySession, sessionId, socket);
     },
 
-    // Called when the socket closes: drops it from every match as well.
+    /**
+     * 닫힌 연결을 목록에서 뺍니다. 연결의 `close` 이벤트에서 호출하며,
+     * 그 연결의 경기 구독과 입력 권한도 모두 해제합니다.
+     */
     remove(sessionId: string, socket: WebSocket) {
       deleteFrom(bySession, sessionId, socket);
       for (const matchId of matchesOf.get(socket) ?? []) {
@@ -49,14 +59,27 @@ export function createConnectionRegistry() {
       }
     },
 
+    /**
+     * 세션의 연결을 모두 닫고 목록에서 지웁니다.
+     *
+     * @param code - WebSocket close code (로그아웃은 4401)
+     */
     closeSession(sessionId: string, code: number, reason: string) {
       const sockets = bySession.get(sessionId);
       bySession.delete(sessionId);
       for (const socket of sockets ?? []) socket.close(code, reason);
     },
 
-    // Subscribes the socket and makes it the user's control connection for
-    // the match. Returns the previous control socket, if it was another one.
+    /**
+     * 연결을 경기 구독자로 등록하고, 그 사용자의 입력 권한 연결로 정합니다.
+     *
+     * @returns 입력 권한을 잃은 이전 연결. 없거나 같은 연결이면 `undefined`
+     *
+     * @remarks
+     * FR-MATCH-02: 경기·사용자마다 마지막으로 구독한 연결 하나만 명령을 보낼 수
+     * 있습니다. 이전 연결은 구독을 유지해 갱신은 계속 받습니다. 참가자 확인은
+     * 호출하는 쪽에서 먼저 합니다.
+     */
     subscribe(matchId: number, userId: number, socket: WebSocket) {
       addTo(byMatch, matchId, socket);
       addTo(matchesOf, socket, matchId);
@@ -67,19 +90,29 @@ export function createConnectionRegistry() {
       return previous === socket ? undefined : previous;
     },
 
+    /** 경기 구독과 그 연결의 입력 권한을 해제합니다. 구독하지 않은 연결이면 변화가 없습니다. */
     unsubscribe,
 
     isSubscribed(matchId: number, socket: WebSocket) {
       return byMatch.get(matchId)?.has(socket) ?? false;
     },
 
+    /** 이 연결이 해당 사용자의 경기 입력 권한 연결인지 확인합니다. */
     isController(matchId: number, userId: number, socket: WebSocket) {
       return controllers.get(matchId)?.get(userId) === socket;
     },
 
-    // Sends one serialized message to every socket subscribed to the match,
-    // unless a state at least this new was already sent. Returns whether it
-    // was sent.
+    /**
+     * 경기 상태 갱신을 한 번만 직렬화해 경기 구독자 전체에 보냅니다.
+     *
+     * @param stateVersion - 메시지에 담긴 snapshot의 버전
+     * @returns 보냈으면 `true`. 구독자가 없거나 같거나 높은 버전을 이미 보냈으면 `false`
+     *
+     * @remarks
+     * `apply()` 결과가 돌아오는 순서는 commit 순서와 다를 수 있습니다. 경기마다
+     * 마지막으로 보낸 버전을 기억해, 버전이 줄어드는 갱신을 보내지 않습니다
+     * (SDS 12번). 다른 경기의 구독자에게는 보내지 않습니다.
+     */
     broadcastUpdate(matchId: number, stateVersion: number, message: object) {
       const sockets = byMatch.get(matchId);
       if (!sockets || stateVersion <= (sentVersions.get(matchId) ?? -1)) {
