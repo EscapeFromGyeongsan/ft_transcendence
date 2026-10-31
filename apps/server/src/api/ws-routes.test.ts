@@ -7,6 +7,7 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
@@ -16,7 +17,11 @@ import {
   createGameCommandService,
   type RegisteredRules,
 } from "../services/game-command-service.ts";
-import { parseCommand, parseEnvelope } from "./ws-routes.ts";
+import {
+  parseCommand,
+  parseEnvelope,
+  type RealtimeConfig,
+} from "./ws-routes.ts";
 import {
   openTestDatabase,
   resetTestDatabase,
@@ -238,7 +243,7 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     expect(reply).toEqual({
       type: "auth.ok",
       requestId: "a1",
-      payload: { userId: 1 },
+      payload: { userId: 1, activeMatchId: null },
     });
 
     const pong = nextMessage(socket);
@@ -620,6 +625,133 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
         payload: {},
       });
       socket.terminate();
+    });
+  });
+
+  describe("disconnects and reconnects", () => {
+    let matchId: number;
+    let tokens: string[];
+
+    // Rebuilds the app with short timings; p1 (black) vs p2.
+    async function start(config: RealtimeConfig) {
+      await app.close();
+      app = await buildApp(
+        {},
+        testDatabaseUrl,
+        { jwtSecret },
+        undefined,
+        config,
+        { gomoku: stubGomoku },
+      );
+      tokens = [await loginToken(1), await loginToken(2)];
+      matchId = await createGameCommandService(database.db, {
+        gomoku: stubGomoku,
+      }).createMatch({ gameType: "gomoku", blackUserId: 1, whiteUserId: 2 });
+    }
+
+    async function player(token: string) {
+      const { socket, reply } = await authenticated(token);
+      const next = inbox(socket);
+      sendJson(socket, { type: "match.subscribe", payload: { matchId } });
+      expect(await next()).toMatchObject({ type: "match.snapshot" });
+      return { socket, next, reply };
+    }
+
+    test("auth.ok points a returning player to the unfinished match", async () => {
+      await start({});
+      const { reply } = await authenticated(tokens[0]);
+      expect(reply).toMatchObject({
+        type: "auth.ok",
+        payload: { userId: 1, activeMatchId: matchId },
+      });
+    });
+
+    test("the opponent hears about a leave and a return", async () => {
+      await start({});
+      const p1 = await player(tokens[0]);
+      const p2 = await player(tokens[1]);
+
+      p1.socket.terminate();
+      expect(await p2.next()).toEqual({
+        type: "player.disconnected",
+        payload: { matchId, userId: 1, remainingMs: expect.any(Number) },
+      });
+
+      const back = await player(tokens[0]);
+      expect(await p2.next()).toMatchObject({
+        type: "player.reconnected",
+        payload: { matchId, userId: 1 },
+      });
+      back.socket.terminate();
+      p2.socket.terminate();
+    });
+
+    test("running out of absence time hands the win to the opponent", async () => {
+      await start({ absenceBudgetMs: 300 });
+      const p1 = await player(tokens[0]);
+      const p2 = await player(tokens[1]);
+
+      p1.socket.terminate();
+      expect(await p2.next()).toMatchObject({ type: "player.disconnected" });
+      expect(await p2.next()).toMatchObject({
+        type: "game.updated",
+        payload: {
+          status: "finished",
+          stateVersion: 1,
+          result: { outcome: "win", winnerId: 2, reason: "disconnect_timeout" },
+        },
+      });
+      p2.socket.terminate();
+    });
+
+    test("a silent connection is cut by the heartbeat", async () => {
+      await start({ heartbeatIntervalMs: 50, heartbeatTimeoutMs: 150 });
+      const p1 = await player(tokens[0]);
+      const p2 = await player(tokens[1]);
+      // Stop answering ping frames, like a dropped network.
+      p1.socket.pong = () => {};
+      const close = closed(p1.socket);
+
+      expect(await p2.next()).toMatchObject({
+        type: "player.disconnected",
+        payload: { userId: 1 },
+      });
+      expect((await close).code).toBe(1006);
+      p2.socket.terminate();
+    });
+
+    test("matched players who never show up void the match", async () => {
+      // p3·p4 are matched through the queue and never subscribe.
+      await start({ absenceBudgetMs: 300 });
+      const games = createGameCommandService(database.db, {
+        gomoku: stubGomoku,
+      });
+      const pair = [];
+      for (const n of [3, 4]) {
+        const { socket } = await authenticated(await loginToken(n));
+        const next = inbox(socket);
+        sendJson(socket, {
+          type: "queue.join",
+          payload: { gameType: "gomoku" },
+        });
+        await next();
+        pair.push({ socket, next });
+      }
+      const matched = (await pair[0].next()) as {
+        payload: { matchId: number };
+      };
+      for (const { socket } of pair) socket.terminate();
+
+      await vi.waitFor(
+        async () =>
+          expect(
+            await games.getSnapshot(matched.payload.matchId),
+          ).toMatchObject({
+            status: "finished",
+            result: { outcome: "void", reason: "disconnect_timeout" },
+          }),
+        { timeout: 3000, interval: 100 },
+      );
     });
   });
 });

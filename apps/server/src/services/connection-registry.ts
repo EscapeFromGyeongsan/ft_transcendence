@@ -97,6 +97,11 @@ export function createConnectionRegistry() {
       return byMatch.get(matchId)?.has(socket) ?? false;
     },
 
+    /** 연결이 구독 중인 경기 ID 목록입니다. 연결을 닫기 전에 읽습니다. */
+    matchesOf(socket: WebSocket) {
+      return [...(matchesOf.get(socket) ?? [])];
+    },
+
     /** 이 연결이 해당 사용자의 경기 입력 권한 연결인지 확인합니다. */
     isController(matchId: number, userId: number, socket: WebSocket) {
       return controllers.get(matchId)?.get(userId) === socket;
@@ -122,6 +127,15 @@ export function createConnectionRegistry() {
       const data = JSON.stringify(message);
       for (const socket of sockets) socket.send(data);
       return true;
+    },
+
+    /**
+     * 경기 상태와 무관한 이벤트(이탈·복귀 알림 등)를 경기 구독자 전체에
+     * 보냅니다. 버전 순서 검사를 하지 않습니다.
+     */
+    broadcastEvent(matchId: number, message: object) {
+      const data = JSON.stringify(message);
+      for (const socket of byMatch.get(matchId) ?? []) socket.send(data);
     },
   };
 }

@@ -29,6 +29,8 @@ export type LeaveResult = "left" | "ALREADY_MATCHED";
  * @param deps.send - 매칭 결과·오류를 연결에 보내는 함수
  * @param deps.onError - `createMatch()` 실패를 기록하는 함수
  * @param deps.random - 흑·백 배정에 쓰는 난수. 테스트에서 고정할 때 넘깁니다.
+ * @param deps.onMatched - 경기가 만들어진 직후, 알림을 보내기 전에 호출됩니다.
+ *   이탈 시계 시작에 씁니다.
  *
  * @remarks
  * 게임 종류별로 먼저 온 순서대로 두 명씩 짝을 짓고, 색은 무작위로 정해
@@ -48,6 +50,7 @@ export function createMatchmaking(deps: {
   send: (socket: WebSocket, type: string, payload: object) => void;
   onError: (error: unknown) => void;
   random?: () => number;
+  onMatched?: (matchId: number, userIds: number[]) => void;
 }) {
   const random = deps.random ?? Math.random;
   const queues = new Map<GameType, Entry[]>();
@@ -77,6 +80,7 @@ export function createMatchmaking(deps: {
         blackUserId: black.userId,
         whiteUserId: white.userId,
       });
+      deps.onMatched?.(matchId, [black.userId, white.userId]);
       for (const entry of pair) {
         dequeue(entry);
         deps.send(entry.socket, "queue.matched", {
