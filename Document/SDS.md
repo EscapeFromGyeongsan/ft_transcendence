@@ -294,7 +294,7 @@ flowchart TD
 | REST 오류 | `error.code`로 분기. 401은 refresh 1회 후 로그인 화면, 403 `RECORDS_PRIVATE`는 "비공개 전적", 429는 잠시 후 재시도, 5xx는 500 화면 또는 토스트 |
 | 게임 오류 | `game.error`의 `code`로 분기. `VERSION_CONFLICT`는 최신 snapshot으로 다시 그림, 그 외는 토스트 |
 | 연결 끊김 | 대국 화면 상단 배너 "재연결 중", 입력 비활성. 상대 끊김은 남은 유예 시간 배너 |
-| 오래된 갱신 | 받은 `stateVersion`이 현재보다 작거나 같으면 무시 |
+| 오래된 갱신 | `game.updated`의 `stateVersion`이 현재보다 작거나 같으면 무시. `match.snapshot`은 버전과 관계없이 상태를 통째로 교체 (2.6의 13번) |
 | 위험 동작 (기권·로그아웃·2FA 해제) | 확인 모달. 버튼은 outline, 확인 단계에서만 강조색 |
 
 - 토큰 보관(제안): access token은 메모리에만 두고, refresh token은 `localStorage`에 둔다(로그인 유지). XSS 시 탈취 위험이 있으므로 CSP와 입력 escape를 같이 적용한다. HttpOnly cookie로 바꾸면 CSRF 대책이 필요하다(5장 미결정).
@@ -814,7 +814,7 @@ flowchart TD
 
 #### 9. WebSocket contract (D)
 
-`B 초안` (D 확인). 이벤트 이름은 이슈 #16~#20을 따른다. 문서화 명세 19장의 대문자 이름(`PLACE_STONE` 등)은 쓰지 않는다. payload 타입은 [contracts.md](contracts.md)(PR #6)를 그대로 쓴다.
+`B 초안`, D 확인(PR #34 리뷰). envelope·첫 메시지 인증·이벤트 이름은 #41·#42·#43에 구현됐다. 이벤트 이름은 이슈 #16~#20을 따른다. 문서화 명세 19장의 대문자 이름(`PLACE_STONE` 등)은 쓰지 않는다. payload 타입은 [contracts.md](contracts.md)(PR #6)를 그대로 쓴다.
 
 Endpoint: `wss://<host>/api/ws` (Nginx가 upgrade 전달, #28).
 
@@ -831,24 +831,40 @@ type Envelope<T> = {
 | 방향 | 이벤트 | payload | 서버 처리 | B 연결 지점 |
 |---|---|---|---|---|
 | C→S | `auth` | `{ accessToken }` | 연결 후 5초 안에 첫 메시지로 받음. 없거나 실패면 close 4401. URL query에 토큰을 넣지 않음(로그 노출) | `AuthService.authenticate()` |
-| S→C | `auth.ok` | `{ userId, activeMatchId: number \| null }` | 진행 중 경기가 있으면 화면이 대국으로 이동 | 참가 위치 (아래 FSM) |
-| C→S | `ping` / S→C `pong` | `{}` | 10초마다. 20초 동안 아무 메시지가 없으면 서버가 끊긴 것으로 처리 | - |
+| S→C | `auth.ok` | `{ userId, activeMatchId: number \| null }` | 진행 중 경기가 있으면 화면이 대국으로 이동. 클라이언트는 `auth.ok`를 받은 뒤에 다음 메시지를 보낸다. 인증 처리 중 다른 메시지가 오면 4401 | 참가 위치 (아래 FSM). `activeMatchId`는 #19·#20에서 채움 |
+| S→C | WebSocket ping frame | - | 서버가 10초마다 보낸다. 브라우저가 자동으로 pong을 보내므로 A 코드는 필요 없음. 마지막 pong·메시지 후 20초 동안 응답이 없으면 끊는다 | - |
+| C→S | `ping` / S→C `pong` | `{}` | 클라이언트가 서버 끊김을 감지하는 용도. 서버의 끊김 판정에는 쓰지 않아도 됨(ping frame이 담당) | - |
 | C→S | `queue.join` / `queue.leave` | `{ gameType }` / `{}` | 참가 위치가 없을 때만 대기열 등록 | - |
 | S→C | `queue.matched` | `{ matchId, gameType }` | 두 명 성립 시 양쪽에 전송 | `createMatch()` |
 | C→S | `invite.send` | `{ friendUserId, gameType }` | 수락된 친구, 둘 다 참가 위치 없음 | 친구 확인(E) |
 | S→C | `invite.received` | `{ inviteId, fromUserId, gameType, expiresAt }` | 받는 사람의 모든 연결에 전송 | - |
 | C→S | `invite.accept` / `invite.decline` / `invite.cancel` | `{ inviteId }` | 수락 시 경기 생성. 만료·취소·이미 참가 중이면 `invite.error` | `createMatch()` |
 | S→C | `invite.updated` | `{ inviteId, status }` | 보낸 사람·받은 사람 모두 | - |
-| C→S | `match.subscribe` / `match.unsubscribe` | `{ matchId }` | 참가자만 구독. 구독 즉시 snapshot 전송 | `getMatch()`, `getSnapshot()` |
+| C→S | `match.subscribe` / `match.unsubscribe` | `{ matchId }` | 참가자만 구독. 구독 즉시 snapshot 전송. 실패는 `error` (`NOT_FOUND`, `NOT_PARTICIPANT`) | `getMatch()`, `getSnapshot()` |
+| S→C | `match.unsubscribed` | `{ matchId }` | `match.unsubscribe` 응답. 요청의 `requestId`를 돌려줌 | - |
 | S→C | `match.snapshot` | `GomokuSnapshot \| OthelloSnapshot` | 구독·재접속·`VERSION_CONFLICT` 때 | `getSnapshot()` |
 | C→S | `game.command` | `GomokuCommand \| OthelloCommand` (`userId` 없음) | 런타임 검증 후 인증된 `userId`를 붙여 호출 | `apply()` |
+| S→C | `game.ack` | `{ matchId, commandId, stateVersion, duplicate }` | 요청자에게만. 결과가 `applied`일 때 보내고 요청의 `requestId`를 돌려줌. 중복 재전송이면 `duplicate: true` | `apply()` 결과 |
 | S→C | `game.updated` | 최신 snapshot | **commit 후**, `applied`이고 `duplicate: false`일 때만 구독자 전체에 | `apply()` 결과 |
-| S→C | `game.error` | `GameError` + `{ matchId, commandId }` | 요청자에게만. 중복 재전송의 최초 결과도 요청자에게만 | `CommandResult.code` |
+| S→C | `game.error` | `GameError` + `{ matchId, commandId }` | 결과가 `rejected`일 때 요청자에게만. 중복 재전송의 최초 거절도 요청자에게만 | `CommandResult.code` |
+| S→C | `error` | `{ code, message, matchId? }` | `game.command` 결과 외의 모든 오류. 요청의 `requestId`를 돌려줌. 코드: `UNSUPPORTED_MESSAGE`(모르는 `type`), `INVALID_MESSAGE`(payload 검증 실패), `NOT_FOUND`·`NOT_PARTICIPANT`(`match.subscribe` 실패, `GameError` 코드 그대로), `INTERNAL_ERROR`(처리 중 예외) | - |
 | S→C | `player.disconnected` / `player.reconnected` | `{ matchId, userId, remainingMs }` | 상대에게 | - |
 | S→C | `presence` | `{ userId, online }` | 친구에게 (사용자의 연결 수 0 ↔ 1 이상 변화 때) | 친구 목록(E) |
 | S→C | `session.replaced` | `{ matchId }` | 같은 사용자의 새 연결이 경기 제어를 가져가면 이전 연결에 전송 | - |
 
-- 세션 폐기(로그아웃·refresh 재사용 감지) 시: 해당 세션으로 인증된 연결을 close 4401로 닫는다. 연결마다 `sessionId`를 들고 있고, 로그아웃 처리 후 `GameSessionManager`에 알린다.
+Close code:
+
+| code | 상황 |
+|---|---|
+| 4401 | 5초 안에 인증 없음, 토큰 무효·만료, 첫 메시지가 `auth`가 아님, 인증 처리 중 다른 메시지, 세션 폐기 |
+| 4400 | JSON이 아님, envelope 형식 오류, binary 메시지 |
+| 1011 | 서버 내부 오류 (인증 확인 중 DB 장애 등) |
+
+- 세션 폐기 시 해당 세션으로 인증된 연결을 close 4401 `Session ended.`로 닫는다. 연결마다 `sessionId`를 들고 있다.
+  - 로그아웃: 로그아웃 처리 후 연결 관리(D)가 닫는다(#41).
+  - refresh token 재사용 감지: `refresh()` 트랜잭션 안에서 일어나므로 `createAuthService`의 `onSessionRevoked(sessionId)` 콜백으로 commit 후에 알린다(B).
+- access token(30분)은 연결할 때만 확인한다. 경기 중에 만료돼도 연결은 유지한다. 연결 종료 사유는 세션 폐기뿐이다.
+- 같은 경기의 명령은 행 잠금으로 순서가 정해지지만 `apply()` 결과가 돌아오는 순서는 보장되지 않는다. 서버는 경기마다 마지막으로 보낸 `stateVersion`을 기억하고, 같은 경기에서 `stateVersion`이 줄어드는 갱신은 보내지 않는다(#18).
 - 같은 사용자의 연결이 여러 개(탭·기기)여도 경기 명령을 보낼 수 있는 연결은 하나다(FR-MATCH-02). 마지막으로 `match.subscribe`한 연결이 제어권을 가진다. 이전 연결은 `session.replaced`를 받고 입력을 비활성화한다. 이 연결이 보낸 `game.command`는 거절한다. 두 연결 모두 같은 사용자이므로 이탈 시간은 연결이 하나라도 있으면 흐르지 않는다.
 - 이벤트 단위 재전송은 하지 않는다. 누락은 snapshot으로 복구한다(#19).
 
@@ -1072,15 +1088,16 @@ flowchart LR
 
 #### 13. Reconnection design (D)
 
-`B 초안` (D 확인). DEC-03(사용자별 경기 내 누적 이탈 60초)과 DEC-07(재시작 시 미완료 경기 무효)을 따른다. 저장 경로 `finishBySystem()`은 `구현됨`(2.10.28).
+`B 초안`, D 확인(PR #34 리뷰). DEC-03(사용자별 경기 내 누적 이탈 60초)과 DEC-07(재시작 시 미완료 경기 무효)을 따른다. 저장 경로 `finishBySystem()`은 `구현됨`(2.10.28).
 
 | 항목 | 설계 |
 |---|---|
-| 끊김 감지 | WebSocket close 이벤트는 즉시. close 없이 끊긴 경우는 20초 동안 메시지(`ping` 포함)가 없으면 끊김으로 본다. 최대 감지 지연 20초 |
+| 끊김 감지 | WebSocket close 이벤트는 즉시. close 없이 끊긴 경우는 서버 ping frame(10초 주기)에 대한 pong·메시지가 마지막 응답 후 20초 동안 없으면 끊김으로 본다. 최대 감지 지연 20초 |
 | 이탈 판정 단위 | 사용자. 그 경기에 대한 사용자의 연결이 0개가 되는 순간 이탈 시작, 1개 이상이 되는 순간 이탈 끝 |
 | 누적 시계 저장 | 메모리 (`GameSessionManager`, 경기별 `Map<userId, { usedMs, since }>`). 재시작하면 경기가 void가 되므로 DB에 둘 필요 없음 |
+| 이탈 시작 시각 (`since`) | close 없이 끊긴 경우 "마지막으로 응답한 시각". 감지까지 걸린 시간도 예산에서 빠지므로 실제 허용 시간이 60초를 넘지 않는다 |
 | 만료 시각 | `since + (60000 - usedMs)`에 타이머. 복귀하면 타이머 취소, `usedMs`에 더함 |
-| 상태 전환 | 한 명이라도 이탈 중이면 `paused`, 모두 복귀하면 `playing`. 전환은 `stateVersion`을 올리지 않는다(5장 미결정에서 제안) |
+| 상태 전환 | 한 명이라도 이탈 중이면 `paused`, 모두 복귀하면 `playing`. 전환은 `stateVersion`을 올리지 않는다. 그래서 같은 버전의 snapshot이 `playing`·`paused` 두 상태로 나올 수 있다. `match.snapshot`은 버전과 관계없이 클라이언트 상태를 통째로 교체하고, 일시정지·복귀는 `player.disconnected`·`player.reconnected`로만 알린다 |
 | 양쪽 부재 | 각자 시계가 따로 흐른다. 먼저 만료된 시점에 아직 상대도 부재면 `absentUserIds`에 둘 다 넣어 void |
 | 만료와 착수·복귀 경합 | `finishBySystem({ expectedVersion })`이 경기 행 잠금 후 버전을 비교한다. 먼저 commit된 쪽이 이기고 나머지는 `skipped` |
 | 기기 전환 | 새 연결이 `match.subscribe`하면 그 연결이 제어권을 받는다(9번). 이전 연결이 살아 있어도 이탈은 없음 |
@@ -1119,7 +1136,7 @@ sequenceDiagram
 ```
 
 - 종료 경로도 착수와 같은 경기 행 잠금을 쓴다. 이탈 만료와 마지막 착수가 겹쳐도 결과는 하나만 확정된다.
-- `paused` 전환을 `games.status`에 저장하는 이유: 그 사이 들어온 착수를 `apply()`가 `GAME_NOT_ACTIVE`로 거절하게 하기 위해서다. 이 갱신에 필요한 repository 함수(상태만 바꾸는 `setStatus`)는 B가 추가한다.
+- `paused` 전환을 `games.status`에 저장하는 이유: 그 사이 들어온 착수를 `apply()`가 `GAME_NOT_ACTIVE`로 거절하게 하기 위해서다. 이 갱신은 `GameCommandService.setStatus(matchId, from, to)`(B)를 쓴다. 현재 상태가 `from`일 때만 바꾸고 바꿨는지를 돌려준다. 그래서 경기 종료 직후 들어온 이탈 처리가 `finished`를 덮어쓰지 않는다.
 
 ---
 
@@ -1989,9 +2006,10 @@ flowchart TD
 | 2FA 켜기·끄기 시 기존 세션 처리 | 현재 유지. 팀 의견 | DEC-04 |
 | refresh token 전달 방식 | 현재 body. B 초안은 클라이언트 `localStorage` 보관(2.2). HttpOnly cookie로 바꿀지 (바꾸면 CSRF 대책 추가) | DEC-04, A |
 | 메일 소유 확인·비밀번호 복구·이메일 변경 | 학교 요건 확인 후 결정 | DEC-04, DEC-11 |
-| WebSocket 라이브러리 | D (`@fastify/websocket` 제안). 토큰 전달·heartbeat·이벤트는 B 초안(2.5의 9번) | 문서화 명세 19장 |
+| WebSocket 라이브러리 | 결정: `@fastify/websocket`(#41). 토큰 전달·heartbeat·이벤트는 2.5의 9번 | 문서화 명세 19장 |
 | 준비·시작 절차, 색상 배정, 초대 유효기간 | B 초안: 준비 단계 없음, 매칭 무작위·초대는 보낸 사람 흑, 초대 60초 (2.7). D, A 확인 | DEC-06 |
-| 이탈 시간 저장 위치·감지 지연 | B 초안: 메모리, 최대 20초 (2.6의 13번). D 확인. `paused`·복귀 전환 시 `stateVersion`을 올릴지 | DEC-03, DEC-07 |
+| 이탈 시간 저장 위치·감지 지연 | 결정: 메모리, 최대 20초, `paused`·복귀 전환 시 `stateVersion`을 올리지 않음 (2.6의 13번) | DEC-03, DEC-07 |
+| 초대(`invite.*`)·`presence` 담당 | #16~#20에 초대 이슈가 없음. D가 맡을지 이슈를 따로 만들지, `presence`를 E와 어떻게 나눌지 | FR-ROOM, FR-SOC-03 |
 | 아바타 저장 위치 | B (PNG/JPEG 2MiB 이하 제안) | DEC-05 |
 | 전적 비공개, 탈퇴 표시·닉네임 스냅샷, 경기 기록 보존 기간 | B, A. 보존 기간은 B 제안 영구 보존(2.10.27) | DEC-05, DEC-09 |
 | 같은 commandId·다른 payload | payload 해시 저장 후 불일치 거절할지 | B, C, D |
