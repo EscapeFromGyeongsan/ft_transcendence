@@ -131,4 +131,5 @@ Tool-specific settings live in `config/`, and local infrastructure settings live
 - [Documentation spec](Document/cyber_boardgame_documentation_spec.md): documents the project will produce (SRS, SDS, contracts, diagrams, test plan)
 - [Full application execution](Document/runtime.md): HTTPS preparation, startup, lifecycle and isolated verification
 - [Runtime validation record](Document/runtime-validation.md): actual checks and pending evidence
+- [WSS verification](Document/runtime-wss-validation.md): pinned integration source, one-command reproduction and timing follow-up
 - [Contribution rules](CONTRIBUTING.md): issue, branch, commit and PR workflow
