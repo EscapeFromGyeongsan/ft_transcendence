@@ -14,10 +14,11 @@ import {
 import { users } from "./users.ts";
 
 /**
- * 경기 한 판의 서버 확정 상태입니다. `state_version`은 확정된 변경마다 1씩 오릅니다.
+ * 경기 한 판의 서버 확정 상태입니다.
  *
  * @remarks
  * 값은 `@cafe/game-contracts`(GameType, GameStatus, TwoPlayerResult)를 따릅니다.
+ * `state_version`은 착수·기권·이탈 종료·재시작 무효 처리에서 1씩 오르고, 일시정지·복귀에서는 유지됩니다.
  * 값을 추가할 때 migration이 단순하도록 pg enum 대신 text + CHECK를 씁니다.
  */
 export const games = pgTable(
