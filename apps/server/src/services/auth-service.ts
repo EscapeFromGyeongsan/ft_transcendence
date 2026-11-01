@@ -65,6 +65,10 @@ export function createAuthService(
   db: Database,
   config: AuthConfig,
   twoFactor?: TwoFactorService,
+  // Called after commit when refresh-token reuse revokes a session, so the
+  // realtime layer can close that session's connections (IF-03). Logout is
+  // not reported here: its caller already knows the session ended.
+  onSessionRevoked?: (sessionId: string) => void,
 ) {
   const accessTtl = config.accessTtlSeconds ?? 30 * 60;
   const refreshTtl = config.refreshTtlSeconds ?? 7 * 24 * 60 * 60;
@@ -198,13 +202,16 @@ export function createAuthService(
     // theft and revokes the whole session.
     async refresh(refreshToken: string): Promise<TokenPair | null> {
       const now = new Date();
-      return db.transaction(async (tx) => {
+      let revokedSessionId: string | undefined;
+      const tokens = await db.transaction(async (tx) => {
         const row = await repo.findRefreshTokenForUpdate(
           tx,
           hashRefreshToken(refreshToken),
         );
         if (!row) return null;
         if (row.usedAt) {
+          // Report only the first revocation; a repeated reuse changes nothing.
+          if (!row.sessionRevokedAt) revokedSessionId = row.sessionId;
           await repo.revokeSession(tx, row.sessionId, now);
           return null;
         }
@@ -222,6 +229,8 @@ export function createAuthService(
           row.sessionExpiresAt,
         );
       });
+      if (revokedSessionId) onSessionRevoked?.(revokedSessionId);
+      return tokens;
     },
 
     logout(sessionId: string) {

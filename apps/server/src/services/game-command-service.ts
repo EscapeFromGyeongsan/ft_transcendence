@@ -69,6 +69,8 @@ export type SystemFinish = {
 export type SystemFinishResult =
   { status: "finished"; stateVersion: number } | { status: "skipped" };
 
+export type PauseStatus = Extract<GameStatus, "playing" | "paused">;
+
 const commandTypes = { place: "place", resign: "resign" } as const;
 const engineErrorCodes: readonly string[] = [
   "INVALID_ACTION",
@@ -345,6 +347,18 @@ export function createGameCommandService(
         await finishMatch(tx, game.id, players, finish, nextVersion);
         return { status: "finished", stateVersion: nextVersion };
       });
+    },
+
+    // Called by the match layer (D) on disconnect (playing → paused) and
+    // return (paused → playing). Changes only when the match is still in
+    // `from`, so a late disconnect never reopens a finished match. Does not
+    // bump stateVersion: pauses are announced by player.* events (IF-05).
+    setStatus(
+      matchId: number,
+      from: PauseStatus,
+      to: PauseStatus,
+    ): Promise<boolean> {
+      return repo.updateGameStatus(db, matchId, from, to);
     },
 
     // Raw rows for checks that need them (participants, history).

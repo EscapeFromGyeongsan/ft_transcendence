@@ -140,6 +140,22 @@ export async function updateGameAfterCommand(
     .where(eq(games.id, gameId));
 }
 
+// Compare-and-set on status in one UPDATE: it waits for the match lock and
+// re-checks the status, so it never overwrites a status that moved on.
+export async function updateGameStatus(
+  db: Executor,
+  gameId: number,
+  from: string,
+  to: string,
+) {
+  const updated = await db
+    .update(games)
+    .set({ status: to, updatedAt: sql`now()` })
+    .where(and(eq(games.id, gameId), eq(games.status, from)))
+    .returning({ id: games.id });
+  return updated.length > 0;
+}
+
 export async function setPlayerResult(
   db: Executor,
   gameId: number,
