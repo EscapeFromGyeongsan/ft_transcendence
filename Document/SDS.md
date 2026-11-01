@@ -291,10 +291,10 @@ flowchart TD
 |---|---|
 | 로딩 | 데이터 영역에 skeleton, 버튼은 비활성 |
 | 빈 데이터 | 전적·리더보드·친구 0건 안내 문구 |
-| REST 오류 | `error.code`로 분기. 401은 refresh 1회 후 로그인 화면, 403 `RECORDS_PRIVATE`는 "비공개 전적", 429는 잠시 후 재시도, 5xx는 500 화면 또는 토스트 |
+| REST 오류 | `error.code`로 분기. 3 MiB를 넘는 요청은 Nginx가 HTML 413으로 막으므로 `error.code`가 없는 413도 "파일이 너무 큼"으로 처리. 401은 refresh 1회 후 로그인 화면, 403 `RECORDS_PRIVATE`는 "비공개 전적", 429는 잠시 후 재시도, 5xx는 500 화면 또는 토스트 |
 | 게임 오류 | `game.error`의 `code`로 분기. `VERSION_CONFLICT`는 최신 snapshot으로 다시 그림, 그 외는 토스트 |
 | 연결 끊김 | 대국 화면 상단 배너 "재연결 중", 입력 비활성. 상대 끊김은 남은 유예 시간 배너 |
-| 오래된 갱신 | `game.updated`의 `stateVersion`이 현재보다 작거나 같으면 무시. `match.snapshot`은 버전과 관계없이 상태를 통째로 교체 (2.6의 13번) |
+| 오래된 갱신 | `game.updated`의 `stateVersion`이 현재보다 작거나 같으면 무시. `match.snapshot`은 현재 이상이면 상태를 통째로 교체, 작으면 무시 (2.6의 13번) |
 | 위험 동작 (기권·로그아웃·2FA 해제) | 확인 모달. 버튼은 outline, 확인 단계에서만 강조색 |
 
 - 토큰 보관(제안): access token은 메모리에만 두고, refresh token은 `localStorage`에 둔다(로그인 유지). XSS 시 탈취 위험이 있으므로 CSP와 입력 escape를 같이 적용한다. HttpOnly cookie로 바꾸면 CSRF 대책이 필요하다(5장 미결정).
@@ -1097,7 +1097,7 @@ flowchart LR
 | 누적 시계 저장 | 메모리 (`GameSessionManager`, 경기별 `Map<userId, { usedMs, since }>`). 재시작하면 경기가 void가 되므로 DB에 둘 필요 없음 |
 | 이탈 시작 시각 (`since`) | close 없이 끊긴 경우 "마지막으로 응답한 시각". 감지까지 걸린 시간도 예산에서 빠지므로 실제 허용 시간이 60초를 넘지 않는다 |
 | 만료 시각 | `since + (60000 - usedMs)`에 타이머. 복귀하면 타이머 취소, `usedMs`에 더함 |
-| 상태 전환 | 한 명이라도 이탈 중이면 `paused`, 모두 복귀하면 `playing`. 전환은 `stateVersion`을 올리지 않는다. 그래서 같은 버전의 snapshot이 `playing`·`paused` 두 상태로 나올 수 있다. `match.snapshot`은 버전과 관계없이 클라이언트 상태를 통째로 교체하고, 일시정지·복귀는 `player.disconnected`·`player.reconnected`로만 알린다 |
+| 상태 전환 | 한 명이라도 이탈 중이면 `paused`, 모두 복귀하면 `playing`. 전환은 `stateVersion`을 올리지 않는다. 그래서 같은 버전의 snapshot이 `playing`·`paused` 두 상태로 나올 수 있다. `match.snapshot`은 `stateVersion`이 현재 이상이면 클라이언트 상태를 통째로 교체하고(같은 버전이면 `status`만 다를 수 있음), 현재보다 작으면 무시한다. 구독 직후 `getSnapshot()` 사이에 commit된 `game.updated`가 snapshot보다 먼저 도착할 수 있기 때문이다. 일시정지·복귀는 `player.disconnected`·`player.reconnected`로만 알린다 |
 | 양쪽 부재 | 각자 시계가 따로 흐른다. 먼저 만료된 시점에 아직 상대도 부재면 `absentUserIds`에 둘 다 넣어 void |
 | 만료와 착수·복귀 경합 | `finishBySystem({ expectedVersion })`이 경기 행 잠금 후 버전을 비교한다. 먼저 commit된 쪽이 이기고 나머지는 `skipped` |
 | 기기 전환 | 새 연결이 `match.subscribe`하면 그 연결이 제어권을 받는다(9번). 이전 연결이 살아 있어도 이탈은 없음 |
