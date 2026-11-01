@@ -51,8 +51,11 @@ const credentialsProperties = {
   password: { type: "string", minLength: 8, maxLength: 128 },
 };
 
-// Login answer for an account with 2FA: no session yet, only a short-lived
-// challenge to send with a code to POST /api/auth/2fa/verify.
+/**
+ * 2FA 계정의 로그인 응답입니다.
+ *
+ * @remarks 아직 세션이 없고, 코드와 함께 2FA 확인 route로 보낼 짧은 수명의 challenge만 담습니다.
+ */
 export const twoFactorChallengeSchema = {
   type: "object",
   properties: {
@@ -69,9 +72,15 @@ export const loginResultSchema = {
   anyOf: [tokenPairSchema, twoFactorChallengeSchema],
 };
 
-// Brute-force guard for unauthenticated auth endpoints (per client IP).
+/** 인증 전 endpoint의 무차별 대입 방지 설정입니다. 클라이언트 IP마다 1분에 10번입니다. */
 export const authRateLimit = { rateLimit: { max: 10, timeWindow: "1 minute" } };
 
+/**
+ * Bearer access token을 확인하는 `preHandler`를 만듭니다.
+ *
+ * @remarks
+ * 서명·만료와 서버 세션 유효성을 모두 확인하고, 통과하면 `request.auth`에 claims를 넣습니다. 실패하면 handler를 실행하지 않고 401로 답합니다.
+ */
 export function createRequireAuth(getAuth: () => AuthService) {
   return async function requireAuth(
     request: FastifyRequest,
@@ -89,6 +98,11 @@ export function createRequireAuth(getAuth: () => AuthService) {
   };
 }
 
+/**
+ * 가입·로그인·토큰 갱신·로그아웃 route를 등록합니다.
+ *
+ * @param getAuth - 요청마다 서비스를 가져옵니다. 설정이 없으면 {@link ServiceUnavailableError}를 던져 503이 됩니다.
+ */
 export function registerAuthRoutes(
   app: FastifyInstance,
   getAuth: () => AuthService,

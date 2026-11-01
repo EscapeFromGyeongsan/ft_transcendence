@@ -29,8 +29,13 @@ export async function insertPlayer(
   await db.insert(gamePlayers).values(values);
 }
 
-// Row lock on the match. Every path that changes a match takes this first, so
-// changes to one match are serialized while other matches run in parallel.
+/**
+ * 경기 행을 읽고 잠급니다(`FOR UPDATE`).
+ *
+ * @remarks
+ * 경기를 바꾸는 모든 경로가 이 잠금을 먼저 잡으므로 한 경기의 변경은 직렬화되고, 다른 경기는 병렬로 진행됩니다.
+ * 트랜잭션 안에서 호출해야 합니다.
+ */
 export async function findGameForUpdate(db: Executor, gameId: number) {
   const [game] = await db
     .select()
@@ -56,6 +61,7 @@ export function findPlayers(db: Executor, gameId: number) {
     .where(eq(gamePlayers.gameId, gameId));
 }
 
+/** 경기의 착수 기록을 수 번호 오름차순으로 읽습니다. */
 export function findMoves(db: Executor, gameId: number) {
   return db
     .select({
@@ -69,6 +75,7 @@ export function findMoves(db: Executor, gameId: number) {
     .orderBy(asc(moves.turnNumber));
 }
 
+/** 같은 경기에서 이미 처리한 `commandId`의 기록을 찾습니다. 중복 재전송 판정에 씁니다. */
 export async function findCommand(
   db: Executor,
   gameId: number,
@@ -121,6 +128,7 @@ export async function insertMove(
   await db.insert(moves).values(values);
 }
 
+/** 명령 적용 후 경기 행을 갱신합니다. 버전·차례와 함께, 종료면 결과 필드도 넘깁니다. */
 export async function updateGameAfterCommand(
   db: Executor,
   gameId: number,
@@ -140,8 +148,14 @@ export async function updateGameAfterCommand(
     .where(eq(games.id, gameId));
 }
 
-// Compare-and-set on status in one UPDATE: it waits for the match lock and
-// re-checks the status, so it never overwrites a status that moved on.
+/**
+ * 경기 상태가 `from`일 때만 `to`로 바꿉니다.
+ *
+ * @returns 바꿨으면 `true`, 상태가 이미 달라졌거나 경기가 없으면 `false`
+ *
+ * @remarks
+ * 한 UPDATE 안의 compare-and-set입니다. 경기 행 잠금을 기다린 뒤 상태를 다시 확인하므로 이미 바뀐 상태를 덮어쓰지 않습니다.
+ */
 export async function updateGameStatus(
   db: Executor,
   gameId: number,
@@ -168,7 +182,12 @@ export async function setPlayerResult(
     .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, userId)));
 }
 
-// Finishes every unfinished match as void and returns their ids.
+/**
+ * 진행 중(`playing`·`paused`)인 모든 경기를 무효로 끝내고 그 ID를 돌려줍니다.
+ *
+ * @remarks
+ * 각 경기의 `state_version`을 1 올리고 두 참가자 결과를 `void`로 바꿉니다. 두 UPDATE를 함께 반영하려면 트랜잭션 안에서 호출합니다.
+ */
 export async function voidUnfinishedGames(db: Executor, reason: string) {
   const voided = await db
     .update(games)
