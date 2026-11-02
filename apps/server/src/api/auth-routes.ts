@@ -76,7 +76,7 @@ export const loginResultSchema = {
 export const authRateLimit = { rateLimit: { max: 10, timeWindow: "1 minute" } };
 
 /**
- * Bearer access token을 확인하는 `preHandler`를 만듭니다.
+ * `onRequest`에서 Bearer access token을 확인하는 인증 훅을 만듭니다.
  *
  * @remarks
  * 서명·만료와 서버 세션 유효성을 모두 확인하고, 통과하면 `request.auth`에 claims를 넣습니다. 실패하면 handler를 실행하지 않고 401로 답합니다.
