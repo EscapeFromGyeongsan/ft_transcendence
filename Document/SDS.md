@@ -743,7 +743,7 @@ erDiagram
         bigint id PK
         boolean records_public "계획, NOT NULL DEFAULT true (DEC-05)"
         timestamptz deleted_at "계획, NULL = 활성 (DEC-09)"
-        text avatar_url "기존 컬럼, 업로드 시 /media/avatars/{id}-{rand}.png|jpg"
+        text avatar_url "기존 컬럼, 업로드 시 /api/media/avatars/{id}-{rand}.png|jpg (PR #15)"
         varchar_254 email "탈퇴 시 NULL 또는 익명값으로 교체 (UNIQUE 해제)"
         varchar_32 nickname "탈퇴 시 NULL로 비워 재사용 허용"
     }
@@ -1354,15 +1354,21 @@ flowchart TD
 - 비밀번호는 Compose secret 파일로 전달한다. B 구현으로 추가된 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`도 secret 또는 env 파일로 전달해야 한다(PR #10 병합 후 반영 필요).
 - 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
 
-##### PR #10 병합 후 추가할 것 (`B 초안`, E 확인, #28)
+##### PR #10·인증·아바타 통합 시 반영할 항목 (`B 초안`, E 확인, #28·#40)
+
+아래 항목은 PR #40에서 구현·검증 자료를 보완하고 있으며 아직 병합 전이다. PR #10의 기본 실행 환경과 구분하고, 전체 통합 상태는 #28에서 추적한다.
 
 | 대상 | 추가 내용 | 이유 |
 |---|---|---|
-| api 컨테이너 | named volume `avatars`를 `AVATAR_DIR`(예: `/data/avatars`)에 연결 | PR #15는 아바타 파일을 `AVATAR_DIR`에 저장한다. volume이 없으면 컨테이너 재생성 시 사라진다(NFR-OPS-01) |
-| Nginx | `location /api/ws`에 `proxy_http_version 1.1`, `Upgrade`, `Connection "upgrade"` 헤더, `proxy_read_timeout 60s` | WSS 연결 유지. 서버 heartbeat(10초)보다 길어야 한다 |
+| api 컨테이너 | named volume `avatars`를 `AVATAR_DIR`(예: `/data/avatars`)와 같은 경로에 연결하고 실행 사용자 `node`의 쓰기 권한을 준비 | PR #15는 아바타 파일을 `AVATAR_DIR`에 저장한다. 컨테이너 재생성 후 파일 보존과 첫 업로드 성공을 함께 확인한다(NFR-OPS-01) |
+| Nginx | 기존 `location /api/`와 공통 `api-proxy.conf`의 HTTP/1.1, `Upgrade`, `Connection`, read/send timeout 75초를 `/api/ws`에도 재사용 | PR #10에 이미 포함된 설정이다. 별도 location·60초 timeout 추가를 필수로 두지 않고, 실제 WSS 검증 결과와 미해결 항목은 #28·#40에서 추적한다 |
 | Nginx | `/api/media/avatars/`는 api로 전달 (정적 서빙 안 함) | 파일 이름 검증을 API가 한다 |
 | Nginx | `client_max_body_size 3m` | 아바타 2 MiB + multipart 여유. API 제한(413)보다 먼저 막지 않게 |
-| `.env.example` | `AVATAR_DIR`, `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY` | 비작성자가 설정만 보고 실행 |
+| 환경 변수 예시·전달 | 개발용 `.env.example`과 전체 실행용 `.env.full.example`에 `AVATAR_DIR`, `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY`를 설명하고, `infra/compose.full.yaml`의 api 환경에 실제 연결 | Compose의 `--env-file`은 설정 치환에 쓰인다. 예시에 값을 추가하는 것만으로 api 컨테이너 환경에 전달되지는 않는다 |
+
+- 인증 설정은 api의 `environment` 또는 명시적 `env_file`로 전달한다. secret 파일 방식을 쓰면 애플리케이션 환경에 값을 연결하는 읽기 처리도 필요하다. PR #10의 `container-start.mjs`가 현재 읽는 secret은 PostgreSQL 비밀번호뿐이다.
+- PR #11의 API 직접 기동은 `JWT_SECRET`이 없거나 32자 미만이면 중단한다. `TWO_FACTOR_KEY`는 미설정이면 2FA만 비활성화하지만 빈 문자열이면 기동 검사에서 실패한다. PR #40의 `container-start.mjs`는 API 실행 전에 Compose의 빈 `TWO_FACTOR_KEY`를 미설정으로 정규화한다. `FT_OAUTH_*` 세 값은 모두 설정하거나 모두 미설정으로 둔다.
+- 위 항목의 실제 Compose·volume·권한·업로드·WSS 구현과 검증 상태는 #28·#40에서 확인한다. 이 문서 보완만으로 전체 통합 완료를 뜻하지 않는다.
 
 ```mermaid
 flowchart LR
@@ -1802,9 +1808,9 @@ flowchart TD
 
 가입 API의 rate limit(분당 10회)을 거치므로 1분 안에 세 번 이상 실행하면 429로 멈출 수 있다.
 
-#### 2.10.25 아바타 업로드·삭제 `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (B, `계획`, 10/24)
+#### 2.10.25 아바타 업로드·삭제 `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (B, `구현됨`, PR #15, 10/30)
 
-DEC-05 제안(PNG/JPEG, 2 MiB 이하, 실제 형식 검사, 기본 이미지)을 따른다. `@fastify/multipart`로 받는다.
+PR #15는 2026-10-30에 병합됐다. PNG/JPEG, 2 MiB 이하, 실제 형식 검사, 가로·세로 각각 1024px 이하를 구현하며 `@fastify/multipart`로 받는다. 파일 검사는 파일 내용으로 수행하고, 아바타가 없으면 UI에서 기본 이미지를 표시한다. 아래 경로·저장 설명은 #15 구현 기준이며 전체 실행 환경 연결은 2.9의 #28·#40에서 추적한다.
 
 ```mermaid
 flowchart TD
@@ -1816,16 +1822,17 @@ flowchart TD
     Size -->|아니오| R413[413 PAYLOAD_TOO_LARGE]
     Size -->|예| Magic{"파일 앞부분 바이트가 PNG 또는 JPEG 서명? (확장자·Content-Type은 믿지 않음)"}
     Magic -->|아니오| R415
-    Magic -->|예| Dim{"이미지 치수 상한 이내? (DEC-05 미정, 제안 1024×1024)"}
-    Dim -->|아니오| R422
-    Dim -->|예| Write["새 이름(/media/avatars/{userId}-{난수}.{png,jpg})으로 임시 파일 저장 후 rename"]
+    Magic -->|예| Dim{"가로·세로 각각 1~1024px 이내? (PR #15 구현)"}
+    Dim -->|아니오| R422Image[422 IMAGE_TOO_BIG]
+    Dim -->|예| Write["새 이름({userId}-{난수}.{png,jpg})으로 임시 파일 저장 후 rename"]
     Write --> Up["users.avatar_url UPDATE"]
-    Up -->|성공| Old[이전 파일 삭제] --> R200[200 갱신된 내 정보]
-    Up -->|실패| Clean[새 파일 삭제, 이전 avatar_url 유지] --> R5xx[500 / 503]
-    S2([DELETE, requireAuth 통과]) --> Null["avatar_url = NULL (UI는 기본 이미지)"] --> Del[이전 파일 삭제] --> R204[204]
+    Up -->|성공| Old[이전 파일 삭제 시도] --> R200[200 갱신된 내 정보]
+    Up -->|실패| Clean[새 파일 삭제 시도, 이전 avatar_url 유지] --> R5xx[500 / 503]
+    S2([DELETE, requireAuth 통과]) --> Null["avatar_url = NULL (UI는 기본 이미지)"] --> Del[이전 파일 삭제 시도] --> R204[204]
 ```
 
-- 저장 위치: api 컨테이너의 volume(`avatar_data`)을 Nginx가 `/media/`로 읽기 전용 제공(E와 PR #10 후속 협의). DB에는 경로만 저장한다.
+- 저장 위치: `AVATAR_DIR`(PR #15 기본값 `data/avatars`). 컨테이너에서는 api에 named volume `avatars`를 연결하고, `AVATAR_DIR`을 같은 마운트 경로로 설정한다(2.9, #28). DB에는 `/api/media/avatars/{name}` URL만 저장한다.
+- 제공: PR #15의 API가 `GET /api/media/avatars/{name}`으로 파일을 제공한다. Nginx는 기존 `/api/` 프록시로 전달하며 아바타 volume을 직접 읽거나 공유하지 않는다.
 - 교체 실패 시 기존 파일과 URL을 유지한다. 탈퇴 시 파일을 삭제한다(2.10.27).
 
 #### 2.10.26 전적 공개 설정 (B, `계획`)
@@ -1912,7 +1919,7 @@ flowchart TD
 |---|---|---|
 | `GET /api/users?nickname=` | 200 닉네임 접두사 일치 최대 20명 (탈퇴자 제외, email 미포함) | 401, 422, 429 |
 | `GET /api/friends` | 200 `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }` | 401 |
-| `POST /api/friends/requests` `{ userId }` | 201 | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
+| `POST /api/friends/requests` `{ userId }` | 201 (pending 생성), 200 (상대가 보낸 pending 요청에 맞요청하여 수락) | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
 | `POST /api/friends/requests/{id}/accept` | 200 | 401, 403 (받는 사람 아님), 404, 409 (pending 아님) |
 | `POST /api/friends/requests/{id}/decline` | 204 | 401, 403, 404, 409 |
 | `DELETE /api/friends/{userId}` | 204 | 401, 404 |
