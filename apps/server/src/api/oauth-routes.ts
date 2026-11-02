@@ -50,6 +50,11 @@ const messages: Record<string, [number, string]> = {
   OAUTH_EMAIL_MISSING: [422, "42 did not provide an email address."],
 };
 
+/**
+ * 42 OAuth 로그인 시작·연결 시작·callback route를 등록합니다.
+ *
+ * @remarks 서비스 getter가 설정 없음으로 {@link ServiceUnavailableError}를 던지면 503이 됩니다.
+ */
 export function registerOAuthRoutes(
   app: FastifyInstance,
   getAuth: () => AuthService,

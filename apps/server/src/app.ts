@@ -60,6 +60,17 @@ function isDatabaseUnavailable(error: unknown) {
   return false;
 }
 
+/**
+ * Fastify 앱을 만들고 서비스·공통 오류 처리·Swagger·route를 등록합니다.
+ *
+ * @param databaseUrl - 없으면 DB가 필요한 route는 503으로 답합니다.
+ * @param authConfig - 없으면 인증이 필요한 route는 503으로 답합니다. 2FA 키·42 OAuth 설정이 빠지면 그 기능만 503입니다.
+ *
+ * @remarks
+ * 서비스는 설정이 있을 때만 만들고 route에는 getter로 넘깁니다. 설정이 없으면 getter가 {@link ServiceUnavailableError}를 던집니다.
+ * 공통 오류 처리는 검증 실패·본문 오류·요청 과다·42 장애·DB 연결 장애를 정해진 오류 본문으로 바꾸고, 나머지는 500으로 답합니다.
+ * 앱을 닫으면 DB 풀도 닫습니다.
+ */
 export async function buildApp(
   options: FastifyServerOptions = {},
   databaseUrl?: string,
