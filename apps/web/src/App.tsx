@@ -1,3 +1,1246 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { authApi, isTokenPair, type AuthUser } from "./api/auth-client.ts";
+import {
+  getAuthFieldErrors,
+  getErrorMessage,
+  type AuthFieldErrors,
+} from "./api/errors.ts";
+
+type ScreenView = "login" | "register" | "twoFactor" | "lobby";
+
+function BoardLogoSvg({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 36 36"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect width="36" height="36" rx="8" fill="#4C822C" />
+      <path
+        d="M7 18H29M18 7V29"
+        stroke="#F0EEE7"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <circle
+        cx="13"
+        cy="13"
+        r="4"
+        fill="#1C1814"
+        stroke="#4A3F33"
+        strokeWidth="1"
+      />
+      <circle
+        cx="23"
+        cy="23"
+        r="4"
+        fill="#FFFFFF"
+        stroke="#DCDAD4"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
+
+function EyeIcon({ visible }: { visible: boolean }) {
+  if (visible) {
+    return (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" />
+    </svg>
+  );
+}
+
+/**
+ * 사이버 보드게임 카페의 인증(회원가입·로그인·2FA·토큰 갱신·로그아웃) 및 로비 진입 화면을 관리하는 최상위 컴포넌트입니다.
+ */
 export function App() {
-  return <h1>사이버 보드게임 카페</h1>;
+  const [view, setView] = useState<ScreenView>("login");
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [initializing, setInitializing] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Login form state
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  // Register form state
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regNickname, setRegNickname] = useState("");
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+
+  // 2FA Challenge state
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+
+  // Feedback & Error state
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+
+  // Lobby menus & modals
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+
+  function resetMessages() {
+    setErrorMessage(null);
+    setFieldErrors({});
+    setNoticeMessage(null);
+  }
+
+  function switchView(next: ScreenView) {
+    resetMessages();
+    setAccountMenuOpen(false);
+    setLogoutModalOpen(false);
+    setView(next);
+  }
+
+  useEffect(() => {
+    let active = true;
+    const savedTokens = authApi.storage.getTokens();
+    if (!savedTokens) {
+      setInitializing(false);
+      return;
+    }
+
+    authApi
+      .getMe()
+      .then((user) => {
+        if (!active) return;
+        setCurrentUser(user);
+        setView("lobby");
+      })
+      .catch(() => {
+        if (!active) return;
+        authApi.storage.clearTokens();
+        setCurrentUser(null);
+        setView("login");
+      })
+      .finally(() => {
+        if (active) setInitializing(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetMessages();
+    setSubmitting(true);
+
+    try {
+      const result = await authApi.login(
+        {
+          email: loginEmail.trim(),
+          password: loginPassword,
+        },
+        rememberMe,
+      );
+
+      if (!isTokenPair(result)) {
+        setChallengeToken(result.challengeToken);
+        setTwoFactorCode("");
+        setView("twoFactor");
+        return;
+      }
+
+      const me = await authApi.getMe();
+      setCurrentUser(me);
+      setLoginPassword("");
+      setView("lobby");
+    } catch (error) {
+      setFieldErrors(getAuthFieldErrors(error));
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRegisterSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetMessages();
+
+    if (!agreeTerms) {
+      setErrorMessage("이용약관 및 개인정보처리방침에 동의해 주세요.");
+      return;
+    }
+
+    setSubmitting(true);
+    const trimmedEmail = regEmail.trim();
+    const trimmedNickname = regNickname.trim();
+
+    try {
+      const registeredUser = await authApi.register({
+        email: trimmedEmail,
+        password: regPassword,
+        nickname: trimmedNickname,
+      });
+
+      // 가입 직후 로그인 연동을 시도하고, 성공하면 로비로 전환합니다.
+      try {
+        const loginResult = await authApi.login(
+          {
+            email: trimmedEmail,
+            password: regPassword,
+          },
+          true,
+        );
+        if (isTokenPair(loginResult)) {
+          const me = await authApi.getMe().catch(() => registeredUser);
+          setCurrentUser(me);
+          setRegPassword("");
+          setView("lobby");
+          setNoticeMessage(`${me.nickname} 님, 회원가입이 완료되었습니다.`);
+          return;
+        }
+      } catch {
+        // 자동 로그인 실패 시 로그인 화면으로 안내
+      }
+
+      setLoginEmail(trimmedEmail);
+      setLoginPassword("");
+      setRegPassword("");
+      setView("login");
+      setNoticeMessage(
+        "회원가입이 완료되었습니다. 가입한 계정으로 로그인해 주세요.",
+      );
+    } catch (error) {
+      const extractedFields = getAuthFieldErrors(error);
+      setFieldErrors(extractedFields);
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleTwoFactorSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!challengeToken) {
+      switchView("login");
+      return;
+    }
+
+    resetMessages();
+    setSubmitting(true);
+
+    try {
+      await authApi.verifyTwoFactorLogin(
+        {
+          challengeToken,
+          code: twoFactorCode.trim(),
+        },
+        rememberMe,
+      );
+      const me = await authApi.getMe();
+      setCurrentUser(me);
+      setChallengeToken(null);
+      setTwoFactorCode("");
+      setView("lobby");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleManualRefresh() {
+    resetMessages();
+    setSubmitting(true);
+    try {
+      await authApi.refresh();
+      const me = await authApi.getMe();
+      setCurrentUser(me);
+      setAccountMenuOpen(false);
+      setNoticeMessage("세션 토큰이 성공적으로 갱신되었습니다.");
+    } catch (error) {
+      setCurrentUser(null);
+      setAccountMenuOpen(false);
+      setLogoutModalOpen(false);
+      setView("login");
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleConfirmLogout() {
+    resetMessages();
+    setSubmitting(true);
+    try {
+      await authApi.logout();
+    } catch (error) {
+      // 로그아웃 요청 중 오류가 발생하더라도 로컬 세션은 종료하고 안내만 남깁니다.
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setCurrentUser(null);
+      setAccountMenuOpen(false);
+      setLogoutModalOpen(false);
+      setSubmitting(false);
+      setView("login");
+      setNoticeMessage("안전하게 로그아웃되었습니다.");
+    }
+  }
+
+  const avatarInitial =
+    currentUser?.nickname?.trim().charAt(0).toUpperCase() || "A";
+
+  return (
+    <div className="cbc-shell">
+      {/* Top Fixed Header */}
+      <header className="cbc-header">
+        <div className="cbc-header-inner">
+          <button
+            type="button"
+            className="cbc-brand"
+            onClick={() => switchView(currentUser ? "lobby" : "login")}
+          >
+            <div className="cbc-brand-icon-wrap">
+              <BoardLogoSvg size={30} />
+            </div>
+            <span className="cbc-brand-title">Cyber Board Cafe</span>
+          </button>
+
+          {currentUser && view === "lobby" ? (
+            <div className="cbc-account-area">
+              <span className="cbc-security-pill">
+                <span className="cbc-pulse-dot" />
+                온라인
+              </span>
+              <button
+                type="button"
+                className="cbc-avatar-trigger"
+                aria-expanded={accountMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setAccountMenuOpen((prev) => !prev)}
+              >
+                <span className="cbc-avatar-circle">{avatarInitial}</span>
+                <span>{currentUser.nickname}</span>
+              </button>
+
+              {accountMenuOpen && (
+                <div
+                  className="cbc-account-dropdown"
+                  role="menu"
+                  aria-label="계정 메뉴"
+                >
+                  <div className="cbc-dropdown-profile">
+                    <div className="cbc-avatar-circle">{avatarInitial}</div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: "14px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {currentUser.nickname}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "var(--on-surface-variant)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {currentUser.email}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="cbc-dropdown-btn"
+                    role="menuitem"
+                    disabled={submitting}
+                    onClick={handleManualRefresh}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "13px" }}>
+                        세션 토큰 갱신
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--on-surface-variant)",
+                        }}
+                      >
+                        POST /api/auth/refresh 호출
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="trigger-logout-modal"
+                    className="cbc-dropdown-btn is-danger"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      setLogoutModalOpen(true);
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "13px" }}>
+                        로그아웃
+                      </div>
+                      <div style={{ fontSize: "11px", opacity: 0.85 }}>
+                        현재 기기에서 안전하게 접속 종료
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="cbc-security-pill">
+              <span className="cbc-pulse-dot" />
+              보안 인증 채널
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="cbc-main">
+        {initializing ? (
+          <div className="cbc-login-card" style={{ textAlign: "center" }}>
+            <h1 className="cbc-heading-login">사이버 보드게임 카페</h1>
+            <p className="cbc-subheading">인증 세션을 확인하는 중입니다...</p>
+          </div>
+        ) : view === "login" ? (
+          <div className="cbc-stage">
+            <div className="cbc-glow-left" />
+            <div className="cbc-glow-right" />
+
+            <div className="cbc-login-card">
+              <div className="cbc-card-header-center">
+                <div className="cbc-meeple-avatar" aria-hidden="true">
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M12 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm3 7h-6a4 4 0 0 0-4 4v7a2 2 0 0 0 2 2h2l1-4h4l1 4h2a2 2 0 0 0 2-2v-7a4 4 0 0 0-4-4z" />
+                  </svg>
+                </div>
+                <h1 className="cbc-heading-login">로그인</h1>
+                <p className="cbc-subheading">
+                  Cyber Board Cafe에 오신 것을 환영합니다.
+                  <br />
+                  계정에 로그인해 대국을 시작하세요.
+                </p>
+              </div>
+
+              {noticeMessage && (
+                <div
+                  className="cbc-success-banner"
+                  role="status"
+                  style={{ marginBottom: "1rem" }}
+                >
+                  <span>{noticeMessage}</span>
+                </div>
+              )}
+
+              <form
+                id="loginForm"
+                className="cbc-form"
+                onSubmit={handleLoginSubmit}
+                noValidate
+              >
+                <div className="cbc-field">
+                  <div className="cbc-label-row">
+                    <label className="cbc-label" htmlFor="emailInput">
+                      이메일
+                      <span aria-hidden="true" className="cbc-required">
+                        *
+                      </span>
+                      <span className="sr-only">(필수 입력 항목)</span>
+                    </label>
+                  </div>
+                  <div className="cbc-input-wrap">
+                    <input
+                      id="emailInput"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      placeholder="example@boardcafe.kr"
+                      value={loginEmail}
+                      onChange={(e) => {
+                        setLoginEmail(e.target.value);
+                        if (errorMessage) resetMessages();
+                      }}
+                      aria-invalid={Boolean(errorMessage || fieldErrors.email)}
+                      aria-describedby={
+                        errorMessage ? "loginErrorMessage" : undefined
+                      }
+                      className={`cbc-input ${
+                        errorMessage || fieldErrors.email ? "is-error" : ""
+                      }`}
+                    />
+                  </div>
+                  {fieldErrors.email && (
+                    <p className="cbc-field-error">{fieldErrors.email}</p>
+                  )}
+                </div>
+
+                <div className="cbc-field">
+                  <div className="cbc-label-row">
+                    <label className="cbc-label" htmlFor="passwordInput">
+                      비밀번호
+                      <span aria-hidden="true" className="cbc-required">
+                        *
+                      </span>
+                      <span className="sr-only">(필수 입력 항목)</span>
+                    </label>
+                  </div>
+                  <div className="cbc-input-wrap">
+                    <input
+                      id="passwordInput"
+                      name="password"
+                      type={showLoginPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      required
+                      placeholder="비밀번호를 입력하세요"
+                      value={loginPassword}
+                      onChange={(e) => {
+                        setLoginPassword(e.target.value);
+                        if (errorMessage) resetMessages();
+                      }}
+                      aria-invalid={Boolean(
+                        errorMessage || fieldErrors.password,
+                      )}
+                      aria-describedby={
+                        errorMessage ? "loginErrorMessage" : undefined
+                      }
+                      className={`cbc-input ${
+                        errorMessage || fieldErrors.password ? "is-error" : ""
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      className="cbc-input-action-right"
+                      aria-label="비밀번호 표시 전환"
+                      onClick={() => setShowLoginPassword((prev) => !prev)}
+                    >
+                      <EyeIcon visible={showLoginPassword} />
+                    </button>
+                  </div>
+                  {fieldErrors.password && (
+                    <p className="cbc-field-error">{fieldErrors.password}</p>
+                  )}
+                </div>
+
+                {errorMessage && (
+                  <div
+                    id="loginErrorMessage"
+                    className="cbc-error-banner"
+                    role="alert"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                      style={{ flexShrink: 0, color: "var(--error)" }}
+                    >
+                      <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                    </svg>
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                <div className="cbc-form-row-between">
+                  <label className="cbc-checkbox-label" htmlFor="rememberMe">
+                    <input
+                      id="rememberMe"
+                      name="remember"
+                      type="checkbox"
+                      className="cbc-checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                    />
+                    <span>로그인 상태 유지</span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="cbc-btn-primary"
+                  disabled={submitting}
+                >
+                  <span>{submitting ? "로그인 중..." : "로그인"}</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M10 17l5-5-5-5v10zM19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z" />
+                  </svg>
+                </button>
+              </form>
+
+              <div className="cbc-card-footer-switch">
+                <span>아직 계정이 없으신가요?</span>{" "}
+                <button
+                  type="button"
+                  className="cbc-link"
+                  onClick={() => switchView("register")}
+                >
+                  회원가입
+                </button>
+              </div>
+            </div>
+
+            <div className="cbc-safety-caption">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+              </svg>
+              <span>개인정보 암호화 및 2단계 보안 인증 채널 가동 중</span>
+            </div>
+          </div>
+        ) : view === "register" ? (
+          <div className="cbc-stage">
+            <div className="cbc-glow-left" />
+            <div className="cbc-glow-right" />
+
+            <div className="cbc-signup-wrapper">
+              {/* Left Hero / Atmosphere Panel (02_signup) */}
+              <div className="cbc-signup-hero">
+                <div className="cbc-signup-hero-pattern" aria-hidden="true">
+                  <svg width="100%" height="100%" viewBox="0 0 400 600">
+                    <defs>
+                      <pattern
+                        id="go-grid"
+                        width="40"
+                        height="40"
+                        patternUnits="userSpaceOnUse"
+                      >
+                        <path
+                          d="M 40 0 L 0 0 0 40"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1"
+                        />
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#go-grid)" />
+                  </svg>
+                </div>
+
+                <div style={{ position: "relative", zIndex: 10 }}>
+                  <div className="cbc-hero-badge">
+                    <span className="cbc-pulse-dot" />
+                    <span>오목 · 클래식 테이블탑</span>
+                  </div>
+                  <h2 className="cbc-hero-title">
+                    차분한 원두 향과
+                    <br />
+                    돌을 놓는 즐거움
+                  </h2>
+                  <p className="cbc-hero-desc">
+                    온라인 오목 대국실과 따뜻한 아날로그 감성이 머무는 공간,
+                    Cyber Board Cafe의 정식 멤버가 되어보세요.
+                  </p>
+                </div>
+
+                <div className="cbc-board-illustration" aria-hidden="true">
+                  <svg
+                    width="100%"
+                    height="100%"
+                    viewBox="0 0 400 300"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect width="400" height="300" fill="#dec8b0" />
+                    <g stroke="#806a54" strokeOpacity="0.6" strokeWidth="1.5">
+                      <line x1="60" x2="340" y1="65" y2="65" />
+                      <line x1="60" x2="340" y1="100" y2="100" />
+                      <line x1="60" x2="340" y1="135" y2="135" />
+                      <line x1="60" x2="340" y1="170" y2="170" />
+                      <line x1="60" x2="340" y1="205" y2="205" />
+                      <line x1="60" x2="340" y1="240" y2="240" />
+                      <line x1="100" x2="100" y1="30" y2="275" />
+                      <line x1="140" x2="140" y1="30" y2="275" />
+                      <line x1="180" x2="180" y1="30" y2="275" />
+                      <line x1="220" x2="220" y1="30" y2="275" />
+                      <line x1="260" x2="260" y1="30" y2="275" />
+                      <line x1="300" x2="300" y1="30" y2="275" />
+                    </g>
+                    <circle cx="180" cy="135" r="14" fill="#2e2924" />
+                    <circle cx="220" cy="135" r="14" fill="#f3ede5" />
+                    <circle cx="220" cy="170" r="14" fill="#2e2924" />
+                    <circle cx="180" cy="170" r="14" fill="#f3ede5" />
+                    <circle cx="140" cy="135" r="14" fill="#f3ede5" />
+                    <circle cx="260" cy="135" r="14" fill="#2e2924" />
+                  </svg>
+                  <div className="cbc-board-overlay">
+                    <span>실시간 대국 매칭 준비 완료</span>
+                  </div>
+                </div>
+
+                <div className="cbc-active-players-card">
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--on-surface-variant)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      현재 접속 플레이어
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-headline)",
+                        fontSize: "18px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      실시간 대국 대기 중
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      padding: "0.25rem 0.625rem",
+                      borderRadius: "0.375rem",
+                      backgroundColor: "var(--secondary-container)",
+                      color: "var(--on-secondary-container)",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    쾌적함
+                  </span>
+                </div>
+              </div>
+
+              {/* Right Registration Form Panel (02_signup) */}
+              <div className="cbc-signup-form-panel">
+                <header style={{ marginBottom: "1.75rem" }}>
+                  <h1 className="cbc-heading-signup">회원가입</h1>
+                  <p
+                    className="cbc-subheading"
+                    style={{ marginTop: "0.5rem", fontSize: "15px" }}
+                  >
+                    새로운 계정을 생성하고 온라인 오목과 보드게임을 즐겨보세요.
+                  </p>
+                </header>
+
+                <form
+                  id="signup-form"
+                  className="cbc-form"
+                  onSubmit={handleRegisterSubmit}
+                  noValidate
+                >
+                  {/* Email Input Group */}
+                  <div className="cbc-field">
+                    <div className="cbc-label-row">
+                      <label className="cbc-label" htmlFor="user-email">
+                        이메일
+                      </label>
+                      {fieldErrors.email ? (
+                        <span className="cbc-label-error-badge">확인 필요</span>
+                      ) : (
+                        <span className="cbc-label-hint">로그인 계정용</span>
+                      )}
+                    </div>
+                    <div className="cbc-input-wrap">
+                      <input
+                        id="user-email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        placeholder="user@example.com"
+                        value={regEmail}
+                        onChange={(e) => {
+                          setRegEmail(e.target.value);
+                          if (fieldErrors.email || errorMessage) {
+                            resetMessages();
+                          }
+                        }}
+                        aria-invalid={Boolean(fieldErrors.email)}
+                        aria-describedby={
+                          fieldErrors.email ? "email-error-msg" : undefined
+                        }
+                        className={`cbc-input ${
+                          fieldErrors.email ? "is-error" : ""
+                        }`}
+                      />
+                    </div>
+                    {fieldErrors.email && (
+                      <p id="email-error-msg" className="cbc-field-error">
+                        {fieldErrors.email}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Password Input Group */}
+                  <div className="cbc-field">
+                    <div className="cbc-label-row">
+                      <label className="cbc-label" htmlFor="user-password">
+                        비밀번호
+                      </label>
+                      {fieldErrors.password && (
+                        <span className="cbc-label-error-badge">확인 필요</span>
+                      )}
+                    </div>
+                    <div className="cbc-input-wrap">
+                      <input
+                        id="user-password"
+                        name="password"
+                        type={showRegPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        minLength={8}
+                        required
+                        placeholder="비밀번호를 입력하세요"
+                        value={regPassword}
+                        onChange={(e) => {
+                          setRegPassword(e.target.value);
+                          if (fieldErrors.password || errorMessage) {
+                            resetMessages();
+                          }
+                        }}
+                        aria-invalid={Boolean(fieldErrors.password)}
+                        aria-describedby={
+                          fieldErrors.password
+                            ? "password-error-msg"
+                            : undefined
+                        }
+                        className={`cbc-input ${
+                          fieldErrors.password ? "is-error" : ""
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        id="toggle-pwd-btn"
+                        className="cbc-input-action-right"
+                        aria-label="비밀번호 표시 전환"
+                        onClick={() => setShowRegPassword((prev) => !prev)}
+                      >
+                        <EyeIcon visible={showRegPassword} />
+                      </button>
+                    </div>
+                    {fieldErrors.password ? (
+                      <p id="password-error-msg" className="cbc-field-error">
+                        {fieldErrors.password}
+                      </p>
+                    ) : (
+                      <p className="cbc-field-helper">
+                        <span>8자 이상 입력해 주세요</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Nickname Input Group */}
+                  <div className="cbc-field">
+                    <div className="cbc-label-row">
+                      <label className="cbc-label" htmlFor="user-nickname">
+                        닉네임
+                      </label>
+                      {fieldErrors.nickname ? (
+                        <span className="cbc-label-error-badge">확인 필요</span>
+                      ) : (
+                        <span className="cbc-label-hint">
+                          2~32자 (문자·숫자·_·-)
+                        </span>
+                      )}
+                    </div>
+                    <div className="cbc-input-wrap">
+                      <input
+                        id="user-nickname"
+                        name="nickname"
+                        type="text"
+                        required
+                        placeholder="닉네임을 입력하세요"
+                        value={regNickname}
+                        onChange={(e) => {
+                          setRegNickname(e.target.value);
+                          if (fieldErrors.nickname || errorMessage) {
+                            resetMessages();
+                          }
+                        }}
+                        aria-invalid={Boolean(fieldErrors.nickname)}
+                        aria-describedby={
+                          fieldErrors.nickname
+                            ? "nickname-error-msg"
+                            : undefined
+                        }
+                        className={`cbc-input ${
+                          fieldErrors.nickname ? "is-error" : ""
+                        }`}
+                      />
+                    </div>
+                    {fieldErrors.nickname && (
+                      <p id="nickname-error-msg" className="cbc-field-error">
+                        {fieldErrors.nickname}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Terms Agreement Checkbox */}
+                  <div className="cbc-terms-box">
+                    <input
+                      id="agree-terms"
+                      name="agree-terms"
+                      type="checkbox"
+                      className="cbc-checkbox"
+                      checked={agreeTerms}
+                      onChange={(e) => {
+                        setAgreeTerms(e.target.checked);
+                        if (errorMessage) resetMessages();
+                      }}
+                    />
+                    <label
+                      htmlFor="agree-terms"
+                      style={{
+                        fontSize: "14px",
+                        lineHeight: "20px",
+                        cursor: "pointer",
+                        userSelect: "none",
+                      }}
+                    >
+                      <span>이용약관 및 개인정보처리방침에 동의합니다</span>
+                    </label>
+                  </div>
+
+                  {errorMessage && (
+                    <div className="cbc-error-banner" role="alert">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        aria-hidden="true"
+                        style={{ flexShrink: 0, color: "var(--error)" }}
+                      >
+                        <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                      </svg>
+                      <span>{errorMessage}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="cbc-btn-primary"
+                    disabled={submitting}
+                  >
+                    <span>{submitting ? "가입 처리 중..." : "가입하기"}</span>
+                  </button>
+
+                  <div className="cbc-card-footer-switch">
+                    <span>이미 계정이 있으신가요?</span>{" "}
+                    <button
+                      type="button"
+                      className="cbc-link"
+                      onClick={() => switchView("login")}
+                    >
+                      로그인
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        ) : view === "twoFactor" ? (
+          <div className="cbc-stage">
+            <div className="cbc-login-card">
+              <div className="cbc-card-header-center">
+                <h1 className="cbc-heading-login">2단계 인증</h1>
+                <p className="cbc-subheading">
+                  인증 앱의 6자리 코드 또는 복구 코드를 입력해 주세요.
+                </p>
+              </div>
+
+              <form
+                id="otp-form"
+                className="cbc-form"
+                onSubmit={handleTwoFactorSubmit}
+              >
+                <div className="cbc-field">
+                  <label className="cbc-label" htmlFor="twoFactorCodeInput">
+                    인증 코드
+                  </label>
+                  <input
+                    id="twoFactorCodeInput"
+                    type="text"
+                    required
+                    placeholder="6자리 숫자 또는 복구 코드"
+                    value={twoFactorCode}
+                    onChange={(e) => {
+                      setTwoFactorCode(e.target.value);
+                      if (errorMessage) resetMessages();
+                    }}
+                    className={`cbc-input ${errorMessage ? "is-error" : ""}`}
+                  />
+                </div>
+
+                {errorMessage && (
+                  <div className="cbc-error-banner" role="alert">
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="cbc-btn-primary"
+                  disabled={submitting}
+                >
+                  <span>{submitting ? "확인 중..." : "확인"}</span>
+                </button>
+              </form>
+
+              <div className="cbc-card-footer-switch">
+                <button
+                  type="button"
+                  className="cbc-link"
+                  onClick={() => {
+                    setChallengeToken(null);
+                    switchView("login");
+                  }}
+                >
+                  다른 계정으로 로그인
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Authenticated Lobby View (04_home_lobby + 20_logout_modal) */
+          <div className="cbc-lobby-container">
+            {noticeMessage && (
+              <div className="cbc-success-banner" role="status">
+                <span>{noticeMessage}</span>
+              </div>
+            )}
+
+            {errorMessage && (
+              <div className="cbc-error-banner" role="alert">
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            <section className="cbc-welcome-banner">
+              <div>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "var(--primary)",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  CYBER BOARD CAFE MEMBER
+                </span>
+                <h1 className="cbc-welcome-title">
+                  환영합니다, {currentUser?.nickname} 님
+                </h1>
+                <p className="cbc-subheading">
+                  오늘도 차분한 원목 테이블에서 명승부를 펼쳐보세요. (계정:{" "}
+                  {currentUser?.email})
+                </p>
+              </div>
+
+              <div className="cbc-stats-tray">
+                <div>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--on-surface-variant)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    회원 번호
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "var(--font-headline)",
+                      fontSize: "20px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    #{currentUser?.id}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="cbc-btn-secondary"
+                  style={{ width: "auto" }}
+                  onClick={() => setLogoutModalOpen(true)}
+                >
+                  로그아웃
+                </button>
+              </div>
+            </section>
+
+            <section className="cbc-lobby-grid" aria-label="추천 게임">
+              <article className="cbc-game-card">
+                <div>
+                  <h2
+                    style={{
+                      fontFamily: "var(--font-headline)",
+                      fontSize: "20px",
+                      margin: "0 0 0.5rem",
+                    }}
+                  >
+                    오목 (15 × 15 자유룰)
+                  </h2>
+                  <p className="cbc-subheading">
+                    가로, 세로, 대각선으로 돌 5개를 먼저 잇는 턴제 전략
+                    보드게임입니다.
+                  </p>
+                </div>
+                <span className="cbc-security-pill">실시간 대국 준비 중</span>
+              </article>
+
+              <article className="cbc-game-card">
+                <div>
+                  <h2
+                    style={{
+                      fontFamily: "var(--font-headline)",
+                      fontSize: "20px",
+                      margin: "0 0 0.5rem",
+                    }}
+                  >
+                    오셀로 (8 × 8 표준 보드)
+                  </h2>
+                  <p className="cbc-subheading">
+                    상대방의 돌을 사이에 두고 뒤집어 자신의 색으로 만들어가는
+                    두뇌 게임입니다.
+                  </p>
+                </div>
+                <span className="cbc-security-pill">실시간 대국 준비 중</span>
+              </article>
+            </section>
+          </div>
+        )}
+      </main>
+
+      {/* Logout Confirmation Dialog (20_logout_modal) */}
+      {logoutModalOpen && (
+        <div
+          id="modalOverlay"
+          className="cbc-modal-backdrop"
+          onClick={() => setLogoutModalOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            aria-describedby="logout-desc"
+            className="cbc-modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="cbc-modal-alert-icon" aria-hidden="true">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+              </svg>
+            </div>
+            <h3
+              id="logout-title"
+              style={{
+                fontFamily: "var(--font-headline)",
+                fontSize: "22px",
+                margin: "0 0 0.5rem",
+              }}
+            >
+              정말 로그아웃하시겠습니까?
+            </h3>
+            <p
+              id="logout-desc"
+              className="cbc-subheading"
+              style={{ maxWidth: "320px" }}
+            >
+              로그아웃하면 현재 세션이 종료되며, 다시 로그인해야 게임을 이용할
+              수 있습니다.
+            </p>
+            <div className="cbc-modal-actions">
+              <button
+                type="button"
+                id="cancelLogoutBtn"
+                className="cbc-btn-secondary"
+                disabled={submitting}
+                onClick={() => setLogoutModalOpen(false)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                id="confirmLogoutBtn"
+                className="cbc-btn-danger"
+                disabled={submitting}
+                onClick={handleConfirmLogout}
+              >
+                <span>{submitting ? "종료 중..." : "로그아웃"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <footer className="cbc-footer">
+        <div className="cbc-footer-inner">
+          <nav className="cbc-footer-nav" aria-label="정책 안내">
+            <a className="cbc-footer-link" href="#terms">
+              이용약관
+            </a>
+            <a className="cbc-footer-link" href="#privacy">
+              개인정보처리방침
+            </a>
+          </nav>
+          <p className="cbc-footer-copy">
+            <BoardLogoSvg size={20} />
+            <span>© 2026 Cyber Board Cafe. 모든 권리 보유.</span>
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
 }
