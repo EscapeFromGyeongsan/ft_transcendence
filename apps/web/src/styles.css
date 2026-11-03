@@ -1063,3 +1063,790 @@ input {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* Lobby Gomoku Matchmaking Controls */
+.cbc-lobby-gomoku-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.cbc-queue-waiting-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.5rem;
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--primary-container);
+}
+
+.cbc-match-join-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cbc-match-join-input {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
+  font-size: 14px;
+}
+
+.cbc-match-join-btn {
+  width: auto;
+  white-space: nowrap;
+}
+
+/* Gomoku Match Page (13_gomoku_match & 15_gomoku_result) */
+.cbc-gomoku-page {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Connection & Reconnect Banners */
+.cbc-conn-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1.5px solid #d97706;
+  background-color: #fffbeb;
+  color: #78350f;
+}
+
+.cbc-conn-banner.is-disconnected {
+  border-color: var(--error);
+  background-color: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.cbc-conn-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.cbc-conn-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  border: 2.5px solid currentColor;
+  border-top-color: transparent;
+  animation: cbc-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cbc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cbc-conn-banner-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.cbc-conn-banner-desc {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.cbc-conn-retry-btn {
+  width: auto;
+  white-space: nowrap;
+}
+
+/* Opponent Disconnected / Match Paused Banner */
+.cbc-pause-banner {
+  border-radius: 0.75rem;
+  background-color: #fff7ed;
+  border: 1.5px solid #ea580c;
+  padding: 1.125rem 1.25rem;
+  color: #7c2d12;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cbc-pause-banner-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cbc-pause-banner-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  flex: 1;
+  min-width: 240px;
+}
+
+.cbc-pause-icon-box {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background-color: #ea580c;
+  color: #ffffff;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cbc-pause-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cbc-pause-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  background-color: #9a3412;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cbc-pause-title {
+  font-size: 15px;
+}
+
+.cbc-pause-desc {
+  margin: 0.25rem 0 0;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.cbc-pause-timer-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  background-color: rgba(255, 255, 255, 0.85);
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(234, 88, 12, 0.3);
+}
+
+.cbc-pause-timer-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cbc-pause-timer-value {
+  font-family: var(--font-headline);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 26px;
+}
+
+.cbc-pause-timer-sub {
+  font-size: 11px;
+}
+
+.cbc-pause-progress-track {
+  width: 100%;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: rgba(154, 52, 18, 0.18);
+  overflow: hidden;
+}
+
+.cbc-pause-progress-bar {
+  height: 100%;
+  background-color: #ea580c;
+  transition: width 0.25s linear;
+}
+
+/* game.error Alert Banner */
+.cbc-game-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  border-radius: 0.75rem;
+  background-color: var(--error-container);
+  color: var(--on-error-container);
+  border: 1.5px solid var(--error);
+}
+
+.cbc-game-error-content {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.cbc-game-error-code {
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  background-color: var(--error);
+  color: var(--on-error);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.cbc-game-error-message {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cbc-game-error-close {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Status Bar (Turn + Last Move + stateVersion) */
+.cbc-gomoku-statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-radius: 0.75rem;
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-container-high);
+  box-shadow: 0 2px 8px -2px rgba(42, 42, 38, 0.05);
+}
+
+.cbc-gomoku-status-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cbc-gomoku-match-pill,
+.cbc-gomoku-version-pill,
+.cbc-gomoku-Rule-pill {
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  background-color: var(--surface-container);
+  color: var(--on-surface-variant);
+}
+
+.cbc-gomoku-turn-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  background-color: var(--surface-container-low);
+  font-size: 14px;
+}
+
+.cbc-gomoku-turn-banner.is-my-turn {
+  background-color: var(--secondary-container);
+  color: var(--on-primary-container);
+}
+
+.cbc-gomoku-turn-banner.is-opponent-turn {
+  background-color: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+.cbc-gomoku-turn-sub {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.cbc-gomoku-lastmove-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  background-color: var(--surface-container-low);
+  font-size: 13px;
+  color: var(--on-surface);
+}
+
+.cbc-stone-dot {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 9999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cbc-stone-dot.is-black {
+  background: radial-gradient(circle at 32% 30%, #4b4742, #171512 72%);
+  border: 1px solid #35302a;
+}
+
+.cbc-stone-dot.is-white {
+  background: radial-gradient(circle at 32% 30%, #ffffff, #dcd8cf 78%);
+  border: 1px solid #b5afa2;
+}
+
+/* Main 12-Col Layout */
+.cbc-gomoku-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .cbc-gomoku-layout {
+    grid-template-columns: 360px 1fr;
+  }
+}
+
+.cbc-gomoku-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cbc-player-card {
+  background-color: var(--surface-container-lowest);
+  border: 1.5px solid var(--surface-container-high);
+  border-radius: 0.75rem;
+  padding: 1rem 1.125rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.cbc-player-card.is-active-turn {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(47, 108, 0, 0.12);
+}
+
+.cbc-player-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.cbc-player-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cbc-stone-badge {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.cbc-stone-badge.is-black {
+  background: radial-gradient(circle at 32% 30%, #4b4742, #171512 72%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+.cbc-stone-badge.is-white {
+  background: radial-gradient(circle at 32% 30%, #ffffff, #dcd8cf 78%);
+  border: 1px solid #b5afa2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.cbc-player-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.cbc-player-role-sub {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.cbc-turn-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  background-color: var(--surface-container);
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+}
+
+.cbc-turn-chip.is-active {
+  background-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.cbc-turn-chip.is-disconnected {
+  background-color: #ea580c;
+  color: #ffffff;
+}
+
+.cbc-match-info-card {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-container-high);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cbc-match-info-heading {
+  margin: 0;
+  font-family: var(--font-headline);
+  font-size: 16px;
+}
+
+.cbc-match-info-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cbc-match-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.cbc-match-info-row dt {
+  color: var(--on-surface-variant);
+}
+
+.cbc-match-info-row dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.cbc-match-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.cbc-btn-resign {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid var(--error);
+  background-color: transparent;
+  color: var(--error);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.cbc-btn-resign:hover:not(:disabled) {
+  background-color: rgba(186, 26, 26, 0.08);
+}
+
+.cbc-btn-resign:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 15×15 Wood Gomoku Board (0..14) */
+.cbc-gomoku-board-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cbc-gomoku-wood-frame {
+  width: 100%;
+  max-width: 680px;
+  background: linear-gradient(145deg, #dec094, #cfa974);
+  border: 4px solid #8a6539;
+  border-radius: 0.875rem;
+  padding: 0.875rem 1rem 1rem 0.625rem;
+  box-shadow:
+    0 14px 32px -8px rgba(48, 35, 19, 0.25),
+    inset 0 1px 0 rgba(255, 245, 225, 0.55);
+}
+
+.cbc-gomoku-col-headers {
+  display: grid;
+  grid-template-columns: 28px repeat(15, minmax(0, 1fr));
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.cbc-gomoku-corner-spacer {
+  width: 28px;
+}
+
+.cbc-gomoku-coord-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4f381d;
+  text-align: center;
+  user-select: none;
+}
+
+.cbc-gomoku-rows-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.cbc-gomoku-row {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+}
+
+.cbc-gomoku-row-cells {
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+}
+
+.cbc-gomoku-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.cbc-gomoku-cell::before,
+.cbc-gomoku-cell::after {
+  content: "";
+  position: absolute;
+  background-color: rgba(74, 52, 27, 0.62);
+  pointer-events: none;
+}
+
+/* Horizontal grid line */
+.cbc-gomoku-cell::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+/* Vertical grid line */
+.cbc-gomoku-cell::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.cbc-gomoku-cell:not(:disabled):hover {
+  background-color: rgba(47, 108, 0, 0.16);
+  border-radius: 9999px;
+}
+
+.cbc-gomoku-cell:disabled {
+  cursor: default;
+}
+
+.cbc-gomoku-star-dot {
+  position: relative;
+  z-index: 1;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #4a341b;
+}
+
+.cbc-gomoku-stone {
+  position: relative;
+  z-index: 2;
+  width: 82%;
+  height: 82%;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cbc-gomoku-stone.is-black {
+  background: radial-gradient(circle at 30% 28%, #524d47, #161412 72%);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.cbc-gomoku-stone.is-white {
+  background: radial-gradient(circle at 30% 28%, #ffffff, #ded9cf 75%);
+  border: 1px solid #a89f90;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22);
+}
+
+.cbc-gomoku-last-marker {
+  width: 34%;
+  height: 34%;
+  border-radius: 9999px;
+  background-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.cbc-gomoku-board-caption {
+  margin: 0;
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  text-align: center;
+}
+
+/* Result Panel (15_gomoku_result) */
+.cbc-gomoku-result-panel {
+  background-color: var(--surface-container-lowest);
+  border: 2px solid var(--primary);
+  border-radius: 0.875rem;
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  box-shadow: 0 12px 32px -8px rgba(42, 42, 38, 0.14);
+}
+
+.cbc-result-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+}
+
+.cbc-result-badge {
+  padding: 0.25rem 0.875rem;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background-color: var(--secondary-container);
+  color: var(--on-primary-container);
+}
+
+.cbc-result-badge.is-defeat {
+  background-color: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.cbc-result-headline {
+  margin: 0;
+  font-family: var(--font-headline);
+  font-size: 32px;
+  line-height: 40px;
+}
+
+.cbc-result-subheadline {
+  margin: 0;
+  font-size: 15px;
+  color: var(--on-surface-variant);
+}
+
+.cbc-result-summary-strip {
+  margin-top: 0.75rem;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background-color: var(--surface-container-low);
+}
+
+.cbc-result-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cbc-result-summary-label {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.cbc-result-criteria-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cbc-result-criteria-heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.cbc-result-criteria-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.cbc-result-criterion-card {
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container-high);
+  font-size: 13px;
+}
+
+.cbc-result-criterion-card.is-active {
+  background-color: rgba(177, 245, 139, 0.3);
+  border: 1.5px solid var(--primary);
+}
+
+.cbc-result-criterion-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.cbc-result-criterion-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cbc-result-criterion-card p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--on-surface-variant);
+}
+
+.cbc-result-footer {
+  display: flex;
+  justify-content: center;
+}
+
