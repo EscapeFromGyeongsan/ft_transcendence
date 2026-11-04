@@ -462,6 +462,39 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     expect((await service.getMatch(matchId))?.game.status).toBe("playing");
   });
 
+  test("setStatus pauses and resumes without bumping the version", async () => {
+    expect(await service.setStatus(matchId, "playing", "paused")).toBe(true);
+    expect((await service.getMatch(matchId))?.game).toMatchObject({
+      status: "paused",
+      stateVersion: 0,
+    });
+    expect(await place(black, 0, 7, 7)).toMatchObject({
+      status: "rejected",
+      code: "GAME_NOT_ACTIVE",
+    });
+    expect(await service.setStatus(matchId, "paused", "playing")).toBe(true);
+    expect((await service.getMatch(matchId))?.game).toMatchObject({
+      status: "playing",
+      stateVersion: 0,
+    });
+  });
+
+  test("setStatus changes nothing when the status already moved on", async () => {
+    expect(await service.setStatus(matchId, "paused", "playing")).toBe(false);
+    await service.apply({
+      matchId,
+      userId: black,
+      commandId: randomUUID(),
+      expectedVersion: 0,
+      action: { type: "resign" },
+    });
+    expect(await service.setStatus(matchId, "playing", "paused")).toBe(false);
+    expect((await service.getMatch(matchId))?.game.status).toBe("finished");
+    expect(await service.setStatus(matchId + 1000, "playing", "paused")).toBe(
+      false,
+    );
+  });
+
   test("getSnapshot returns the contract shape for a playing match", async () => {
     await place(black, 0, 7, 7);
     const snapshot = await service.getSnapshot(matchId);

@@ -4,8 +4,12 @@ import type { Executor } from "../db/client.ts";
 import { gamePlayers, games } from "../db/schema/games.ts";
 import { users } from "../db/schema/users.ts";
 
-// Counts come from finished matches only (game_players.result is set at
-// finish). Void matches are excluded from played/win rate.
+/**
+ * 사용자의 게임 종류별 승·패·무 수를 셉니다.
+ *
+ * @remarks
+ * `game_players.result`는 경기가 끝날 때 채워지므로 끝난 경기만 집계됩니다. 무효(void) 경기는 세지 않습니다.
+ */
 export async function countResults(
   db: Executor,
   userId: number,
@@ -25,6 +29,12 @@ export async function countResults(
 
 const opponent = alias(gamePlayers, "opponent");
 
+/**
+ * 사용자의 끝난 경기 목록을 최신순(경기 ID 내림차순)으로 읽습니다.
+ *
+ * @param options - `before`는 이 경기 ID보다 오래된 것만(cursor), `limit`은 페이지 크기
+ * @returns 최대 `limit + 1`행. 마지막 한 행은 다음 페이지가 있는지 판단용입니다.
+ */
 export function findFinishedMatches(
   db: Executor,
   userId: number,
@@ -63,8 +73,13 @@ export function findFinishedMatches(
   );
 }
 
-// DEC-08 order: wins desc, win rate desc, user id asc. Void matches are not
-// counted; users with at least one counted match are listed.
+/**
+ * 게임 종류별 리더보드 상위 `limit`명을 읽습니다.
+ *
+ * @remarks
+ * DEC-08 순서: 승수 내림차순, 승률 내림차순, 사용자 ID 오름차순. 무효 경기는 세지 않고,
+ * 집계되는 경기가 한 판 이상인 사용자만 나옵니다.
+ */
 export function findLeaderboard(db: Executor, gameType: string, limit: number) {
   const wins = sql<number>`count(*) filter (where ${gamePlayers.result} = 'win')::int`;
   const played = sql<number>`count(*) filter (where ${gamePlayers.result} in ('win', 'loss', 'draw'))::int`;
