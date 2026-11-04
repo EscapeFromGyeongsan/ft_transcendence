@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
@@ -364,6 +365,23 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
           await request(sockets[0], "match.subscribe", { matchId }),
         ).toMatchObject({ payload: { code: "INVALID_MESSAGE" } });
       }
+    });
+
+    test("an unsubscribe sent right after subscribe is handled after it", async () => {
+      const replies: unknown[] = [];
+      sockets[0].on("message", (data) =>
+        replies.push(JSON.parse(data.toString()).type),
+      );
+      sendJson(sockets[0], {
+        type: "match.subscribe",
+        payload: { matchId: matchA },
+      });
+      sendJson(sockets[0], {
+        type: "match.unsubscribe",
+        payload: { matchId: matchA },
+      });
+      await vi.waitFor(() => expect(replies).toHaveLength(2));
+      expect(replies).toEqual(["match.snapshot", "match.unsubscribed"]);
     });
 
     test("unsubscribe is acknowledged", async () => {
