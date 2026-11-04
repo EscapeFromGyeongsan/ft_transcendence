@@ -27,9 +27,12 @@ export type Envelope = {
  * - `malformedMessage`(4400): JSON이 아니거나 envelope 형식이 틀린 메시지,
  *   binary 메시지
  * - `internalError`(1011): 인증 서비스 장애 등 서버 내부 오류
+ * - `messageTooLarge`(1009): 16 KiB를 넘는 메시지. 서버 코드가 아니라 `ws`
+ *   라이브러리가 `maxPayload` 설정에 따라 닫습니다.
  */
 export const closeCodes = {
   internalError: 1011,
+  messageTooLarge: 1009,
   malformedMessage: 4400,
   unauthenticated: 4401,
 } as const;
@@ -193,6 +196,8 @@ export function registerRealtimeRoutes(
     { websocket: true, schema: { hide: true } },
     (socket, request) => {
       let claims: AccessTokenClaims | undefined;
+      // Session the socket is registered under, set before auth.ok.
+      let registeredSession: string | undefined;
       let authenticating = false;
       const authTimer = setTimeout(
         () =>
@@ -202,7 +207,9 @@ export function registerRealtimeRoutes(
 
       socket.on("close", () => {
         clearTimeout(authTimer);
-        if (claims) connections.remove(claims.sessionId, socket);
+        if (registeredSession) {
+          connections.remove(registeredSession, socket);
+        }
       });
 
       socket.on("message", async (data, isBinary) => {
@@ -227,6 +234,14 @@ export function registerRealtimeRoutes(
           let result: AccessTokenClaims | null;
           try {
             result = await getAuth().authenticate(token);
+            if (result && socket.readyState === socket.OPEN) {
+              // From here a logout closes this socket. A logout that
+              // committed while the session was being checked found nothing
+              // to close, so check the session once more.
+              registeredSession = result.sessionId;
+              connections.add(registeredSession, socket);
+              if (!(await getAuth().authenticate(token))) result = null;
+            }
           } catch (error) {
             request.log.error(
               { err: error },
@@ -247,7 +262,6 @@ export function registerRealtimeRoutes(
           if (socket.readyState !== socket.OPEN) return;
           clearTimeout(authTimer);
           claims = result;
-          connections.add(claims.sessionId, socket);
           send(socket, "auth.ok", { userId: claims.userId }, message.requestId);
           return;
         }
