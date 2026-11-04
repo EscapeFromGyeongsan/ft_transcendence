@@ -26,7 +26,9 @@ export type LeaveResult = "left" | "ALREADY_MATCHED";
 /**
  * 자동 매칭 대기열을 만듭니다(SDS 2.7의 7.1, IF-06).
  *
- * @param deps.send - 매칭 결과·오류를 연결에 보내는 함수
+ * @param deps.send - 매칭 실패 오류를 신청한 연결에 보내는 함수
+ * @param deps.notifyUser - `queue.matched`를 사용자의 모든 연결에 보내는 함수.
+ *   신청한 탭이 매칭 중에 닫혀도 다른 탭이 경기를 알 수 있습니다.
  * @param deps.onError - `createMatch()` 실패를 기록하는 함수
  * @param deps.random - 흑·백 배정에 쓰는 난수. 테스트에서 고정할 때 넘깁니다.
  * @param deps.onMatched - 경기가 만들어진 직후, 알림을 보내기 전에 호출됩니다.
@@ -48,6 +50,7 @@ export type LeaveResult = "left" | "ALREADY_MATCHED";
 export function createMatchmaking(deps: {
   getGames: () => GameCommandService;
   send: (socket: WebSocket, type: string, payload: object) => void;
+  notifyUser: (userId: number, type: string, payload: object) => void;
   onError: (error: unknown) => void;
   random?: () => number;
   onMatched?: (matchId: number, userIds: number[]) => void;
@@ -55,11 +58,14 @@ export function createMatchmaking(deps: {
   const random = deps.random ?? Math.random;
   const queues = new Map<GameType, Entry[]>();
   const entries = new Map<number, Entry>();
+  // Users whose join is still checking the DB.
+  const joining = new Set<number>();
 
   function dequeue(entry: Entry) {
     const queue = queues.get(entry.gameType) ?? [];
-    queue.splice(queue.indexOf(entry), 1);
-    entries.delete(entry.userId);
+    const index = queue.indexOf(entry);
+    if (index >= 0) queue.splice(index, 1);
+    if (entries.get(entry.userId) === entry) entries.delete(entry.userId);
   }
 
   // Pairs are taken synchronously, so one entry never ends up in two matches.
@@ -69,7 +75,7 @@ export function createMatchmaking(deps: {
     if (waiting.length < 2) return;
     const pair = waiting.slice(0, 2);
     for (const entry of pair) entry.state = "matching";
-    void createMatch(pair);
+    void createMatch(pair).catch(deps.onError);
   }
 
   async function createMatch(pair: Entry[]) {
@@ -83,7 +89,7 @@ export function createMatchmaking(deps: {
       deps.onMatched?.(matchId, [black.userId, white.userId]);
       for (const entry of pair) {
         dequeue(entry);
-        deps.send(entry.socket, "queue.matched", {
+        deps.notifyUser(entry.userId, "queue.matched", {
           matchId,
           gameType: entry.gameType,
         });
@@ -106,21 +112,25 @@ export function createMatchmaking(deps: {
      * 사용자를 게임 종류의 대기열에 넣고, 두 명이 모이면 매칭을 시작합니다.
      *
      * @remarks
-     * 끝나지 않은 경기는 DB로 확인합니다(`findActiveMatchId`). 이 조회 전후로
-     * 대기열을 확인하므로, 같은 사용자의 동시 신청은 하나만 들어갑니다.
+     * 끝나지 않은 경기는 DB로 확인합니다(`findActiveMatchId`). 조회하는 동안
+     * 그 사용자의 다른 신청은 거절하므로, 여러 탭에서 동시에 신청해도 하나만
+     * 들어갑니다. 한 신청이 매칭까지 끝내는 사이 다른 신청의 조회가 예전 DB
+     * 상태를 읽어 다시 대기열에 들어가는 일이 없습니다.
      */
     async join(
       userId: number,
       socket: WebSocket,
       gameType: GameType,
     ): Promise<JoinResult> {
-      // Checked before and after the lookup: a join that starts while the
-      // user is being matched must not see the old DB state as idle.
-      if (entries.has(userId)) return "ALREADY_ACTIVE";
-      const activeMatchId = await deps.getGames().findActiveMatchId(userId);
-      if (activeMatchId !== undefined || entries.has(userId)) {
-        return "ALREADY_ACTIVE";
+      if (entries.has(userId) || joining.has(userId)) return "ALREADY_ACTIVE";
+      joining.add(userId);
+      let activeMatchId: number | undefined;
+      try {
+        activeMatchId = await deps.getGames().findActiveMatchId(userId);
+      } finally {
+        joining.delete(userId);
       }
+      if (activeMatchId !== undefined) return "ALREADY_ACTIVE";
       // Closed during the lookup: removeSocket() has already run.
       if (socket.readyState !== socket.OPEN) return "closed";
       const entry: Entry = { userId, socket, gameType, state: "waiting" };

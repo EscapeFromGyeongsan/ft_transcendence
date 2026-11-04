@@ -395,6 +395,25 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 현재 서버는 같은 참가자가 같은 경기·`commandId`로 **다른 payload를 보내도 최초 결과를 재전송**한다. `COMMAND_ID_CONFLICT`는 현재 다른 사용자의 ID 재사용에만 해당한다. 새 행동에는 항상 새 `commandId`를 만들고 동일 요청 재전송에만 기존 값을 사용해야 한다. B는 최초 결과 재전송 유지와 해시 비교 미도입을 제안했다. #29에서 다른 소비자의 확인을 추적하며, 이번 문서 보완은 서버 동작을 변경하지 않는다.
 
+### 9.2 엔진 규칙 상태와 전송 snapshot
+
+`@cafe/game-engine`의 `gomoku.createInitialState()`는 `GomokuState`를 반환한다. 엔진 상태는 다음 필드로 구성한다.
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| `board` | `Cell[][]` | 15×15 오목 보드. 초기에는 모든 칸이 `null` |
+| `currentPlayerColor` | `PlayerColor \| null` | 현재 차례의 돌 색. 초기에는 `"black"`, 규칙상 종료 후에는 `null` |
+| `result` | `GomokuFinish \| null` | 진행 중에는 `null`. 승리 시 `{ outcome: "win", winner: PlayerColor, reason: "five_in_row" }`, 무승부 시 `{ outcome: "draw", reason: "draw" }` |
+
+엔진은 규칙 데이터로 작업한다. 경기 관리 계층이 `currentPlayerColor`를 배정된 흑·백 사용자 ID와 연결해 `currentPlayerId`를 구성하고, 경기 ID·규칙 버전·상태 버전·진행 상태·결과를 붙여 전송용 `GomokuSnapshot`을 만든다. 인증·명령 중복 처리·버전 관리·저장·전송은 경기 관리 계층의 책임이다.
+
+초기 상태 생성과 `gomoku.applyMove(state, action, playerColor)`를 구현했으며 팀 검토 대상이다. `action`은 착수 전용 `PlaceAction`이고 `playerColor`는 서버가 인증된 참가자에게 배정한 색이다. 엔진은 종료 여부, 정수·범위 좌표, 현재 차례, 빈칸을 검사한다. 정상 착수는 모든 행을 복사한 새 보드의 `{ ok: true, state }`를 반환한다. 가로·세로·두 대각선의 연속 5개 이상이면 승리하고, 승리 없이 보드가 차면 무승부이다. 금수는 없다. 종료 후에는 차례가 `null`이며 추가 착수를 `GAME_FINISHED`로 거절한다. 그 외 불법 착수는 `INVALID_ACTION`이다. 실패는 `{ ok: false, error: { code, message } }`이며 성공·실패 모두 입력 상태를 수정하지 않는다. 이 반환 형식은 엔진 호출 결과이며 REST·WebSocket의 응답 형식을 확정하지 않는다.
+
+엔진 입력은 유효한 15×15 규칙 상태와 구조가 검증된 행동이다. `gomoku.restoreState(moves)`는 저장 순서의 착수 기록으로 규칙 상태를 복원하고, 잘못된 이력에는 예외를 던진다. `gomoku.rules`는 팀 PR #11의 `GameRules`에 맞는 연결 함수이며 착수 기록을 재생한 뒤 다음 차례·종료 결과 또는 오류 코드를 반환한다. 제안 규칙 버전은 `gomoku.GOMOKU_RULES_VERSION`(`gomoku-freestyle-v1`)이다. 등록·버전 선택은 호출 계층에서 담당한다.
+
+실제 참가자·경기 진행 상태 검사, 기권·이탈·재시작에 따른 종료, 명령 중복·버전 관리, snapshot 구성·전송은 경기 관리 계층에서 연결해야 한다. 보드 재생만으로 기권·이탈 등의 결과를 복원할 수 없으므로 저장된 경기 상태·결과도 함께 사용한다. PR #6의 `769f809`는 숫자 ID와 기권을 포함하는 전송 계약을 추가한다. 이 문서에는 해당 전송 계약을 통합했다. 서버는 기권을 직접 처리하고 `PlaceAction`만 엔진에 전달한다. `GomokuRulesInput.action`도 착수 전용이며 엔진 연결 함수는 ID를 사용하지 않는다. 상세 공개 함수와 검증 방법은 [game-engine/README.md](../packages/game-engine/README.md)를 참조한다.
+
+
 ## 10. 요청자 및 팀 검토 항목
 
 - [x] 요청자가 필드 설명과 초기 상태 → 착수 → 갱신 예제 흐름을 검토했다(2026-10-08).

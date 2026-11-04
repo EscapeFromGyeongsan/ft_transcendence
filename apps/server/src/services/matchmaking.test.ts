@@ -15,15 +15,18 @@ function setup(
   let nextMatchId = 100;
   const games = {
     createMatch: vi.fn(options.createMatch ?? (async () => nextMatchId++)),
-    findActiveMatchId: vi.fn(async (userId: number) =>
-      options.active?.includes(userId) ? 1 : undefined,
+    findActiveMatchId: vi.fn(
+      async (userId: number): Promise<number | undefined> =>
+        options.active?.includes(userId) ? 1 : undefined,
     ),
   };
-  const sent: { socket: WebSocket; type: string; payload: object }[] = [];
+  // `to` is a socket for send() and a user ID for notifyUser().
+  const sent: { to: WebSocket | number; type: string; payload: object }[] = [];
   const onError = vi.fn();
   const matchmaking = createMatchmaking({
     getGames: () => games as unknown as GameCommandService,
-    send: (socket, type, payload) => sent.push({ socket, type, payload }),
+    send: (to, type, payload) => sent.push({ to, type, payload }),
+    notifyUser: (to, type, payload) => sent.push({ to, type, payload }),
     onError,
     random: () => 0,
   });
@@ -47,12 +50,12 @@ describe("matchmaking", () => {
     });
     expect(sent).toEqual([
       {
-        socket: s1,
+        to: 1,
         type: "queue.matched",
         payload: { matchId: 100, gameType: "gomoku" },
       },
       {
-        socket: s2,
+        to: 2,
         type: "queue.matched",
         payload: { matchId: 100, gameType: "gomoku" },
       },
@@ -70,6 +73,7 @@ describe("matchmaking", () => {
     const matchmaking = createMatchmaking({
       getGames: () => games as unknown as GameCommandService,
       send: () => {},
+      notifyUser: () => {},
       onError: () => {},
       random: () => roll,
     });
@@ -119,6 +123,22 @@ describe("matchmaking", () => {
       matchmaking.join(1, fakeSocket(), "gomoku"),
     ]);
     expect(results.sort()).toEqual(["ALREADY_ACTIVE", "joined"]);
+  });
+
+  test("a second join of the same user is refused while the first checks the DB", async () => {
+    let release!: () => void;
+    const { matchmaking, games } = setup();
+    games.findActiveMatchId.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve(undefined))),
+    );
+    // Another tab joins while the first lookup is pending. Before the fix
+    // its lookup could read the DB from before the first join's match.
+    const first = matchmaking.join(1, fakeSocket(), "gomoku");
+    expect(await matchmaking.join(1, fakeSocket(), "gomoku")).toBe(
+      "ALREADY_ACTIVE",
+    );
+    release();
+    expect(await first).toBe("joined");
   });
 
   test("leaving or closing the socket before a pair forms removes the entry", async () => {

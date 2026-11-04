@@ -309,8 +309,10 @@ export function createGameCommandService(
     },
 
     // Called by the match layer (D) when a disconnect budget runs out. Takes
-    // the same match lock as apply(), so a return or a last move that commits
-    // first wins and this call does nothing (status or version moved on).
+    // the same match lock as apply(), so a move or resign that commits first
+    // wins and this call does nothing (status or version moved on). Pause and
+    // resume keep stateVersion, so a return alone does not stop a stale call;
+    // D rechecks absent players and cancels the timer on return.
     finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
       return db.transaction(async (tx) => {
         const game = await repo.findGameForUpdate(tx, input.matchId);
@@ -349,6 +351,11 @@ export function createGameCommandService(
 
     // Raw rows for checks that need them (participants, history).
     getMatch,
+
+    /** 이 게임 종류의 엔진이 등록되어 경기를 만들 수 있는지 확인합니다. */
+    isRegistered(gameType: string) {
+      return rulesByGameType[gameType as GameType] !== undefined;
+    },
 
     /**
      * 사용자의 끝나지 않은 경기(`waiting`/`playing`/`paused`) ID를 찾습니다.

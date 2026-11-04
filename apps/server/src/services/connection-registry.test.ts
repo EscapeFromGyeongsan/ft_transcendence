@@ -13,10 +13,10 @@ describe("connection registry", () => {
   test("a match broadcast reaches only that match's subscribers", () => {
     const registry = createConnectionRegistry();
     const [a1, a2, b1, idle] = [1, 2, 3, 4].map(fakeSocket);
-    registry.add("s1", a1);
-    registry.add("s2", a2);
-    registry.add("s3", b1);
-    registry.add("s4", idle);
+    registry.add("s1", a1, 1);
+    registry.add("s2", a2, 1);
+    registry.add("s3", b1, 1);
+    registry.add("s4", idle, 1);
     registry.subscribe(10, 1, a1);
     registry.subscribe(10, 2, a2);
     registry.subscribe(20, 3, b1);
@@ -45,6 +45,19 @@ describe("connection registry", () => {
     ]);
   });
 
+  test("the sent version survives an empty match until forgetMatch", () => {
+    const registry = createConnectionRegistry();
+    const [first, later] = [1, 2].map(fakeSocket);
+    registry.subscribe(10, 1, first);
+    registry.broadcastUpdate(10, 3, { v: 3 });
+    registry.unsubscribe(10, first);
+
+    registry.subscribe(10, 1, later);
+    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(false);
+    registry.forgetMatch(10);
+    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(true);
+  });
+
   test("the last subscribing socket of a user controls the match", () => {
     const registry = createConnectionRegistry();
     const [tab1, tab2, opponent] = [1, 2, 3].map(fakeSocket);
@@ -69,7 +82,7 @@ describe("connection registry", () => {
     const registry = createConnectionRegistry();
     const [left, closed, stays] = [1, 2, 3].map(fakeSocket);
     for (const [i, socket] of [left, closed, stays].entries()) {
-      registry.add("s", socket);
+      registry.add("s", socket, 1);
       registry.subscribe(10, i + 1, socket);
     }
     registry.subscribe(20, 2, closed);
@@ -88,12 +101,26 @@ describe("connection registry", () => {
     expect(registry.isSubscribed(10, stays)).toBe(true);
   });
 
+  test("sendToUser reaches every connection of that user only", () => {
+    const registry = createConnectionRegistry();
+    const [tab1, tab2, other] = [1, 2, 3].map(fakeSocket);
+    registry.add("s1", tab1, 7);
+    registry.add("s2", tab2, 7);
+    registry.add("s3", other, 8);
+    registry.remove("s2", tab2);
+
+    registry.sendToUser(7, { type: "queue.matched" });
+    expect(tab1.send).toHaveBeenCalledOnce();
+    expect(tab2.send).not.toHaveBeenCalled();
+    expect(other.send).not.toHaveBeenCalled();
+  });
+
   test("closeSession closes only that session's sockets", () => {
     const registry = createConnectionRegistry();
     const [tab1, tab2, other] = [1, 2, 3].map(fakeSocket);
-    registry.add("s1", tab1);
-    registry.add("s1", tab2);
-    registry.add("s2", other);
+    registry.add("s1", tab1, 1);
+    registry.add("s1", tab2, 1);
+    registry.add("s2", other, 1);
 
     registry.closeSession("s1", 4401, "Session ended.");
 

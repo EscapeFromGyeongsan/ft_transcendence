@@ -23,6 +23,8 @@ function deleteFrom<K, V>(map: Map<K, Set<V>>, key: K, value: V) {
  */
 export function createConnectionRegistry() {
   const bySession = new Map<string, Set<WebSocket>>();
+  const byUser = new Map<number, Set<WebSocket>>();
+  const userOf = new Map<WebSocket, number>();
   const byMatch = new Map<number, Set<WebSocket>>();
   const matchesOf = new Map<WebSocket, Set<number>>();
   // FR-MATCH-02: per match and user, only the socket that subscribed last
@@ -39,13 +41,14 @@ export function createConnectionRegistry() {
       if (controller === socket) byUser!.delete(userId);
     }
     if (byUser?.size === 0) controllers.delete(matchId);
-    if (!byMatch.has(matchId)) sentVersions.delete(matchId);
   }
 
   return {
     /** 인증에 성공한 연결을 세션에 등록합니다. */
-    add(sessionId: string, socket: WebSocket) {
+    add(sessionId: string, socket: WebSocket, userId: number) {
       addTo(bySession, sessionId, socket);
+      addTo(byUser, userId, socket);
+      userOf.set(socket, userId);
     },
 
     /**
@@ -54,6 +57,9 @@ export function createConnectionRegistry() {
      */
     remove(sessionId: string, socket: WebSocket) {
       deleteFrom(bySession, sessionId, socket);
+      const userId = userOf.get(socket);
+      if (userId !== undefined) deleteFrom(byUser, userId, socket);
+      userOf.delete(socket);
       for (const matchId of matchesOf.get(socket) ?? []) {
         unsubscribe(matchId, socket);
       }
@@ -136,6 +142,23 @@ export function createConnectionRegistry() {
     broadcastEvent(matchId: number, message: object) {
       const data = JSON.stringify(message);
       for (const socket of byMatch.get(matchId) ?? []) socket.send(data);
+    },
+
+    /** 사용자의 인증된 연결 전체(여러 탭·기기)에 메시지를 보냅니다. */
+    sendToUser(userId: number, message: object) {
+      const data = JSON.stringify(message);
+      for (const socket of byUser.get(userId) ?? []) socket.send(data);
+    },
+
+    /**
+     * 경기가 끝났을 때 그 경기의 마지막 전송 버전을 지웁니다.
+     *
+     * @remarks
+     * 구독자가 모두 나가도 지우지 않습니다. 그 뒤 늦게 끝난 명령이 낮은 버전을
+     * 새 구독자에게 보내지 않게 하기 위해서입니다.
+     */
+    forgetMatch(matchId: number) {
+      sentVersions.delete(matchId);
     },
   };
 }
