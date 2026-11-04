@@ -7,11 +7,14 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import type { Cell } from "@cafe/game-contracts";
+import { gomoku } from "@cafe/game-engine";
 import { buildApp } from "../app.ts";
+import { signAccessToken } from "../core/tokens.ts";
 import {
   createGameCommandService,
   type RegisteredRules,
@@ -117,6 +120,7 @@ test("parseCommand checks the shared GameCommand shape", () => {
   };
   expect(parseCommand(valid)).toEqual({
     matchId: 1,
+    gameType: "gomoku",
     commandId: valid.commandId,
     expectedVersion: 0,
     action: { type: "place", row: 7, col: 7 },
@@ -131,6 +135,7 @@ test("parseCommand checks the shared GameCommand shape", () => {
     { commandId: "c1" },
     { expectedVersion: -1 },
     { expectedVersion: 1.5 },
+    { expectedVersion: 2_147_483_648 },
     { action: { type: "place", row: "7", col: 7 } },
     { action: { type: "place", row: 7 } },
     { action: { type: "undo" } },
@@ -171,6 +176,39 @@ describe("/api/ws without a database", () => {
     const close = closed(socket);
     sendJson(socket, { type: "ping", payload: {} });
     expect((await close).code).toBe(4401);
+  });
+
+  test("closes 4400 on a binary message", async () => {
+    app = await buildApp({}, undefined, { jwtSecret });
+    const socket = await connect(app);
+    const close = closed(socket);
+    socket.send(Buffer.from('{"type":"auth","payload":{}}'));
+    expect((await close).code).toBe(4400);
+  });
+
+  test("a message over 16 KiB is closed by ws with 1009", async () => {
+    app = await buildApp({}, undefined, { jwtSecret });
+    const socket = await connect(app);
+    const close = closed(socket);
+    sendJson(socket, { type: "auth", payload: { pad: "x".repeat(17_000) } });
+    expect((await close).code).toBe(1009);
+  });
+
+  test("closes 1011 when the database fails during authentication", async () => {
+    // A correctly signed token reaches the session lookup, which fails
+    // because nothing listens on port 1.
+    const validToken = signAccessToken(
+      { userId: 1, sessionId: "00000000-0000-4000-8000-000000000000" },
+      jwtSecret,
+      60,
+    );
+    app = await buildApp({}, "postgresql://cafe:x@127.0.0.1:1/cafe_none", {
+      jwtSecret,
+    });
+    const socket = await connect(app);
+    const close = closed(socket);
+    sendJson(socket, { type: "auth", payload: { accessToken: validToken } });
+    expect((await close).code).toBe(1011);
   });
 
   test("closes 1011 when authentication is unavailable", async () => {
@@ -255,6 +293,15 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     socket.terminate();
   });
 
+  test("a second message while authenticating is closed with 4401", async () => {
+    const accessToken = await loginToken();
+    const socket = await connect(app);
+    const close = closed(socket);
+    sendJson(socket, { type: "auth", payload: { accessToken } });
+    sendJson(socket, { type: "ping", payload: {} });
+    expect(await close).toEqual({ code: 4401, reason: "Authenticate first." });
+  });
+
   test("an invalid or tampered token is closed with 4401", async () => {
     const token = await loginToken();
     for (const accessToken of ["not-a-jwt", `${token}x`]) {
@@ -282,6 +329,57 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     const retryClose = closed(retry);
     sendJson(retry, { type: "auth", payload: { accessToken: token } });
     expect((await retryClose).code).toBe(4401);
+  });
+
+  test("the real gomoku engine refuses off-board moves as INVALID_ACTION", async () => {
+    const realGomoku: RegisteredRules = {
+      version: gomoku.GOMOKU_RULES_VERSION,
+      rules: gomoku.rules,
+      board: gomoku.board,
+    };
+    await app.close();
+    app = await buildApp(
+      {},
+      testDatabaseUrl,
+      { jwtSecret },
+      undefined,
+      {},
+      {
+        gomoku: realGomoku,
+      },
+    );
+    const token = await loginToken(1);
+    await loginToken(2);
+    const matchId = await createGameCommandService(database.db, {
+      gomoku: realGomoku,
+    }).createMatch({ gameType: "gomoku", blackUserId: 1, whiteUserId: 2 });
+    const { socket } = await authenticated(token);
+    const next = inbox(socket);
+    sendJson(socket, { type: "match.subscribe", payload: { matchId } });
+    await next();
+
+    // The DB allows only 0..14, so these must never reach insertMove.
+    for (const [row, col] of [
+      [15, 0],
+      [-1, 0],
+      [0, 15],
+    ]) {
+      sendJson(socket, {
+        type: "game.command",
+        payload: {
+          matchId,
+          gameType: "gomoku",
+          commandId: randomUUID(),
+          expectedVersion: 0,
+          action: { type: "place", row, col },
+        },
+      });
+      expect(await next()).toMatchObject({
+        type: "game.error",
+        payload: { code: "INVALID_ACTION" },
+      });
+    }
+    socket.terminate();
   });
 
   describe("match subscription", () => {
@@ -371,6 +469,23 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
           await request(sockets[0], "match.subscribe", { matchId }),
         ).toMatchObject({ payload: { code: "INVALID_MESSAGE" } });
       }
+    });
+
+    test("an unsubscribe sent right after subscribe is handled after it", async () => {
+      const replies: unknown[] = [];
+      sockets[0].on("message", (data) =>
+        replies.push(JSON.parse(data.toString()).type),
+      );
+      sendJson(sockets[0], {
+        type: "match.subscribe",
+        payload: { matchId: matchA },
+      });
+      sendJson(sockets[0], {
+        type: "match.unsubscribe",
+        payload: { matchId: matchA },
+      });
+      await vi.waitFor(() => expect(replies).toHaveLength(2));
+      expect(replies).toEqual(["match.snapshot", "match.unsubscribed"]);
     });
 
     test("unsubscribe is acknowledged", async () => {
@@ -502,6 +617,15 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
             },
           });
         }
+      });
+
+      test("a gameType that differs from the match is refused", async () => {
+        play(0, { gameType: "othello" });
+        expect(await next[0]()).toMatchObject({
+          type: "error",
+          payload: { code: "INVALID_MESSAGE", matchId: matchA },
+        });
+        await expectNothingPending(1);
       });
 
       test("an invalid command payload is refused before apply", async () => {

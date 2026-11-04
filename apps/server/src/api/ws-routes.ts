@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { GameType } from "@cafe/game-contracts";
-import type { WebSocket } from "ws";
+import type { GameSnapshot, GameType } from "@cafe/game-contracts";
+import type { RawData, WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
 import type { AuthService } from "../services/auth-service.ts";
 import type { ConnectionRegistry } from "../services/connection-registry.ts";
@@ -34,9 +34,12 @@ export type Envelope = {
  * - `malformedMessage`(4400): JSON이 아니거나 envelope 형식이 틀린 메시지,
  *   binary 메시지
  * - `internalError`(1011): 인증 서비스 장애 등 서버 내부 오류
+ * - `messageTooLarge`(1009): 16 KiB를 넘는 메시지. 서버 코드가 아니라 `ws`
+ *   라이브러리가 `maxPayload` 설정에 따라 닫습니다.
  */
 export const closeCodes = {
   internalError: 1011,
+  messageTooLarge: 1009,
   malformedMessage: 4400,
   unauthenticated: 4401,
 } as const;
@@ -110,6 +113,8 @@ function isMatchId(value: unknown): value is number {
 }
 
 const gameTypes: readonly unknown[] = ["gomoku", "othello"];
+// game_commands.expected_version is an int4 column.
+const MAX_EXPECTED_VERSION = 2_147_483_647;
 
 function isGameType(value: unknown): value is GameType {
   return gameTypes.includes(value);
@@ -139,14 +144,15 @@ function parseAction(value: unknown): GameAction | null {
  *
  * @remarks
  * - `matchId`는 1 이상 safe integer, `gameType`은 알려진 게임, `commandId`는
- *   UUID(`game_commands.command_id`가 uuid 컬럼), `expectedVersion`은 0 이상 정수
+ *   UUID(`game_commands.command_id`가 uuid 컬럼), `expectedVersion`은
+ *   0 이상 int4 범위 정수(`game_commands.expected_version`)
  * - `action`은 `place`(정수 `row`/`col`) 또는 `resign`만 받고, 다른 필드는 버립니다.
  * - 좌표 범위·합법 여부는 엔진이 판단합니다.
  * - 행동하는 사용자는 payload가 아니라 인증된 연결에서 정합니다(IF-02).
  */
 export function parseCommand(
   payload: Record<string, unknown>,
-): Omit<GameCommand, "userId"> | null {
+): (Omit<GameCommand, "userId"> & { gameType: GameType }) | null {
   const { matchId, gameType, commandId, expectedVersion } = payload;
   const action = parseAction(payload.action);
   if (
@@ -156,12 +162,14 @@ export function parseCommand(
     !uuidPattern.test(commandId) ||
     !Number.isSafeInteger(expectedVersion) ||
     (expectedVersion as number) < 0 ||
+    (expectedVersion as number) > MAX_EXPECTED_VERSION ||
     !action
   ) {
     return null;
   }
   return {
     matchId,
+    gameType: gameType as GameType,
     commandId,
     expectedVersion: expectedVersion as number,
     action,
@@ -219,6 +227,14 @@ export function registerRealtimeRoutes(
   config: RealtimeConfig = {},
 ) {
   const authTimeoutMs = config.authTimeoutMs ?? 5000;
+  // Game type of each match a socket has subscribed to, for command checks.
+  const matchGameTypes = new Map<number, GameType>();
+
+  function forgetMatch(matchId: number) {
+    connections.forgetMatch(matchId);
+    matchGameTypes.delete(matchId);
+  }
+
   const matchmaking = createMatchmaking({
     getGames,
     send: (socket, type, payload) => send(socket, type, payload),
@@ -298,17 +314,31 @@ export function registerRealtimeRoutes(
     }
     // Closed while the match was read: the close handler already ran.
     if (socket.readyState !== socket.OPEN) return;
+    const wasSubscribed = connections.isSubscribed(matchId, socket);
     const replaced = connections.subscribe(matchId, userId, socket);
     if (replaced && replaced.readyState === replaced.OPEN) {
       send(replaced, "session.replaced", { matchId });
     }
+    // On failure undo only this request, not an earlier subscription.
+    const undo = () => {
+      if (!wasSubscribed) connections.unsubscribe(matchId, socket);
+    };
+    let snapshot: GameSnapshot | undefined;
     try {
-      const snapshot = await games.getSnapshot(matchId);
-      send(socket, "match.snapshot", snapshot!, requestId);
+      snapshot = await games.getSnapshot(matchId);
     } catch (error) {
-      connections.unsubscribe(matchId, socket);
+      undo();
       throw error;
     }
+    if (!snapshot) {
+      undo();
+      sendError(socket, requestId, "NOT_FOUND", "Match not found.", {
+        matchId,
+      });
+      return;
+    }
+    matchGameTypes.set(matchId, snapshot.gameType);
+    send(socket, "match.snapshot", snapshot, requestId);
   }
 
   function unsubscribe(socket: WebSocket, { requestId, payload }: Envelope) {
@@ -339,7 +369,7 @@ export function registerRealtimeRoutes(
       );
       return;
     }
-    const { matchId, commandId } = parsed;
+    const { matchId, gameType, commandId, expectedVersion, action } = parsed;
     const gameError = (code: string, message: string, duplicate = false) =>
       send(
         socket,
@@ -355,13 +385,30 @@ export function registerRealtimeRoutes(
       gameError("SESSION_REPLACED", "Another connection controls this match.");
       return;
     }
+    if (gameType !== matchGameTypes.get(matchId)) {
+      sendError(
+        socket,
+        requestId,
+        "INVALID_MESSAGE",
+        "gameType does not match the match.",
+        { matchId },
+      );
+      return;
+    }
 
     const games = getGames();
-    const result = await games.apply({ ...parsed, userId });
+    const result = await games.apply({
+      matchId,
+      commandId,
+      expectedVersion,
+      action,
+      userId,
+    });
     if (result.status === "rejected") {
       gameError(result.code, rejectMessages[result.code], result.duplicate);
       if (result.code === "VERSION_CONFLICT") {
-        send(socket, "match.snapshot", (await games.getSnapshot(matchId))!);
+        const latest = await games.getSnapshot(matchId);
+        if (latest) send(socket, "match.snapshot", latest);
       }
       return;
     }
@@ -376,15 +423,17 @@ export function registerRealtimeRoutes(
       },
       requestId,
     );
-    // A resent command was already broadcast the first time.
-    if (result.duplicate) return;
-    // The snapshot may already include later commits; broadcastUpdate skips
-    // it when an equal or newer state already went out (SDS 12번 순서).
-    const snapshot = (await games.getSnapshot(matchId))!;
+    // Broadcast even for a resent command: if reading the snapshot failed
+    // after the first commit, the resend delivers it. The snapshot may also
+    // include later commits; broadcastUpdate skips any state that is not
+    // newer than the last one sent (SDS 12번 순서).
+    const snapshot = await games.getSnapshot(matchId);
+    if (!snapshot) return;
     connections.broadcastUpdate(matchId, snapshot.stateVersion, {
       type: "game.updated",
       payload: snapshot,
     });
+    if (snapshot.status === "finished") forgetMatch(matchId);
   }
 
   // The access token arrives in the first message, never in the URL, so it
@@ -394,7 +443,8 @@ export function registerRealtimeRoutes(
     { websocket: true, schema: { hide: true } },
     (socket, request) => {
       let claims: AccessTokenClaims | undefined;
-      let authenticating = false;
+      // Session the socket is registered under, set before auth.ok.
+      let registeredSession: string | undefined;
       const authTimer = setTimeout(
         () =>
           socket.close(closeCodes.unauthenticated, "Authentication timed out."),
@@ -404,10 +454,31 @@ export function registerRealtimeRoutes(
       socket.on("close", () => {
         clearTimeout(authTimer);
         matchmaking.removeSocket(socket);
-        if (claims) connections.remove(claims.sessionId, socket);
+        if (registeredSession) {
+          connections.remove(registeredSession, socket);
+        }
       });
 
-      socket.on("message", async (data, isBinary) => {
+      // Messages of one socket are handled one at a time in arrival order,
+      // so e.g. a match.unsubscribe never overtakes an earlier subscribe.
+      let pending = Promise.resolve();
+      let firstMessage = true;
+      socket.on("message", (data, isBinary) => {
+        // Only the auth message may come before auth.ok; anything else sent
+        // while it is being checked is refused right away, not queued.
+        if (!claims && !firstMessage) {
+          socket.close(closeCodes.unauthenticated, "Authenticate first.");
+          return;
+        }
+        firstMessage = false;
+        pending = pending
+          .then(() => handleMessage(data, isBinary))
+          .catch((error) =>
+            request.log.error({ err: error }, "WebSocket message failed."),
+          );
+      });
+
+      async function handleMessage(data: RawData, isBinary: boolean) {
         const message = isBinary ? null : parseEnvelope(data.toString());
         if (!message) {
           socket.close(closeCodes.malformedMessage, "Malformed message.");
@@ -416,19 +487,21 @@ export function registerRealtimeRoutes(
 
         if (!claims) {
           const token = message.payload.accessToken;
-          // Clients wait for auth.ok before sending anything else.
-          if (
-            authenticating ||
-            message.type !== "auth" ||
-            typeof token !== "string"
-          ) {
+          if (message.type !== "auth" || typeof token !== "string") {
             socket.close(closeCodes.unauthenticated, "Authenticate first.");
             return;
           }
-          authenticating = true;
           let result: AccessTokenClaims | null;
           try {
             result = await getAuth().authenticate(token);
+            if (result && socket.readyState === socket.OPEN) {
+              // From here a logout closes this socket. A logout that
+              // committed while the session was being checked found nothing
+              // to close, so check the session once more.
+              registeredSession = result.sessionId;
+              connections.add(registeredSession, socket);
+              if (!(await getAuth().authenticate(token))) result = null;
+            }
           } catch (error) {
             request.log.error(
               { err: error },
@@ -437,7 +510,6 @@ export function registerRealtimeRoutes(
             socket.close(closeCodes.internalError, "Service unavailable.");
             return;
           }
-          authenticating = false;
           if (!result) {
             socket.close(
               closeCodes.unauthenticated,
@@ -449,7 +521,6 @@ export function registerRealtimeRoutes(
           if (socket.readyState !== socket.OPEN) return;
           clearTimeout(authTimer);
           claims = result;
-          connections.add(claims.sessionId, socket);
           send(socket, "auth.ok", { userId: claims.userId }, message.requestId);
           return;
         }
@@ -491,7 +562,7 @@ export function registerRealtimeRoutes(
             "Internal server error.",
           );
         }
-      });
+      }
     },
   );
 }

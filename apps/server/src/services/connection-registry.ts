@@ -39,7 +39,6 @@ export function createConnectionRegistry() {
       if (controller === socket) byUser!.delete(userId);
     }
     if (byUser?.size === 0) controllers.delete(matchId);
-    if (!byMatch.has(matchId)) sentVersions.delete(matchId);
   }
 
   return {
@@ -122,6 +121,17 @@ export function createConnectionRegistry() {
       const data = JSON.stringify(message);
       for (const socket of sockets) socket.send(data);
       return true;
+    },
+
+    /**
+     * 경기가 끝났을 때 그 경기의 마지막 전송 버전을 지웁니다.
+     *
+     * @remarks
+     * 구독자가 모두 나가도 지우지 않습니다. 그 뒤 늦게 끝난 명령이 낮은 버전을
+     * 새 구독자에게 보내지 않게 하기 위해서입니다.
+     */
+    forgetMatch(matchId: number) {
+      sentVersions.delete(matchId);
     },
   };
 }

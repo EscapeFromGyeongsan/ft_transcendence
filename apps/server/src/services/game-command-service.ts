@@ -309,8 +309,10 @@ export function createGameCommandService(
     },
 
     // Called by the match layer (D) when a disconnect budget runs out. Takes
-    // the same match lock as apply(), so a return or a last move that commits
-    // first wins and this call does nothing (status or version moved on).
+    // the same match lock as apply(), so a move or resign that commits first
+    // wins and this call does nothing (status or version moved on). Pause and
+    // resume keep stateVersion, so a return alone does not stop a stale call;
+    // D rechecks absent players and cancels the timer on return.
     finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
       return db.transaction(async (tx) => {
         const game = await repo.findGameForUpdate(tx, input.matchId);
