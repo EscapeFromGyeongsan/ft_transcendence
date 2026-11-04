@@ -318,6 +318,33 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     }
   });
 
+  test("refresh-token reuse closes the connections of that session", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { email: "p1@example.com", password, nickname: "p1" },
+    });
+    const login = (
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { email: "p1@example.com", password },
+      })
+    ).json();
+    const { socket } = await authenticated(login.accessToken);
+    const close = closed(socket);
+    const refresh = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/refresh",
+        payload: { refreshToken: login.refreshToken },
+      });
+    expect((await refresh()).statusCode).toBe(200);
+    // Reusing the rotated token is treated as theft (#51).
+    expect((await refresh()).statusCode).toBe(401);
+    expect(await close).toEqual({ code: 4401, reason: "Session ended." });
+  });
+
   test("logout closes open connections of that session and rejects the token", async () => {
     const token = await loginToken();
     const { socket } = await authenticated(token);
@@ -810,12 +837,23 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
         type: "player.disconnected",
         payload: { matchId, userId: 1, remainingMs: expect.any(Number) },
       });
+      // The match is paused (setStatus) with the same stateVersion.
+      expect(await p2.next()).toMatchObject({
+        type: "match.snapshot",
+        payload: { status: "paused", stateVersion: 0 },
+      });
 
       const back = await player(tokens[0]);
       expect(await p2.next()).toMatchObject({
         type: "player.reconnected",
         payload: { matchId, userId: 1 },
       });
+      for (const next of [p2.next, back.next]) {
+        expect(await next()).toMatchObject({
+          type: "match.snapshot",
+          payload: { status: "playing", stateVersion: 0 },
+        });
+      }
       back.socket.terminate();
       p2.socket.terminate();
     });
@@ -828,6 +866,10 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       p1.socket.terminate();
       expect(await p2.next()).toMatchObject({ type: "player.disconnected" });
       expect(await p2.next()).toMatchObject({
+        type: "match.snapshot",
+        payload: { status: "paused" },
+      });
+      expect(await p2.next()).toMatchObject({
         type: "game.updated",
         payload: {
           status: "finished",
@@ -836,6 +878,43 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
         },
       });
       p2.socket.terminate();
+    });
+
+    test("a silent connection is cut right at the timeout, not the next ping", async () => {
+      // Pings are far apart; the cut must not wait for the next one.
+      await start({ heartbeatIntervalMs: 5_000, heartbeatTimeoutMs: 150 });
+      const p1 = await player(tokens[0]);
+      p1.socket.pong = () => {};
+      const startedAt = Date.now();
+      expect((await closed(p1.socket)).code).toBe(1006);
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+    });
+
+    test("moves are refused while the opponent is away", async () => {
+      await start({});
+      const p1 = await player(tokens[0]);
+      const p2 = await player(tokens[1]);
+      p2.socket.terminate();
+      expect(await p1.next()).toMatchObject({ type: "player.disconnected" });
+      expect(await p1.next()).toMatchObject({
+        type: "match.snapshot",
+        payload: { status: "paused" },
+      });
+      sendJson(p1.socket, {
+        type: "game.command",
+        payload: {
+          matchId,
+          gameType: "gomoku",
+          commandId: randomUUID(),
+          expectedVersion: 0,
+          action: { type: "place", row: 7, col: 7 },
+        },
+      });
+      expect(await p1.next()).toMatchObject({
+        type: "game.error",
+        payload: { code: "GAME_NOT_ACTIVE" },
+      });
+      p1.socket.terminate();
     });
 
     test("a silent connection is cut by the heartbeat", async () => {

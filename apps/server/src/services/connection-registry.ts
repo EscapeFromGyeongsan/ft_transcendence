@@ -136,12 +136,19 @@ export function createConnectionRegistry() {
     },
 
     /**
-     * 경기 상태와 무관한 이벤트(이탈·복귀 알림 등)를 경기 구독자 전체에
-     * 보냅니다. 버전 순서 검사를 하지 않습니다.
+     * 경기 상태와 무관한 이벤트(이탈·복귀 알림 등)를 경기 구독자에게 보냅니다.
+     * 버전 순서 검사를 하지 않습니다.
+     *
+     * @param exceptUserId - 이 사용자의 연결에는 보내지 않습니다. 이탈·복귀한
+     *   본인을 빼고 상대에게만 알릴 때 씁니다.
      */
-    broadcastEvent(matchId: number, message: object) {
+    broadcastEvent(matchId: number, message: object, exceptUserId?: number) {
       const data = JSON.stringify(message);
-      for (const socket of byMatch.get(matchId) ?? []) socket.send(data);
+      for (const socket of byMatch.get(matchId) ?? []) {
+        if (exceptUserId === undefined || userOf.get(socket) !== exceptUserId) {
+          socket.send(data);
+        }
+      }
     },
 
     /** 사용자의 인증된 연결 전체(여러 탭·기기)에 메시지를 보냅니다. */

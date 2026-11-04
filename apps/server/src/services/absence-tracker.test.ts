@@ -4,8 +4,14 @@ import { createAbsenceTracker } from "./absence-tracker.ts";
 function setup() {
   const notify = vi.fn();
   const onExpire = vi.fn();
-  const tracker = createAbsenceTracker({ budgetMs: 60_000, notify, onExpire });
-  return { tracker, notify, onExpire };
+  const onPauseChange = vi.fn();
+  const tracker = createAbsenceTracker({
+    budgetMs: 60_000,
+    notify,
+    onExpire,
+    onPauseChange,
+  });
+  return { tracker, notify, onExpire, onPauseChange };
 }
 
 describe("absence tracker", () => {
@@ -46,14 +52,14 @@ describe("absence tracker", () => {
     tracker.connect(1, 20);
 
     tracker.disconnect(1, 10);
-    expect(notify).toHaveBeenLastCalledWith(1, "player.disconnected", {
+    expect(notify).toHaveBeenLastCalledWith(1, 10, "player.disconnected", {
       matchId: 1,
       userId: 10,
       remainingMs: 60_000,
     });
     vi.advanceTimersByTime(30_000);
     tracker.connect(1, 10);
-    expect(notify).toHaveBeenLastCalledWith(1, "player.reconnected", {
+    expect(notify).toHaveBeenLastCalledWith(1, 10, "player.reconnected", {
       matchId: 1,
       userId: 10,
       remainingMs: 30_000,
@@ -76,6 +82,7 @@ describe("absence tracker", () => {
     tracker.disconnect(1, 10, 5_000);
     expect(notify).toHaveBeenLastCalledWith(
       1,
+      10,
       "player.disconnected",
       expect.objectContaining({ remainingMs: 45_000 }),
     );
@@ -130,5 +137,37 @@ describe("absence tracker", () => {
     tracker.track(1, [10, 20]);
     vi.advanceTimersByTime(30_000);
     expect(onExpire).toHaveBeenCalledOnce();
+  });
+
+  test("after expiry a returning player does not get the budget back", () => {
+    const { tracker, notify, onExpire } = setup();
+    tracker.track(1, [10, 20]);
+    tracker.connect(1, 10);
+    tracker.connect(1, 20);
+    tracker.disconnect(1, 10);
+    vi.advanceTimersByTime(60_000);
+    expect(onExpire).toHaveBeenCalledOnce();
+    notify.mockClear();
+
+    // The result is still being saved; the return changes nothing.
+    tracker.connect(1, 10);
+    tracker.track(1, [10, 20]);
+    tracker.disconnect(1, 20);
+    expect(notify).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(120_000);
+    expect(onExpire).toHaveBeenCalledOnce();
+  });
+
+  test("only a player who was here and left pauses the match", () => {
+    const { tracker, onPauseChange } = setup();
+    tracker.track(1, [10, 20]);
+    tracker.connect(1, 10);
+    // 20 has not shown up yet: not a reason to pause.
+    expect(onPauseChange).toHaveBeenLastCalledWith(1, false);
+    tracker.connect(1, 20);
+    tracker.disconnect(1, 10);
+    expect(onPauseChange).toHaveBeenLastCalledWith(1, true);
+    tracker.connect(1, 10);
+    expect(onPauseChange).toHaveBeenLastCalledWith(1, false);
   });
 });

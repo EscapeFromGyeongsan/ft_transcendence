@@ -226,12 +226,15 @@ const rejectMessages: Record<ErrorCode, string> = {
  * `queue.join`/`queue.leave`는 자동 매칭 대기열({@link createMatchmaking})로
  * 넘기고, 연결이 닫히면 그 연결의 대기 항목을 뺍니다.
  *
- * 끊김 감지·재접속(#19): 서버가 ping frame을 주기적으로 보내고, 정해진 시간
- * 동안 메시지·pong이 없으면 연결을 끊습니다. 경기 구독 연결이 0개가 된
- * 사용자는 이탈로 보고 상대에게 `player.disconnected`를 보냅니다. 다시
- * 구독하면 최신 snapshot과 함께 `player.reconnected`를 알립니다. 누적 이탈
- * 시간이 다 차면 `finishBySystem()`으로 경기를 끝내고 `game.updated`를
- * 보냅니다. `auth.ok`의 `activeMatchId`로 클라이언트가 진행 중 경기를 찾습니다.
+ * 끊김 감지·재접속(#19): 서버가 ping frame을 주기적으로 보내고, 마지막 pong·
+ * 메시지 후 정해진 시간(기본 20초)이 지나면 연결을 끊습니다. 경기 구독 연결이
+ * 0개가 된 사용자는 이탈로 보고 상대에게 `player.disconnected`를 보내며, 경기를
+ * `paused`로 바꾼 snapshot을 보냅니다. 다시 구독하면 `player.reconnected`와
+ * `playing`으로 돌아온 snapshot을 보냅니다. 상태 전환(`setStatus`)은 경기마다
+ * 순서대로 실행합니다. 누적 이탈 시간이 다 차면 결과가 저장될 때까지
+ * `finishBySystem()`을 다시 시도하고 `game.updated`를 보냅니다. 그동안
+ * 이탈자가 돌아와도 예산은 다시 생기지 않습니다. `auth.ok`의 `activeMatchId`로
+ * 클라이언트가 진행 중 경기를 찾습니다.
  */
 export function registerRealtimeRoutes(
   app: FastifyInstance,
@@ -245,12 +248,19 @@ export function registerRealtimeRoutes(
   const heartbeatTimeoutMs = config.heartbeatTimeoutMs ?? 20_000;
   const absences = createAbsenceTracker({
     budgetMs: config.absenceBudgetMs,
-    notify: (matchId, type, payload) =>
-      connections.broadcastEvent(matchId, { type, payload }),
+    notify: (matchId, userId, type, payload) =>
+      connections.broadcastEvent(matchId, { type, payload }, userId),
     onExpire: (matchId, absentUserIds) =>
       void finishByTimeout(matchId, absentUserIds),
+    onPauseChange: (matchId, paused) => setPaused(matchId, paused),
   });
-  app.addHook("onClose", async () => absences.clear());
+  // Matches each socket counts as a connection for the absence clock.
+  const counted = new WeakMap<WebSocket, Set<number>>();
+  const retryTimers = new Set<ReturnType<typeof setTimeout>>();
+  app.addHook("onClose", async () => {
+    absences.clear();
+    for (const timer of retryTimers) clearTimeout(timer);
+  });
 
   // Game type of each match a socket has subscribed to, for command checks.
   const matchGameTypes = new Map<number, GameType>();
@@ -269,29 +279,94 @@ export function registerRealtimeRoutes(
     onMatched: (matchId, userIds) => absences.track(matchId, userIds),
   });
 
-  // A move or resign may commit between reading the version and finishing;
-  // finishBySystem() then skips, so read again (bounded) while still active.
-  async function finishByTimeout(matchId: number, absentUserIds: number[]) {
-    const games = getGames();
+  // Keeps trying until the result is saved, so an absent player never
+  // escapes the timeout. A skip (a move or resign committed between reading
+  // the version and finishing) retries at once; an error retries with a
+  // growing delay, capped at 10 s. The clock stays expired meanwhile.
+  async function finishByTimeout(
+    matchId: number,
+    absentUserIds: number[],
+    attempt = 0,
+  ) {
+    let delayMs = 0;
     try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const snapshot = await games.getSnapshot(matchId);
-        if (!snapshot || snapshot.status === "finished") return;
-        const result = await games.finishBySystem({
-          matchId,
-          reason: "disconnect_timeout",
-          absentUserIds,
-          expectedVersion: snapshot.stateVersion,
-        });
-        if (result.status === "finished") {
-          broadcastSnapshot(matchId, (await games.getSnapshot(matchId))!);
-          return;
-        }
+      const games = getGames();
+      const snapshot = await games.getSnapshot(matchId);
+      if (!snapshot || snapshot.status === "finished") {
+        absences.finish(matchId);
+        return;
+      }
+      const result = await games.finishBySystem({
+        matchId,
+        reason: "disconnect_timeout",
+        absentUserIds,
+        expectedVersion: snapshot.stateVersion,
+      });
+      if (result.status === "finished") {
+        const finished = await games.getSnapshot(matchId);
+        if (finished) broadcastSnapshot(matchId, finished);
+        absences.finish(matchId);
+        return;
       }
     } catch (error) {
       app.log.error({ err: error }, "Disconnect timeout finish failed.");
-    } finally {
-      absences.finish(matchId);
+      delayMs = Math.min(10_000, 500 * 2 ** attempt);
+    }
+    const timer = setTimeout(() => {
+      retryTimers.delete(timer);
+      void finishByTimeout(matchId, absentUserIds, attempt + 1);
+    }, delayMs);
+    retryTimers.add(timer);
+  }
+
+  // Pausing and resuming run one after another per match: if a resume
+  // overtook the pause before it, the match would stay paused (SDS 13번).
+  const pauseChains = new Map<number, Promise<void>>();
+
+  function setPaused(matchId: number, paused: boolean) {
+    const next = (pauseChains.get(matchId) ?? Promise.resolve())
+      .then(async () => {
+        const games = getGames();
+        const changed = paused
+          ? await games.setStatus(matchId, "playing", "paused")
+          : await games.setStatus(matchId, "paused", "playing");
+        if (!changed) return;
+        // Same stateVersion, new status: clients replace their state with a
+        // snapshot that is not older than theirs (SDS 9번).
+        const snapshot = await games.getSnapshot(matchId);
+        if (snapshot) {
+          connections.broadcastEvent(matchId, {
+            type: "match.snapshot",
+            payload: snapshot,
+          });
+        }
+      })
+      .catch((error) =>
+        app.log.error({ err: error }, "Pause status change failed."),
+      );
+    pauseChains.set(matchId, next);
+    void next.then(() => {
+      if (pauseChains.get(matchId) === next) pauseChains.delete(matchId);
+    });
+  }
+
+  function countConnection(socket: WebSocket, matchId: number, userId: number) {
+    const matches = counted.get(socket) ?? new Set<number>();
+    matches.add(matchId);
+    counted.set(socket, matches);
+    absences.connect(matchId, userId);
+  }
+
+  // Only a socket that was counted is taken off, so a socket closed while its
+  // subscribe was still reading the snapshot cannot make a present user absent.
+  function uncountConnection(
+    socket: WebSocket,
+    matchId: number,
+    userId: number,
+    at?: number,
+  ) {
+    if (counted.get(socket)?.delete(matchId)) {
+      absences.disconnect(matchId, userId, at);
     }
   }
 
@@ -411,7 +486,7 @@ export function registerRealtimeRoutes(
       snapshot.status !== "finished"
     ) {
       absences.track(matchId, [snapshot.players.black, snapshot.players.white]);
-      absences.connect(matchId, userId);
+      countConnection(socket, matchId, userId);
     }
   }
 
@@ -425,10 +500,8 @@ export function registerRealtimeRoutes(
       sendError(socket, requestId, "INVALID_MESSAGE", "Invalid matchId.");
       return;
     }
-    // Unsubscribe first so the leave notice goes to the others only.
-    const wasSubscribed = connections.isSubscribed(matchId, socket);
     connections.unsubscribe(matchId, socket);
-    if (wasSubscribed) absences.disconnect(matchId, userId);
+    uncountConnection(socket, matchId, userId);
     send(socket, "match.unsubscribed", { matchId }, requestId);
   }
 
@@ -527,23 +600,24 @@ export function registerRealtimeRoutes(
         authTimeoutMs,
       );
       // Browsers answer ping frames automatically, so any pong or message
-      // proves the peer is alive. A silent peer is cut after the timeout.
+      // proves the peer is alive. A silent peer is cut exactly
+      // heartbeatTimeoutMs after it last answered.
       let lastSeen = Date.now();
       let silent = false;
-      const heartbeat = setInterval(() => {
-        if (Date.now() - lastSeen > heartbeatTimeoutMs) {
-          silent = true;
-          socket.terminate();
-          return;
-        }
-        socket.ping();
-      }, heartbeatIntervalMs);
-      socket.on("pong", () => {
+      const deadline = setTimeout(() => {
+        silent = true;
+        socket.terminate();
+      }, heartbeatTimeoutMs);
+      const seen = () => {
         lastSeen = Date.now();
-      });
+        deadline.refresh();
+      };
+      const heartbeat = setInterval(() => socket.ping(), heartbeatIntervalMs);
+      socket.on("pong", seen);
 
       socket.on("close", () => {
         clearTimeout(authTimer);
+        clearTimeout(deadline);
         clearInterval(heartbeat);
         matchmaking.removeSocket(socket);
         if (!registeredSession) return;
@@ -552,7 +626,7 @@ export function registerRealtimeRoutes(
         const matchIds = connections.matchesOf(socket);
         connections.remove(registeredSession, socket);
         for (const matchId of matchIds) {
-          absences.disconnect(matchId, claims!.userId, leftAt);
+          uncountConnection(socket, matchId, claims!.userId, leftAt);
         }
       });
 
@@ -561,7 +635,7 @@ export function registerRealtimeRoutes(
       let pending = Promise.resolve();
       let firstMessage = true;
       socket.on("message", (data, isBinary) => {
-        lastSeen = Date.now();
+        seen();
         // Only the auth message may come before auth.ok; anything else sent
         // while it is being checked is refused right away, not queued.
         if (!claims && !firstMessage) {

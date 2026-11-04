@@ -119,15 +119,23 @@ export async function buildApp(
     if (!twoFactor) throw new ServiceUnavailableError();
     return twoFactor;
   };
+  const connections = createConnectionRegistry();
+  // A session revoked for refresh-token reuse closes its WebSocket
+  // connections, like a logout (#51).
   const auth =
     database && authConfig
-      ? createAuthService(database.db, authConfig, twoFactor)
+      ? createAuthService(database.db, authConfig, twoFactor, (sessionId) =>
+          connections.closeSession(
+            sessionId,
+            closeCodes.unauthenticated,
+            "Session ended.",
+          ),
+        )
       : undefined;
   const getAuth = (): AuthService => {
     if (!auth) throw new ServiceUnavailableError();
     return auth;
   };
-  const connections = createConnectionRegistry();
   // Logout also closes the WebSocket connections opened with that session.
   const routeAuth: AuthService | undefined = auth && {
     ...auth,
