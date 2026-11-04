@@ -352,6 +352,11 @@ export function createGameCommandService(
     // Raw rows for checks that need them (participants, history).
     getMatch,
 
+    /** 이 게임 종류의 엔진이 등록되어 경기를 만들 수 있는지 확인합니다. */
+    isRegistered(gameType: string) {
+      return rulesByGameType[gameType as GameType] !== undefined;
+    },
+
     /**
      * 사용자의 끝나지 않은 경기(`waiting`/`playing`/`paused`) ID를 찾습니다.
      *

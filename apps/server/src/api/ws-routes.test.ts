@@ -718,7 +718,7 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       // Playing a match counts as active (DB check).
       sendJson(p1.socket, {
         type: "queue.join",
-        payload: { gameType: "othello" },
+        payload: { gameType: "gomoku" },
       });
       expect(await p1.next()).toMatchObject({
         type: "error",
@@ -731,6 +731,15 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       const { socket } = await authenticated(await loginToken());
       const next = inbox(socket);
       sendJson(socket, { type: "queue.join", payload: { gameType: "chess" } });
+      expect(await next()).toMatchObject({
+        type: "error",
+        payload: { code: "INVALID_MESSAGE" },
+      });
+      // Known to the contract but no engine is registered.
+      sendJson(socket, {
+        type: "queue.join",
+        payload: { gameType: "othello" },
+      });
       expect(await next()).toMatchObject({
         type: "error",
         payload: { code: "INVALID_MESSAGE" },

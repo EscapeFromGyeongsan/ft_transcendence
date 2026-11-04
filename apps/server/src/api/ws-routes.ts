@@ -238,6 +238,8 @@ export function registerRealtimeRoutes(
   const matchmaking = createMatchmaking({
     getGames,
     send: (socket, type, payload) => send(socket, type, payload),
+    notifyUser: (userId, type, payload) =>
+      connections.sendToUser(userId, { type, payload }),
     onError: (error) => app.log.error({ err: error }, "Matchmaking failed."),
   });
 
@@ -247,7 +249,7 @@ export function registerRealtimeRoutes(
     { requestId, payload }: Envelope,
   ) {
     const { gameType } = payload;
-    if (!isGameType(gameType)) {
+    if (!isGameType(gameType) || !getGames().isRegistered(gameType)) {
       sendError(socket, requestId, "INVALID_MESSAGE", "Invalid gameType.");
       return;
     }
@@ -499,7 +501,7 @@ export function registerRealtimeRoutes(
               // committed while the session was being checked found nothing
               // to close, so check the session once more.
               registeredSession = result.sessionId;
-              connections.add(registeredSession, socket);
+              connections.add(registeredSession, socket, result.userId);
               if (!(await getAuth().authenticate(token))) result = null;
             }
           } catch (error) {
