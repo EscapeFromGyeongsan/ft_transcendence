@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { WebSocket } from "ws";
+import type { GameSnapshot } from "@cafe/game-contracts";
+import type { RawData, WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
 import type { AuthService } from "../services/auth-service.ts";
 import type { ConnectionRegistry } from "../services/connection-registry.ts";
@@ -32,9 +33,12 @@ export type Envelope = {
  * - `malformedMessage`(4400): JSON이 아니거나 envelope 형식이 틀린 메시지,
  *   binary 메시지
  * - `internalError`(1011): 인증 서비스 장애 등 서버 내부 오류
+ * - `messageTooLarge`(1009): 16 KiB를 넘는 메시지. 서버 코드가 아니라 `ws`
+ *   라이브러리가 `maxPayload` 설정에 따라 닫습니다.
  */
 export const closeCodes = {
   internalError: 1011,
+  messageTooLarge: 1009,
   malformedMessage: 4400,
   unauthenticated: 4401,
 } as const;
@@ -244,17 +248,30 @@ export function registerRealtimeRoutes(
     }
     // Closed while the match was read: the close handler already ran.
     if (socket.readyState !== socket.OPEN) return;
+    const wasSubscribed = connections.isSubscribed(matchId, socket);
     const replaced = connections.subscribe(matchId, userId, socket);
     if (replaced && replaced.readyState === replaced.OPEN) {
       send(replaced, "session.replaced", { matchId });
     }
+    // On failure undo only this request, not an earlier subscription.
+    const undo = () => {
+      if (!wasSubscribed) connections.unsubscribe(matchId, socket);
+    };
+    let snapshot: GameSnapshot | undefined;
     try {
-      const snapshot = await games.getSnapshot(matchId);
-      send(socket, "match.snapshot", snapshot!, requestId);
+      snapshot = await games.getSnapshot(matchId);
     } catch (error) {
-      connections.unsubscribe(matchId, socket);
+      undo();
       throw error;
     }
+    if (!snapshot) {
+      undo();
+      sendError(socket, requestId, "NOT_FOUND", "Match not found.", {
+        matchId,
+      });
+      return;
+    }
+    send(socket, "match.snapshot", snapshot, requestId);
   }
 
   function unsubscribe(socket: WebSocket, { requestId, payload }: Envelope) {
@@ -340,7 +357,8 @@ export function registerRealtimeRoutes(
     { websocket: true, schema: { hide: true } },
     (socket, request) => {
       let claims: AccessTokenClaims | undefined;
-      let authenticating = false;
+      // Session the socket is registered under, set before auth.ok.
+      let registeredSession: string | undefined;
       const authTimer = setTimeout(
         () =>
           socket.close(closeCodes.unauthenticated, "Authentication timed out."),
@@ -349,10 +367,31 @@ export function registerRealtimeRoutes(
 
       socket.on("close", () => {
         clearTimeout(authTimer);
-        if (claims) connections.remove(claims.sessionId, socket);
+        if (registeredSession) {
+          connections.remove(registeredSession, socket);
+        }
       });
 
-      socket.on("message", async (data, isBinary) => {
+      // Messages of one socket are handled one at a time in arrival order,
+      // so e.g. a match.unsubscribe never overtakes an earlier subscribe.
+      let pending = Promise.resolve();
+      let firstMessage = true;
+      socket.on("message", (data, isBinary) => {
+        // Only the auth message may come before auth.ok; anything else sent
+        // while it is being checked is refused right away, not queued.
+        if (!claims && !firstMessage) {
+          socket.close(closeCodes.unauthenticated, "Authenticate first.");
+          return;
+        }
+        firstMessage = false;
+        pending = pending
+          .then(() => handleMessage(data, isBinary))
+          .catch((error) =>
+            request.log.error({ err: error }, "WebSocket message failed."),
+          );
+      });
+
+      async function handleMessage(data: RawData, isBinary: boolean) {
         const message = isBinary ? null : parseEnvelope(data.toString());
         if (!message) {
           socket.close(closeCodes.malformedMessage, "Malformed message.");
@@ -361,19 +400,21 @@ export function registerRealtimeRoutes(
 
         if (!claims) {
           const token = message.payload.accessToken;
-          // Clients wait for auth.ok before sending anything else.
-          if (
-            authenticating ||
-            message.type !== "auth" ||
-            typeof token !== "string"
-          ) {
+          if (message.type !== "auth" || typeof token !== "string") {
             socket.close(closeCodes.unauthenticated, "Authenticate first.");
             return;
           }
-          authenticating = true;
           let result: AccessTokenClaims | null;
           try {
             result = await getAuth().authenticate(token);
+            if (result && socket.readyState === socket.OPEN) {
+              // From here a logout closes this socket. A logout that
+              // committed while the session was being checked found nothing
+              // to close, so check the session once more.
+              registeredSession = result.sessionId;
+              connections.add(registeredSession, socket);
+              if (!(await getAuth().authenticate(token))) result = null;
+            }
           } catch (error) {
             request.log.error(
               { err: error },
@@ -382,7 +423,6 @@ export function registerRealtimeRoutes(
             socket.close(closeCodes.internalError, "Service unavailable.");
             return;
           }
-          authenticating = false;
           if (!result) {
             socket.close(
               closeCodes.unauthenticated,
@@ -394,7 +434,6 @@ export function registerRealtimeRoutes(
           if (socket.readyState !== socket.OPEN) return;
           clearTimeout(authTimer);
           claims = result;
-          connections.add(claims.sessionId, socket);
           send(socket, "auth.ok", { userId: claims.userId }, message.requestId);
           return;
         }
@@ -430,7 +469,7 @@ export function registerRealtimeRoutes(
             "Internal server error.",
           );
         }
-      });
+      }
     },
   );
 }

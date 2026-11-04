@@ -1,0 +1,12 @@
+{
+  "name": "@cafe/game-engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cafe/game-contracts": "0.1.0"
+  }
+}
