@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { GameSnapshot } from "@cafe/game-contracts";
+import type { GameSnapshot, GameType } from "@cafe/game-contracts";
 import type { RawData, WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
 import type { AuthService } from "../services/auth-service.ts";
@@ -112,6 +112,8 @@ function isMatchId(value: unknown): value is number {
 }
 
 const gameTypes: readonly unknown[] = ["gomoku", "othello"];
+// game_commands.expected_version is an int4 column.
+const MAX_EXPECTED_VERSION = 2_147_483_647;
 // game_commands.command_id is a uuid column.
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -137,14 +139,15 @@ function parseAction(value: unknown): GameAction | null {
  *
  * @remarks
  * - `matchId`는 1 이상 safe integer, `gameType`은 알려진 게임, `commandId`는
- *   UUID(`game_commands.command_id`가 uuid 컬럼), `expectedVersion`은 0 이상 정수
+ *   UUID(`game_commands.command_id`가 uuid 컬럼), `expectedVersion`은
+ *   0 이상 int4 범위 정수(`game_commands.expected_version`)
  * - `action`은 `place`(정수 `row`/`col`) 또는 `resign`만 받고, 다른 필드는 버립니다.
  * - 좌표 범위·합법 여부는 엔진이 판단합니다.
  * - 행동하는 사용자는 payload가 아니라 인증된 연결에서 정합니다(IF-02).
  */
 export function parseCommand(
   payload: Record<string, unknown>,
-): Omit<GameCommand, "userId"> | null {
+): (Omit<GameCommand, "userId"> & { gameType: GameType }) | null {
   const { matchId, gameType, commandId, expectedVersion } = payload;
   const action = parseAction(payload.action);
   if (
@@ -154,12 +157,14 @@ export function parseCommand(
     !uuidPattern.test(commandId) ||
     !Number.isSafeInteger(expectedVersion) ||
     (expectedVersion as number) < 0 ||
+    (expectedVersion as number) > MAX_EXPECTED_VERSION ||
     !action
   ) {
     return null;
   }
   return {
     matchId,
+    gameType: gameType as GameType,
     commandId,
     expectedVersion: expectedVersion as number,
     action,
@@ -214,6 +219,13 @@ export function registerRealtimeRoutes(
   config: RealtimeConfig = {},
 ) {
   const authTimeoutMs = config.authTimeoutMs ?? 5000;
+  // Game type of each match a socket has subscribed to, for command checks.
+  const matchGameTypes = new Map<number, GameType>();
+
+  function forgetMatch(matchId: number) {
+    connections.forgetMatch(matchId);
+    matchGameTypes.delete(matchId);
+  }
 
   // Only participants may subscribe. The socket joins the match before the
   // snapshot is read, so an update committed in between is still delivered;
@@ -271,6 +283,7 @@ export function registerRealtimeRoutes(
       });
       return;
     }
+    matchGameTypes.set(matchId, snapshot.gameType);
     send(socket, "match.snapshot", snapshot, requestId);
   }
 
@@ -302,7 +315,7 @@ export function registerRealtimeRoutes(
       );
       return;
     }
-    const { matchId, commandId } = parsed;
+    const { matchId, gameType, commandId, expectedVersion, action } = parsed;
     const gameError = (code: string, message: string, duplicate = false) =>
       send(
         socket,
@@ -318,13 +331,30 @@ export function registerRealtimeRoutes(
       gameError("SESSION_REPLACED", "Another connection controls this match.");
       return;
     }
+    if (gameType !== matchGameTypes.get(matchId)) {
+      sendError(
+        socket,
+        requestId,
+        "INVALID_MESSAGE",
+        "gameType does not match the match.",
+        { matchId },
+      );
+      return;
+    }
 
     const games = getGames();
-    const result = await games.apply({ ...parsed, userId });
+    const result = await games.apply({
+      matchId,
+      commandId,
+      expectedVersion,
+      action,
+      userId,
+    });
     if (result.status === "rejected") {
       gameError(result.code, rejectMessages[result.code], result.duplicate);
       if (result.code === "VERSION_CONFLICT") {
-        send(socket, "match.snapshot", (await games.getSnapshot(matchId))!);
+        const latest = await games.getSnapshot(matchId);
+        if (latest) send(socket, "match.snapshot", latest);
       }
       return;
     }
@@ -339,15 +369,17 @@ export function registerRealtimeRoutes(
       },
       requestId,
     );
-    // A resent command was already broadcast the first time.
-    if (result.duplicate) return;
-    // The snapshot may already include later commits; broadcastUpdate skips
-    // it when an equal or newer state already went out (SDS 12번 순서).
-    const snapshot = (await games.getSnapshot(matchId))!;
+    // Broadcast even for a resent command: if reading the snapshot failed
+    // after the first commit, the resend delivers it. The snapshot may also
+    // include later commits; broadcastUpdate skips any state that is not
+    // newer than the last one sent (SDS 12번 순서).
+    const snapshot = await games.getSnapshot(matchId);
+    if (!snapshot) return;
     connections.broadcastUpdate(matchId, snapshot.stateVersion, {
       type: "game.updated",
       payload: snapshot,
     });
+    if (snapshot.status === "finished") forgetMatch(matchId);
   }
 
   // The access token arrives in the first message, never in the URL, so it

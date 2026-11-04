@@ -45,6 +45,19 @@ describe("connection registry", () => {
     ]);
   });
 
+  test("the sent version survives an empty match until forgetMatch", () => {
+    const registry = createConnectionRegistry();
+    const [first, later] = [1, 2].map(fakeSocket);
+    registry.subscribe(10, 1, first);
+    registry.broadcastUpdate(10, 3, { v: 3 });
+    registry.unsubscribe(10, first);
+
+    registry.subscribe(10, 1, later);
+    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(false);
+    registry.forgetMatch(10);
+    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(true);
+  });
+
   test("the last subscribing socket of a user controls the match", () => {
     const registry = createConnectionRegistry();
     const [tab1, tab2, opponent] = [1, 2, 3].map(fakeSocket);

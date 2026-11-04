@@ -12,6 +12,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import type { Cell } from "@cafe/game-contracts";
+import { gomoku } from "@cafe/game-engine";
 import { buildApp } from "../app.ts";
 import { signAccessToken } from "../core/tokens.ts";
 import {
@@ -119,6 +120,7 @@ test("parseCommand checks the shared GameCommand shape", () => {
   };
   expect(parseCommand(valid)).toEqual({
     matchId: 1,
+    gameType: "gomoku",
     commandId: valid.commandId,
     expectedVersion: 0,
     action: { type: "place", row: 7, col: 7 },
@@ -133,6 +135,7 @@ test("parseCommand checks the shared GameCommand shape", () => {
     { commandId: "c1" },
     { expectedVersion: -1 },
     { expectedVersion: 1.5 },
+    { expectedVersion: 2_147_483_648 },
     { action: { type: "place", row: "7", col: 7 } },
     { action: { type: "place", row: 7 } },
     { action: { type: "undo" } },
@@ -326,6 +329,57 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     const retryClose = closed(retry);
     sendJson(retry, { type: "auth", payload: { accessToken: token } });
     expect((await retryClose).code).toBe(4401);
+  });
+
+  test("the real gomoku engine refuses off-board moves as INVALID_ACTION", async () => {
+    const realGomoku: RegisteredRules = {
+      version: gomoku.GOMOKU_RULES_VERSION,
+      rules: gomoku.rules,
+      board: gomoku.board,
+    };
+    await app.close();
+    app = await buildApp(
+      {},
+      testDatabaseUrl,
+      { jwtSecret },
+      undefined,
+      {},
+      {
+        gomoku: realGomoku,
+      },
+    );
+    const token = await loginToken(1);
+    await loginToken(2);
+    const matchId = await createGameCommandService(database.db, {
+      gomoku: realGomoku,
+    }).createMatch({ gameType: "gomoku", blackUserId: 1, whiteUserId: 2 });
+    const { socket } = await authenticated(token);
+    const next = inbox(socket);
+    sendJson(socket, { type: "match.subscribe", payload: { matchId } });
+    await next();
+
+    // The DB allows only 0..14, so these must never reach insertMove.
+    for (const [row, col] of [
+      [15, 0],
+      [-1, 0],
+      [0, 15],
+    ]) {
+      sendJson(socket, {
+        type: "game.command",
+        payload: {
+          matchId,
+          gameType: "gomoku",
+          commandId: randomUUID(),
+          expectedVersion: 0,
+          action: { type: "place", row, col },
+        },
+      });
+      expect(await next()).toMatchObject({
+        type: "game.error",
+        payload: { code: "INVALID_ACTION" },
+      });
+    }
+    socket.terminate();
   });
 
   describe("match subscription", () => {
@@ -563,6 +617,15 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
             },
           });
         }
+      });
+
+      test("a gameType that differs from the match is refused", async () => {
+        play(0, { gameType: "othello" });
+        expect(await next[0]()).toMatchObject({
+          type: "error",
+          payload: { code: "INVALID_MESSAGE", matchId: matchA },
+        });
+        await expectNothingPending(1);
       });
 
       test("an invalid command payload is refused before apply", async () => {
