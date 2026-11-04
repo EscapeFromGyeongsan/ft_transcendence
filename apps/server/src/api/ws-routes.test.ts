@@ -10,6 +10,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { buildApp } from "../app.ts";
+import { signAccessToken } from "../core/tokens.ts";
 import { parseEnvelope } from "./ws-routes.ts";
 import {
   openTestDatabase,
@@ -106,6 +107,39 @@ describe("/api/ws without a database", () => {
     expect((await close).code).toBe(4401);
   });
 
+  test("closes 4400 on a binary message", async () => {
+    app = await buildApp({}, undefined, { jwtSecret });
+    const socket = await connect(app);
+    const close = closed(socket);
+    socket.send(Buffer.from('{"type":"auth","payload":{}}'));
+    expect((await close).code).toBe(4400);
+  });
+
+  test("a message over 16 KiB is closed by ws with 1009", async () => {
+    app = await buildApp({}, undefined, { jwtSecret });
+    const socket = await connect(app);
+    const close = closed(socket);
+    sendJson(socket, { type: "auth", payload: { pad: "x".repeat(17_000) } });
+    expect((await close).code).toBe(1009);
+  });
+
+  test("closes 1011 when the database fails during authentication", async () => {
+    // A correctly signed token reaches the session lookup, which fails
+    // because nothing listens on port 1.
+    const validToken = signAccessToken(
+      { userId: 1, sessionId: "00000000-0000-4000-8000-000000000000" },
+      jwtSecret,
+      60,
+    );
+    app = await buildApp({}, "postgresql://cafe:x@127.0.0.1:1/cafe_none", {
+      jwtSecret,
+    });
+    const socket = await connect(app);
+    const close = closed(socket);
+    sendJson(socket, { type: "auth", payload: { accessToken: validToken } });
+    expect((await close).code).toBe(1011);
+  });
+
   test("closes 1011 when authentication is unavailable", async () => {
     app = await buildApp({}, undefined, { jwtSecret });
     const socket = await connect(app);
@@ -177,6 +211,15 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       payload: { code: "UNSUPPORTED_MESSAGE" },
     });
     socket.terminate();
+  });
+
+  test("a second message while authenticating is closed with 4401", async () => {
+    const accessToken = await loginToken();
+    const socket = await connect(app);
+    const close = closed(socket);
+    sendJson(socket, { type: "auth", payload: { accessToken } });
+    sendJson(socket, { type: "ping", payload: {} });
+    expect(await close).toEqual({ code: 4401, reason: "Authenticate first." });
   });
 
   test("an invalid or tampered token is closed with 4401", async () => {
