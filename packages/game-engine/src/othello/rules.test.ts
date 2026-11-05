@@ -96,11 +96,10 @@ describe("othello rules & restoreState", () => {
         seat: "black",
         action: { type: "place", row: 2, col: 1 },
       });
-      expect(decision.ok).toBe(true);
-      if (decision.ok) {
-        expect(decision.nextTurn).toBe("white");
-        expect(decision.finish).toBeUndefined();
-      }
+      expect(decision).toEqual({
+        ok: true,
+        nextTurn: "white",
+      });
     });
 
     it("게임이 종료되는 착수 시 nextTurn: null과 finish 결과를 반환한다", () => {
