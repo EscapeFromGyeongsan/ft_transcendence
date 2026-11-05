@@ -86,15 +86,11 @@ describe("othello rules & restoreState", () => {
       });
     });
 
-    it("게임이 종료되는 착수 시 finish 결과를 반환한다", () => {
-      // 흑 (0,0), 백 (0,1), 흑 (1,0), (2,0)의 상황을 재현하는 moves 생성
-      // 직접 applyMove로 만든 판의 상황 대신 간결하게 rules 함수가 finish를 담아 반환하는지 검증
-      // 4턴 진행 후 종료되는 시나리오 또는 초기 상태 기반 연쇄 착수 검증
+    it("진행 중인 합법 착수 시 다음 차례를 반환하고 finish는 포함하지 않는다", () => {
       const moves = [
         { row: 2, col: 3, stone: "black" },
         { row: 2, col: 2, stone: "white" },
       ];
-      // 계속 진행 가능한 합법 착수
       const decision = rules({
         moves,
         seat: "black",
@@ -105,6 +101,57 @@ describe("othello rules & restoreState", () => {
         expect(decision.nextTurn).toBe("white");
         expect(decision.finish).toBeUndefined();
       }
+    });
+
+    it("게임이 종료되는 착수 시 nextTurn: null과 finish 결과를 반환한다", () => {
+      // 9수 만에 백돌이 모두 뒤집혀 흑 승리로 종료되는 수순
+      const moves = [
+        { row: 2, col: 3, stone: "black" },
+        { row: 2, col: 2, stone: "white" },
+        { row: 2, col: 1, stone: "black" },
+        { row: 1, col: 3, stone: "white" },
+        { row: 0, col: 4, stone: "black" },
+        { row: 5, col: 3, stone: "white" },
+        { row: 6, col: 3, stone: "black" },
+        { row: 2, col: 4, stone: "white" },
+      ];
+      const decision = rules({
+        moves,
+        seat: "black",
+        action: { type: "place", row: 3, col: 5 },
+      });
+      expect(decision).toEqual({
+        ok: true,
+        nextTurn: null,
+        finish: {
+          outcome: "win",
+          winner: "black",
+          reason: "disc_count",
+        },
+      });
+    });
+
+    it("이미 종료된 이력 상태에서 착수하면 GAME_FINISHED 코드를 반환한다", () => {
+      const finishedMoves = [
+        { row: 2, col: 3, stone: "black" },
+        { row: 2, col: 2, stone: "white" },
+        { row: 2, col: 1, stone: "black" },
+        { row: 1, col: 3, stone: "white" },
+        { row: 0, col: 4, stone: "black" },
+        { row: 5, col: 3, stone: "white" },
+        { row: 6, col: 3, stone: "black" },
+        { row: 2, col: 4, stone: "white" },
+        { row: 3, col: 5, stone: "black" },
+      ];
+      const decision = rules({
+        moves: finishedMoves,
+        seat: "white",
+        action: { type: "place", row: 0, col: 0 },
+      });
+      expect(decision).toEqual({
+        ok: false,
+        code: "GAME_FINISHED",
+      });
     });
   });
 });
