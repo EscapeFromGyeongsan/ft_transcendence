@@ -133,3 +133,4 @@ Tool-specific settings live in `config/`, and local infrastructure settings live
 - [Runtime validation record](Document/runtime-validation.md): actual checks and pending evidence
 - [WSS verification](Document/runtime-wss-validation.md): pinned integration source, one-command reproduction and timing follow-up
 - [Contribution rules](CONTRIBUTING.md): issue, branch, commit and PR workflow
+- [TSDoc coding conventions](Document/code-conventions.md): TypeScript/React documentation comment rules

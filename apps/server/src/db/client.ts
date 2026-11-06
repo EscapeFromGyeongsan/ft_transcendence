@@ -1,6 +1,14 @@
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { connectionProbe } from "./schema/connection-probe.ts";
+
+export type Database = NodePgDatabase;
+// Either the pool-backed database or an open transaction. Repositories accept
+// this so every step of one operation can share the same transaction.
+export type Executor = Pick<
+  Database,
+  "select" | "insert" | "update" | "delete" | "execute"
+>;
 
 export function createDatabase(
   connectionString: string,

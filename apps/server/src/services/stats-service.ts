@@ -1,0 +1,63 @@
+import type { Database } from "../db/client.ts";
+import * as repo from "../repositories/stats-repository.ts";
+
+const PROGRESS_TARGET = 10;
+
+export function createStatsService(db: Database) {
+  return {
+    async getStats(userId: number, gameType: string) {
+      if (!(await repo.userExists(db, userId))) return undefined;
+      const { wins, losses, draws } = await repo.countResults(
+        db,
+        userId,
+        gameType,
+      );
+      const played = wins + losses + draws;
+      return {
+        userId,
+        gameType,
+        wins,
+        losses,
+        draws,
+        played,
+        winRate: played === 0 ? 0 : wins / played,
+        // DEC-08: first-win achievement and 10-match participation progress,
+        // both per game type and derived from counted matches.
+        achievements: { firstWin: wins > 0 },
+        progress: {
+          current: Math.min(played, PROGRESS_TARGET),
+          target: PROGRESS_TARGET,
+        },
+      };
+    },
+
+    async getMatches(
+      userId: number,
+      options: { gameType?: string; before?: number; limit: number },
+    ) {
+      if (!(await repo.userExists(db, userId))) return undefined;
+      const found = await repo.findFinishedMatches(db, userId, options);
+      const rows = found.slice(0, options.limit);
+      return {
+        matches: rows.map((row) => ({
+          matchId: row.matchId,
+          gameType: row.gameType,
+          result: row.result,
+          reason: row.reason,
+          seat: row.seat,
+          opponent: { id: row.opponentId, nickname: row.opponentNickname },
+          finishedAt: row.finishedAt,
+        })),
+        // Pass as `before` to get the next (older) page.
+        nextBefore:
+          found.length > options.limit ? rows[rows.length - 1].matchId : null,
+      };
+    },
+
+    getLeaderboard(gameType: string, limit: number) {
+      return repo.findLeaderboard(db, gameType, limit);
+    },
+  };
+}
+
+export type StatsService = ReturnType<typeof createStatsService>;
