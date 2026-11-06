@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { buildApp } from "./app.ts";
 import { createDatabase } from "./db/client.ts";
+import { gameEngines } from "./engines.ts";
 import { voidUnfinishedGames } from "./services/game-command-service.ts";
 
 if (existsSync(".env")) loadEnvFile(".env");
@@ -48,6 +49,8 @@ const app = await buildApp(
   process.env.DATABASE_URL,
   { jwtSecret, twoFactorKey, oauth42 },
   process.env.AVATAR_DIR || "data/avatars",
+  {},
+  gameEngines,
 );
 try {
   const databaseHealth = await app.inject({
