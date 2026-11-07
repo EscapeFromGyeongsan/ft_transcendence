@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { GameType } from "@cafe/game-contracts";
-import { authApi, isTokenPair, type AuthUser } from "./api/auth-client.ts";
+import {
+  authApi,
+  isOAuthLinkedResult,
+  isTokenPair,
+  type AuthUser,
+} from "./api/auth-client.ts";
 import {
   getAuthFieldErrors,
   getErrorMessage,
@@ -57,6 +62,7 @@ type ScreenView =
   | "login"
   | "register"
   | "twoFactor"
+  | "oauthCallback"
   | "lobby"
   | "matchmaking"
   | "gomoku"
@@ -219,6 +225,7 @@ export function App() {
     if (initial.kind === "terms") return "terms";
     if (initial.kind === "privacy") return "privacy";
     if (initial.kind === "register") return "register";
+    if (initial.kind === "oauthCallback") return "oauthCallback";
     if (initial.kind === "notFound") return "notFound";
     return "login";
   });
@@ -420,6 +427,9 @@ export function App() {
             challengeToken ? "twoFactor" : currentUser ? "lobby" : "login",
           );
           break;
+        case "oauthCallback":
+          setView("oauthCallback");
+          break;
         case "lobby":
           setView(currentUser ? "lobby" : "login");
           break;
@@ -580,6 +590,7 @@ export function App() {
             setView((current) =>
               current === "terms" ||
               current === "privacy" ||
+              current === "oauthCallback" ||
               current === "notFound"
                 ? current
                 : "gomoku",
@@ -809,6 +820,65 @@ export function App() {
   useEffect(() => {
     let active = true;
     const initialRoute = parseInitialAppRoute();
+
+    if (initialRoute.kind === "oauthCallback") {
+      setView("oauthCallback");
+      setInitializing(false);
+      if (initialRoute.error || !initialRoute.code || !initialRoute.state) {
+        setErrorMessage(
+          initialRoute.error
+            ? `42 인증이 취소되었거나 실패했습니다 (${initialRoute.error}).`
+            : "42 인증 응답 파라미터(code, state)가 누락되었습니다.",
+        );
+        return;
+      }
+
+      setSubmitting(true);
+      authApi
+        .completeOAuth42Callback(
+          { code: initialRoute.code, state: initialRoute.state },
+          true,
+        )
+        .then(async (result) => {
+          if (!active) return;
+          if (isOAuthLinkedResult(result)) {
+            const me = await authApi.getMe();
+            if (!active) return;
+            setCurrentUser(me);
+            setProfileUserId(me.id);
+            setView("profile");
+            setNoticeMessage(
+              "42 Intra 계정이 현재 계정에 성공적으로 연결되었습니다.",
+            );
+            return;
+          }
+          if (!isTokenPair(result)) {
+            setChallengeToken(result.challengeToken);
+            setTwoFactorCode("");
+            setView("twoFactor");
+            setNoticeMessage(
+              "42 Intra 인증이 확인되었습니다. 2단계 인증 코드를 입력해 주세요.",
+            );
+            return;
+          }
+          const me = await authApi.getMe();
+          if (!active) return;
+          setCurrentUser(me);
+          setView("lobby");
+          setNoticeMessage("42 Intra 계정으로 로그인되었습니다.");
+        })
+        .catch((error) => {
+          if (!active) return;
+          setErrorMessage(getErrorMessage(error));
+        })
+        .finally(() => {
+          if (active) setSubmitting(false);
+        });
+      return () => {
+        active = false;
+      };
+    }
+
     const savedTokens = authApi.storage.getTokens();
     if (!savedTokens) {
       if (initialRoute.kind === "terms") {
@@ -884,6 +954,24 @@ export function App() {
       active = false;
     };
   }, []);
+
+  async function handleOAuth42Login() {
+    resetMessages();
+    setSubmitting(true);
+    try {
+      const { authorizeUrl } = await authApi.startOAuth42Login();
+      if (
+        typeof globalThis.window !== "undefined" &&
+        globalThis.window.location
+      ) {
+        globalThis.window.location.assign(authorizeUrl);
+      }
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1252,6 +1340,50 @@ export function App() {
             isAuthenticated={Boolean(currentUser)}
             onNavigateHome={() => switchView(currentUser ? "lobby" : "login")}
           />
+        ) : view === "oauthCallback" ? (
+          <div className="cbc-stage" data-testid="oauth-callback-view">
+            <div className="cbc-login-card" style={{ textAlign: "center" }}>
+              <span className="cbc-eyebrow">42 INTRA OAUTH 2.0</span>
+              <h1
+                className="cbc-heading-login"
+                style={{ marginTop: "0.375rem" }}
+              >
+                {errorMessage
+                  ? "42 계정 인증을 완료하지 못했습니다"
+                  : "42 Intra 인증 처리 중..."}
+              </h1>
+              {errorMessage ? (
+                <>
+                  <div
+                    className="cbc-error-banner"
+                    role="alert"
+                    style={{ marginTop: "1rem", textAlign: "left" }}
+                  >
+                    <span>{errorMessage}</span>
+                  </div>
+                  <div style={{ marginTop: "1.25rem" }}>
+                    <button
+                      type="button"
+                      className="cbc-btn-primary"
+                      data-testid="oauth-callback-return-btn"
+                      onClick={() =>
+                        switchView(currentUser ? "profile" : "login")
+                      }
+                    >
+                      {currentUser
+                        ? "내 프로필로 돌아가기"
+                        : "로그인 화면으로 돌아가기"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="cbc-subheading" style={{ marginTop: "0.5rem" }}>
+                  보안 상태 토큰(state·flowToken)을 검증하고 세션을 연결하는
+                  중입니다...
+                </p>
+              )}
+            </div>
+          </div>
         ) : initializing ? (
           <div className="cbc-login-card" style={{ textAlign: "center" }}>
             <h1 className="cbc-heading-login">사이버 보드게임 카페</h1>
@@ -1431,6 +1563,23 @@ export function App() {
                   </svg>
                 </button>
               </form>
+
+              <div className="cbc-oauth-divider">
+                <span>또는 외부 인증으로 로그인</span>
+              </div>
+
+              <button
+                type="button"
+                className="cbc-btn-secondary cbc-btn-oauth42"
+                disabled={submitting}
+                data-testid="oauth-42-login-btn"
+                onClick={handleOAuth42Login}
+              >
+                <span className="cbc-oauth42-badge" aria-hidden="true">
+                  42
+                </span>
+                <span>42 Intra 계정으로 계속하기</span>
+              </button>
 
               <div className="cbc-card-footer-switch">
                 <span>아직 계정이 없으신가요?</span>{" "}

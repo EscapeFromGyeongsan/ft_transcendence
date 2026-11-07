@@ -24,6 +24,14 @@ describe("legal-routing and policy content (Issue #64)", () => {
     expect(parseAppRoute("/signup")).toEqual({ kind: "register" });
     expect(parseAppRoute("/register")).toEqual({ kind: "register" });
     expect(parseAppRoute("/login/2fa")).toEqual({ kind: "twoFactor" });
+    expect(
+      parseAppRoute("/oauth/42/callback", "?code=abc&state=xyz"),
+    ).toEqual({
+      kind: "oauthCallback",
+      code: "abc",
+      state: "xyz",
+      error: null,
+    });
     expect(parseAppRoute("/matching")).toEqual({ kind: "matchmaking" });
     expect(parseAppRoute("/match/42")).toEqual({ kind: "match", matchId: 42 });
     expect(parseAppRoute("/", "?matchId=7")).toEqual({

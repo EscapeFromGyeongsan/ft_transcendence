@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createAuthApiClient,
+  isOAuthLinkedResult,
+  isTokenPair,
   type StoredTokens,
   type TokenStorage,
 } from "./auth-client.ts";
@@ -275,6 +277,101 @@ describe("authApi client & 401 refresh retry", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("42 OAuth 시작·콜백(로그인/계정 연결)과 TOTP 2FA(status/setup/enable/disable) API를 연동한다", async () => {
+    const storage = createMemoryTokenStorage({
+      accessToken: "user-access-1",
+      refreshToken: "user-refresh-1",
+    });
+    const fetchMock = vi.fn<typeof fetch>();
+
+    // 1. startOAuth42Login
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, {
+        authorizeUrl: "https://api.intra.42.fr/oauth/authorize?state=s1",
+        flowToken: "flow-token-login-1",
+      }),
+    );
+
+    // 2. completeOAuth42Callback (login mode -> TokenPair)
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, {
+        accessToken: "oauth-access-2",
+        tokenType: "Bearer",
+        expiresIn: 1800,
+        refreshToken: "oauth-refresh-2",
+      }),
+    );
+
+    // 3. startOAuth42Link
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, {
+        authorizeUrl: "https://api.intra.42.fr/oauth/authorize?state=s2",
+        flowToken: "flow-token-link-2",
+      }),
+    );
+
+    // 4. completeOAuth42Callback (link mode -> { linked: true })
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { linked: true }));
+
+    // 5. getTwoFactorStatus -> { enabled: false }
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { enabled: false }));
+
+    // 6. setupTwoFactor -> { secret, otpauthUrl }
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, {
+        secret: "JBSWY3DPEHPK3PXP",
+        otpauthUrl: "otpauth://totp/CyberBoardCafe:user@cafe.kr?secret=JBSWY3DPEHPK3PXP",
+      }),
+    );
+
+    // 7. enableTwoFactor -> { recoveryCodes: 10 codes }
+    const tenCodes = Array.from({ length: 10 }, (_, idx) => `ABCD-000${idx}`);
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, { recoveryCodes: tenCodes }),
+    );
+
+    // 8. disableTwoFactor -> 204
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const client = createAuthApiClient({
+      fetchImpl: fetchMock,
+      storage,
+    });
+
+    const loginStart = await client.startOAuth42Login();
+    expect(loginStart.flowToken).toBe("flow-token-login-1");
+
+    const loginCallback = await client.completeOAuth42Callback({
+      code: "code-1",
+      state: "s1",
+      flowToken: loginStart.flowToken,
+    });
+    expect(isTokenPair(loginCallback)).toBe(true);
+    expect(storage.getTokens()?.accessToken).toBe("oauth-access-2");
+
+    const linkStart = await client.startOAuth42Link();
+    expect(linkStart.flowToken).toBe("flow-token-link-2");
+
+    const linkCallback = await client.completeOAuth42Callback({
+      code: "code-2",
+      state: "s2",
+      flowToken: linkStart.flowToken,
+    });
+    expect(isOAuthLinkedResult(linkCallback)).toBe(true);
+
+    const status = await client.getTwoFactorStatus();
+    expect(status.enabled).toBe(false);
+
+    const setup = await client.setupTwoFactor();
+    expect(setup.secret).toBe("JBSWY3DPEHPK3PXP");
+
+    const enabled = await client.enableTwoFactor("123456");
+    expect(enabled.recoveryCodes).toHaveLength(10);
+
+    await client.disableTwoFactor("123456");
+    expect(fetchMock).toHaveBeenCalledTimes(8);
   });
 });
 

@@ -21,6 +21,12 @@ export type ParsedAppRoute =
   | { readonly kind: "login" }
   | { readonly kind: "register" }
   | { readonly kind: "twoFactor" }
+  | {
+      readonly kind: "oauthCallback";
+      readonly code: string | null;
+      readonly state: string | null;
+      readonly error: string | null;
+    }
   | { readonly kind: "matchmaking" }
   | { readonly kind: "match"; readonly matchId: number }
   | { readonly kind: "myProfile" }
@@ -66,6 +72,28 @@ export function parseAppRoute(
   }
 
   const normalizedPath = pathname.trim() || "/";
+  const searchParams = new URLSearchParams(search);
+  const oauthCode = searchParams.get("code")?.trim() || null;
+  const oauthState = searchParams.get("state")?.trim() || null;
+  const oauthError =
+    searchParams.get("error_description")?.trim() ||
+    searchParams.get("error")?.trim() ||
+    null;
+
+  if (
+    normalizedPath === "/oauth/42/callback" ||
+    normalizedPath === "/oauth/42/callback/" ||
+    normalizedPath === "/auth/oauth/42/callback" ||
+    normalizedPath === "/auth/oauth/42/callback/" ||
+    (oauthCode !== null && oauthState !== null)
+  ) {
+    return {
+      kind: "oauthCallback",
+      code: oauthCode,
+      state: oauthState,
+      error: oauthError,
+    };
+  }
 
   if (normalizedPath === "/terms" || normalizedPath === "/terms/") {
     return { kind: "terms" };
@@ -116,7 +144,6 @@ export function parseAppRoute(
   }
 
   if (normalizedPath === "/" || normalizedPath === "/index.html") {
-    const searchParams = new URLSearchParams(search);
     const queryMatchId = parsePositiveSafeInt(searchParams.get("matchId"));
     if (queryMatchId !== null) {
       return { kind: "match", matchId: queryMatchId };
@@ -135,6 +162,7 @@ export function resolvePathForScreen(options: {
     | "login"
     | "register"
     | "twoFactor"
+    | "oauthCallback"
     | "lobby"
     | "matchmaking"
     | "gomoku"
@@ -158,6 +186,8 @@ export function resolvePathForScreen(options: {
       return "/signup";
     case "twoFactor":
       return "/login/2fa";
+    case "oauthCallback":
+      return null;
     case "lobby":
       return "/";
     case "matchmaking":
