@@ -2277,3 +2277,449 @@ input {
   width: 2rem;
   height: 2rem;
 }
+
+/* ---------- Lobby Game Selection & Matchmaking View (04_home_lobby, 16_matchmaking) ---------- */
+.cbc-game-card.is-selected {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 2px rgba(47, 108, 0, 0.16),
+    0 8px 24px -6px rgba(42, 42, 38, 0.08);
+}
+
+.cbc-game-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.625rem;
+}
+
+.cbc-game-card-subtitle {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 0.25rem;
+}
+
+.cbc-game-card-title {
+  font-family: var(--font-headline);
+  font-size: 20px;
+  margin: 0;
+}
+
+.cbc-security-pill.is-muted {
+  background-color: var(--surface-container-high);
+  color: var(--on-surface-variant);
+}
+
+.cbc-lobby-rule-list {
+  margin: 1rem 0 0;
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  background-color: var(--surface-container-low);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cbc-lobby-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 12px;
+}
+
+.cbc-lobby-rule-row dt {
+  color: var(--on-surface-variant);
+  font-weight: 600;
+}
+
+.cbc-lobby-rule-row dd {
+  margin: 0;
+  color: var(--on-surface);
+  font-weight: 600;
+  text-align: right;
+}
+
+.cbc-game-select-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 0.625rem;
+}
+
+.cbc-game-select-btn.is-selected {
+  border-color: var(--primary);
+  color: var(--primary);
+  background-color: rgba(177, 245, 139, 0.28);
+}
+
+.cbc-matchmaking-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.cbc-matchmaking-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cbc-matchmaking-header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.cbc-matchmaking-icon-box {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  background-color: var(--surface-container-high);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cbc-matchmaking-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.cbc-matchmaking-title {
+  font-family: var(--font-headline);
+  font-size: 24px;
+  line-height: 32px;
+  margin: 0.125rem 0 0;
+}
+
+.cbc-matchmaking-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .cbc-matchmaking-grid {
+    grid-template-columns: 7fr 5fr;
+  }
+}
+
+.cbc-matchmaking-main-card,
+.cbc-matchmaking-side-card {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-container-high);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 2px 10px -2px rgba(42, 42, 38, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cbc-matchmaking-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cbc-matchmaking-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.cbc-matchmaking-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--on-surface-variant);
+}
+
+.cbc-matchmaking-radar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1.125rem;
+  padding: 0.75rem 0;
+}
+
+.cbc-matchmaking-radar-circle {
+  position: relative;
+  width: 10.5rem;
+  height: 10.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cbc-matchmaking-radar-ping {
+  position: absolute;
+  inset: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--secondary-container);
+  opacity: 0.35;
+  animation: cbc-pulse 2s ease-in-out infinite;
+}
+
+@keyframes cbc-pulse {
+  0%,
+  100% {
+    transform: scale(0.95);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.5;
+  }
+}
+
+.cbc-matchmaking-radar-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  position: relative;
+  z-index: 1;
+}
+
+.cbc-matchmaking-ring-bg {
+  stroke: var(--surface-container-high);
+}
+
+.cbc-matchmaking-ring-fg {
+  stroke: var(--primary);
+  transition: stroke-dashoffset 0.8s linear;
+}
+
+.cbc-matchmaking-radar-center {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cbc-matchmaking-status-copy {
+  max-width: 28rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.cbc-matchmaking-status-title {
+  font-family: var(--font-headline);
+  font-size: 20px;
+  margin: 0;
+}
+
+.cbc-matchmaking-elapsed-box {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.75rem;
+  background-color: var(--surface-container-low);
+}
+
+.cbc-matchmaking-elapsed-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--on-surface-variant);
+}
+
+.cbc-matchmaking-elapsed-value {
+  font-family: var(--font-headline);
+  font-size: 28px;
+  line-height: 36px;
+  color: var(--on-surface);
+}
+
+.cbc-matchmaking-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .cbc-matchmaking-meta-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.cbc-matchmaking-meta-item {
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  background-color: var(--surface-container-low);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cbc-matchmaking-meta-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--on-surface-variant);
+}
+
+.cbc-matchmaking-meta-value {
+  font-size: 14px;
+  color: var(--on-surface);
+}
+
+.cbc-matchmaking-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+.cbc-matchmaking-cancel-btn {
+  width: auto;
+  padding: 0.75rem 1.5rem;
+}
+
+.cbc-matchmaking-esc-hint {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.cbc-matchmaking-board-preview {
+  position: relative;
+  height: 7.5rem;
+  border-radius: 0.625rem;
+  overflow: hidden;
+  background-color: #dfc599;
+}
+
+.cbc-matchmaking-board-preview-caption {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(28, 24, 20, 0.82),
+    rgba(28, 24, 20, 0.05)
+  );
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem;
+  color: #ffffff;
+}
+
+.cbc-matchmaking-board-preview-caption span {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.cbc-matchmaking-board-preview-caption strong {
+  font-family: var(--font-headline);
+  font-size: 18px;
+}
+
+.cbc-matchmaking-size-box {
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  background-color: var(--surface-container-low);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.cbc-matchmaking-size-value {
+  font-family: var(--font-headline);
+  font-size: 18px;
+}
+
+.cbc-matchmaking-size-sub {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.cbc-matchmaking-rule-list {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  background-color: var(--surface-container-low);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cbc-matchmaking-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 12px;
+}
+
+.cbc-matchmaking-rule-row dt {
+  color: var(--on-surface-variant);
+}
+
+.cbc-matchmaking-rule-row dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--on-surface);
+  text-align: right;
+}
+
+.cbc-matchmaking-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  padding: 0.875rem;
+  border-radius: 0.625rem;
+  background-color: var(--surface-container-low);
+  text-align: center;
+}
+
+.cbc-matchmaking-stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cbc-matchmaking-stat-cell span {
+  font-size: 11px;
+  color: var(--on-surface-variant);
+}
+
+.cbc-matchmaking-stat-cell strong {
+  font-family: var(--font-headline);
+  font-size: 16px;
+}
+
+.cbc-matchmaking-stat-cell strong.is-primary {
+  color: var(--primary);
+}
+

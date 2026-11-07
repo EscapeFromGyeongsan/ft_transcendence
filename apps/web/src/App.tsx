@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import type { GameType } from "@cafe/game-contracts";
 import { authApi, isTokenPair, type AuthUser } from "./api/auth-client.ts";
 import {
   getAuthFieldErrors,
@@ -6,6 +7,7 @@ import {
   type AuthFieldErrors,
 } from "./api/errors.ts";
 import { GomokuMatchView } from "./game/GomokuMatchView.tsx";
+import { MatchmakingView } from "./game/MatchmakingView.tsx";
 import {
   applyConnectionPhase,
   applyGameAck,
@@ -20,6 +22,22 @@ import {
   markCommandPending,
   type GomokuClientState,
 } from "./game/gomoku-state.ts";
+import {
+  GAME_CATALOG_LIST,
+  applyMatchmakingError,
+  applyMatchmakingWsPhaseChange,
+  applyQueueJoinRequested,
+  applyQueueJoined,
+  applyQueueLeaveRequested,
+  applyQueueLeft,
+  applyQueueMatched,
+  clearMatchmakingError,
+  createInitialMatchmakingState,
+  getGameCatalogEntry,
+  isMatchmakingBusy,
+  selectMatchmakingGame,
+  type MatchmakingClientState,
+} from "./game/matchmaking-state.ts";
 import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
 import { Avatar } from "./profile/Avatar.tsx";
 import { LeaderboardView } from "./profile/LeaderboardView.tsx";
@@ -30,6 +48,7 @@ type ScreenView =
   | "register"
   | "twoFactor"
   | "lobby"
+  | "matchmaking"
   | "gomoku"
   | "profile"
   | "leaderboard";
@@ -204,7 +223,10 @@ export function App() {
   const [playerNicknames, setPlayerNicknames] = useState<Record<number, string>>(
     {},
   );
-  const [isQueuingGomoku, setIsQueuingGomoku] = useState(false);
+  const [matchmakingState, setMatchmakingState] =
+    useState<MatchmakingClientState>(() =>
+      createInitialMatchmakingState("gomoku"),
+    );
   const [matchIdInput, setMatchIdInput] = useState("");
   const [gomokuState, setGomokuState] = useState<GomokuClientState>(() =>
     createInitialGomokuClientState(null, parseInitialMatchId()),
@@ -220,8 +242,46 @@ export function App() {
     resetMessages();
     setAccountMenuOpen(false);
     setLogoutModalOpen(false);
+    // 매칭 대기 화면에서 다른 화면(로비·프로필·리더보드 등)으로 직접 이동할 때 대기열을 정리합니다.
+    if (
+      next !== "matchmaking" &&
+      next !== "gomoku" &&
+      isMatchmakingBusy(matchmakingState)
+    ) {
+      wsClientRef.current?.leaveQueue();
+      setMatchmakingState((prev) => applyQueueLeft(prev));
+    }
     setView(next);
   }
+
+  // 화면 전환 시 브라우저 주소창 경로(/, /matching, /match/:matchId)를 동기화합니다.
+  useEffect(() => {
+    if (
+      typeof globalThis.window === "undefined" ||
+      !globalThis.window.history ||
+      typeof globalThis.window.history.replaceState !== "function"
+    ) {
+      return;
+    }
+    let targetPath: string | null = null;
+    if (view === "gomoku" && gomokuState.matchId !== null) {
+      targetPath = `/match/${gomokuState.matchId}`;
+    } else if (view === "matchmaking") {
+      targetPath = "/matching";
+    } else if (view === "lobby") {
+      targetPath = "/";
+    }
+    if (
+      targetPath !== null &&
+      globalThis.window.location?.pathname !== targetPath
+    ) {
+      try {
+        globalThis.window.history.replaceState(null, "", targetPath);
+      } catch {
+        // 테스트·제한 환경에서 history.replaceState 예외 무시
+      }
+    }
+  }, [view, gomokuState.matchId]);
 
   // 로그인된 사용자의 viewerUserId를 gomokuState와 동기화합니다.
   useEffect(() => {
@@ -289,7 +349,7 @@ export function App() {
         wsClientRef.current.disconnect();
         wsClientRef.current = null;
       }
-      setIsQueuingGomoku(false);
+      setMatchmakingState(createInitialMatchmakingState("gomoku"));
       saveActiveMatchIdToStorage(null);
       return;
     }
@@ -306,6 +366,18 @@ export function App() {
           setGomokuState((prev) =>
             applyConnectionPhase(prev, phase, reconnectAttempt),
           );
+          setMatchmakingState((prev) =>
+            applyMatchmakingWsPhaseChange(prev, phase),
+          );
+          if (
+            phase === "reconnecting" ||
+            phase === "disconnected" ||
+            phase === "session_replaced"
+          ) {
+            setView((current) =>
+              current === "matchmaking" ? "lobby" : current,
+            );
+          }
         },
         onAuthOk({ userId, activeMatchId }) {
           const urlMatchId = parseMatchIdFromLocation();
@@ -319,34 +391,34 @@ export function App() {
           if (targetMatchId !== null) {
             saveActiveMatchIdToStorage(targetMatchId);
             client.setSubscribedMatchId(targetMatchId);
+            setMatchmakingState((prev) => applyQueueLeft(prev));
             setView("gomoku");
           } else {
             saveActiveMatchIdToStorage(null);
           }
         },
         onQueueJoined({ gameType }) {
-          if (gameType === "gomoku") {
-            setIsQueuingGomoku(true);
-            setNoticeMessage("오목 실시간 매칭 대기열에 등록되었습니다.");
-          }
+          setMatchmakingState((prev) => applyQueueJoined(prev, { gameType }));
+          setView((current) => (current === "gomoku" ? current : "matchmaking"));
         },
         onQueueLeft() {
-          setIsQueuingGomoku(false);
+          setMatchmakingState((prev) => applyQueueLeft(prev));
+          setView((current) => (current === "matchmaking" ? "lobby" : current));
           setNoticeMessage("매칭 대기열 등록이 취소되었습니다.");
         },
         onQueueMatched({ matchId, gameType }) {
-          setIsQueuingGomoku(false);
-          if (gameType === "gomoku") {
-            saveActiveMatchIdToStorage(matchId);
-            setGomokuState((prev) => ({
-              ...createInitialGomokuClientState(
-                prev.viewerUserId ?? currentUserId,
-                matchId,
-              ),
-              connectionPhase: "connected",
-            }));
-            setView("gomoku");
-          }
+          saveActiveMatchIdToStorage(matchId);
+          setMatchmakingState((prev) =>
+            applyQueueMatched(prev, { matchId, gameType }),
+          );
+          setGomokuState((prev) => ({
+            ...createInitialGomokuClientState(
+              prev.viewerUserId ?? currentUserId,
+              matchId,
+            ),
+            connectionPhase: "connected",
+          }));
+          setView("gomoku");
         },
         onMatchSnapshot(snapshot) {
           saveActiveMatchIdToStorage(
@@ -373,6 +445,12 @@ export function App() {
         },
         onError(payload) {
           setGomokuState((prev) => applyGameError(prev, payload));
+          setMatchmakingState((prev) => applyMatchmakingError(prev, payload));
+          if (payload.code !== "ALREADY_MATCHED") {
+            setView((current) =>
+              current === "matchmaking" ? "lobby" : current,
+            );
+          }
         },
         onPlayerDisconnected(payload) {
           setGomokuState((prev) => applyPlayerDisconnected(prev, payload));
@@ -406,8 +484,23 @@ export function App() {
     switchView("profile");
   }
 
-  function handleJoinGomokuQueue() {
+  function handleSelectGame(gameType: GameType) {
     resetMessages();
+    setMatchmakingState((prev) => selectMatchmakingGame(prev, gameType));
+  }
+
+  function handleStartMatchmaking(
+    gameType: GameType = matchmakingState.selectedGameType,
+  ) {
+    resetMessages();
+    const catalog = getGameCatalogEntry(gameType);
+    if (!catalog.playable) {
+      setErrorMessage(
+        `${catalog.shortTitle} 실시간 매칭은 현재 준비 중입니다. 오목(15×15)을 선택해 대국을 시작해 주세요.`,
+      );
+      return;
+    }
+
     const client = wsClientRef.current;
     if (!client || client.getPhase() !== "connected") {
       setErrorMessage(
@@ -416,13 +509,25 @@ export function App() {
       client?.reconnectNow();
       return;
     }
-    client.joinQueue("gomoku");
+
+    setMatchmakingState((prev) => applyQueueJoinRequested(prev, gameType));
+    setView("matchmaking");
+    client.joinQueue(gameType);
   }
 
-  function handleLeaveGomokuQueue() {
+  function handleCancelMatchmaking() {
     resetMessages();
-    wsClientRef.current?.leaveQueue();
-    setIsQueuingGomoku(false);
+    setMatchmakingState((prev) => applyQueueLeaveRequested(prev));
+    const sent = wsClientRef.current?.leaveQueue() ?? false;
+    if (!sent) {
+      setMatchmakingState((prev) => applyQueueLeft(prev));
+      setView("lobby");
+      setNoticeMessage("매칭 대기열 등록이 취소되었습니다.");
+    }
+  }
+
+  function handleDismissMatchmakingError() {
+    setMatchmakingState((prev) => clearMatchmakingError(prev));
   }
 
   function handleSubscribeByMatchId(event: FormEvent<HTMLFormElement>) {
@@ -507,13 +612,7 @@ export function App() {
       wsClientRef.current?.unsubscribeMatch(activeMatchId);
       wsClientRef.current?.setSubscribedMatchId(null);
     }
-    switchView("lobby");
-    const client = wsClientRef.current;
-    if (client && client.getPhase() === "connected") {
-      client.joinQueue("gomoku");
-    } else {
-      client?.reconnectNow();
-    }
+    handleStartMatchmaking("gomoku");
   }
 
   useEffect(() => {
@@ -725,6 +824,7 @@ export function App() {
 
           {currentUser &&
           (view === "lobby" ||
+            view === "matchmaking" ||
             view === "gomoku" ||
             view === "profile" ||
             view === "leaderboard") ? (
@@ -1511,6 +1611,14 @@ export function App() {
             currentUserId={currentUser.id}
             onOpenProfile={openProfile}
           />
+        ) : view === "matchmaking" ? (
+          <MatchmakingView
+            state={matchmakingState}
+            connectionPhase={gomokuState.connectionPhase}
+            userId={currentUser?.id ?? null}
+            onCancelQueue={handleCancelMatchmaking}
+            onDismissError={handleDismissMatchmakingError}
+          />
         ) : view === "gomoku" ? (
           <GomokuMatchView
             state={gomokuState}
@@ -1525,7 +1633,7 @@ export function App() {
           />
         ) : (
           /* Authenticated Lobby View (04_home_lobby + 20_logout_modal) */
-          <div className="cbc-lobby-container">
+          <div className="cbc-lobby-container" data-testid="lobby-view">
             {noticeMessage && (
               <div className="cbc-success-banner" role="status">
                 <span>{noticeMessage}</span>
@@ -1535,6 +1643,29 @@ export function App() {
             {errorMessage && (
               <div className="cbc-error-banner" role="alert">
                 <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {matchmakingState.error && (
+              <div
+                className="cbc-error-banner"
+                role="alert"
+                data-testid="lobby-matchmaking-error"
+                data-error-code={matchmakingState.error.code}
+                style={{ justifyContent: "space-between" }}
+              >
+                <span>
+                  [{matchmakingState.error.code}]{" "}
+                  {matchmakingState.error.message}
+                </span>
+                <button
+                  type="button"
+                  className="cbc-btn-secondary"
+                  style={{ width: "auto", padding: "0.25rem 0.625rem" }}
+                  onClick={handleDismissMatchmakingError}
+                >
+                  닫기
+                </button>
               </div>
             )}
 
@@ -1616,122 +1747,137 @@ export function App() {
               </div>
             </section>
 
+            {/* 게임 선택 카탈로그 및 매칭 시작 (FR-CAT-01, FR-CAT-02, FR-MATCH-01) */}
             <section className="cbc-lobby-grid" aria-label="추천 게임">
-              <article className="cbc-game-card">
-                <div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.5rem",
-                      marginBottom: "0.5rem",
-                    }}
+              {GAME_CATALOG_LIST.map((entry) => {
+                const isSelected =
+                  matchmakingState.selectedGameType === entry.gameType;
+                return (
+                  <article
+                    key={entry.gameType}
+                    className={`cbc-game-card ${isSelected ? "is-selected" : ""}`}
+                    data-testid={`game-card-${entry.gameType}`}
+                    data-selected={isSelected ? "true" : "false"}
                   >
-                    <h2
-                      style={{
-                        fontFamily: "var(--font-headline)",
-                        fontSize: "20px",
-                        margin: 0,
-                      }}
-                    >
-                      오목 (15 × 15 자유룰)
-                    </h2>
-                    <span className="cbc-security-pill">
-                      <span className="cbc-pulse-dot" />
-                      실시간 대국 가능
-                    </span>
-                  </div>
-                  <p className="cbc-subheading">
-                    가로, 세로, 대각선으로 돌 5개를 먼저 잇는 턴제 전략
-                    보드게임입니다. 서버 권위 판정(IF-01·IF-05)으로 공정하게
-                    진행됩니다.
-                  </p>
-                </div>
-
-                <div className="cbc-lobby-gomoku-actions">
-                  {gomokuState.matchId !== null &&
-                    gomokuState.snapshot?.status !== "finished" && (
-                      <button
-                        type="button"
-                        className="cbc-btn-primary"
-                        onClick={() => switchView("gomoku")}
-                      >
-                        진행 중인 오목 대국(#{gomokuState.matchId}) 복귀
-                      </button>
-                    )}
-
-                  {isQueuingGomoku ? (
-                    <div className="cbc-queue-waiting-box" role="status">
-                      <div>
-                        <strong>오목 대전 상대를 찾는 중입니다...</strong>
-                        <p className="cbc-subheading" style={{ fontSize: "12px" }}>
-                          매칭이 성사되면 자동으로 15×15 오목 대국실로 이동합니다.
-                        </p>
+                    <div>
+                      <div className="cbc-game-card-top">
+                        <div>
+                          <span className="cbc-game-card-subtitle">
+                            {entry.subtitle}
+                          </span>
+                          <h2 className="cbc-game-card-title">{entry.title}</h2>
+                        </div>
+                        <span
+                          className={`cbc-security-pill ${
+                            entry.playable ? "" : "is-muted"
+                          }`}
+                        >
+                          {entry.playable && <span className="cbc-pulse-dot" />}
+                          {entry.statusBadge}
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        className="cbc-btn-secondary"
-                        style={{ width: "auto" }}
-                        onClick={handleLeaveGomokuQueue}
-                      >
-                        매칭 취소
-                      </button>
+
+                      <p className="cbc-subheading">{entry.description}</p>
+
+                      {/* 사전 대국 규칙 요약 리스트 (FR-CAT-02) */}
+                      <dl className="cbc-lobby-rule-list">
+                        <div className="cbc-lobby-rule-row">
+                          <dt>보드 크기</dt>
+                          <dd>
+                            {entry.boardSizeLabel} ({entry.boardSubLabel})
+                          </dd>
+                        </div>
+                        {entry.rules.slice(0, 3).map((rule) => (
+                          <div key={rule.label} className="cbc-lobby-rule-row">
+                            <dt>{rule.label}</dt>
+                            <dd>{rule.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="cbc-btn-primary"
-                      onClick={handleJoinGomokuQueue}
-                    >
-                      오목 빠른 매칭 시작
-                    </button>
-                  )}
 
-                  <form
-                    className="cbc-match-join-form"
-                    onSubmit={handleSubscribeByMatchId}
-                  >
-                    <label htmlFor="matchIdInput" className="sr-only">
-                      대국 번호(matchId) 입력
-                    </label>
-                    <input
-                      id="matchIdInput"
-                      type="number"
-                      min={1}
-                      placeholder="대국 번호 (matchId) 입력"
-                      value={matchIdInput}
-                      onChange={(e) => setMatchIdInput(e.target.value)}
-                      className="cbc-input cbc-match-join-input"
-                    />
-                    <button
-                      type="submit"
-                      className="cbc-btn-secondary cbc-match-join-btn"
-                    >
-                      대국실 입장
-                    </button>
-                  </form>
-                </div>
-              </article>
+                    <div className="cbc-lobby-gomoku-actions">
+                      <div className="cbc-game-select-row">
+                        <button
+                          type="button"
+                          className={`cbc-btn-secondary cbc-game-select-btn ${
+                            isSelected ? "is-selected" : ""
+                          }`}
+                          aria-pressed={isSelected}
+                          data-testid={`select-game-${entry.gameType}`}
+                          onClick={() => handleSelectGame(entry.gameType)}
+                        >
+                          {isSelected
+                            ? `${entry.shortTitle} 선택됨`
+                            : `${entry.shortTitle} 선택`}
+                        </button>
 
-              <article className="cbc-game-card">
-                <div>
-                  <h2
-                    style={{
-                      fontFamily: "var(--font-headline)",
-                      fontSize: "20px",
-                      margin: "0 0 0.5rem",
-                    }}
-                  >
-                    오셀로 (8 × 8 표준 보드)
-                  </h2>
-                  <p className="cbc-subheading">
-                    상대방의 돌을 사이에 두고 뒤집어 자신의 색으로 만들어가는
-                    두뇌 게임입니다.
-                  </p>
-                </div>
-                <span className="cbc-security-pill">실시간 대국 준비 중</span>
-              </article>
+                        {entry.playable ? (
+                          <button
+                            type="button"
+                            className="cbc-btn-primary cbc-game-match-btn"
+                            data-testid={`start-matchmaking-${entry.gameType}`}
+                            onClick={() =>
+                              handleStartMatchmaking(entry.gameType)
+                            }
+                          >
+                            {entry.shortTitle} 빠른 매칭 시작
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="cbc-btn-secondary cbc-game-match-btn"
+                            data-testid={`start-matchmaking-${entry.gameType}`}
+                            disabled
+                          >
+                            {entry.shortTitle} 매칭 준비 중
+                          </button>
+                        )}
+                      </div>
+
+                      {entry.gameType === "gomoku" && (
+                        <>
+                          {gomokuState.matchId !== null &&
+                            gomokuState.snapshot?.status !== "finished" && (
+                              <button
+                                type="button"
+                                className="cbc-btn-primary"
+                                data-testid="return-active-match-btn"
+                                onClick={() => switchView("gomoku")}
+                              >
+                                진행 중인 오목 대국(#{gomokuState.matchId}) 복귀
+                              </button>
+                            )}
+
+                          <form
+                            className="cbc-match-join-form"
+                            onSubmit={handleSubscribeByMatchId}
+                          >
+                            <label htmlFor="matchIdInput" className="sr-only">
+                              대국 번호(matchId) 입력
+                            </label>
+                            <input
+                              id="matchIdInput"
+                              type="number"
+                              min={1}
+                              placeholder="대국 번호 (matchId) 입력"
+                              value={matchIdInput}
+                              onChange={(e) => setMatchIdInput(e.target.value)}
+                              className="cbc-input cbc-match-join-input"
+                            />
+                            <button
+                              type="submit"
+                              className="cbc-btn-secondary cbc-match-join-btn"
+                            >
+                              대국실 입장
+                            </button>
+                          </form>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </section>
           </div>
         )}
