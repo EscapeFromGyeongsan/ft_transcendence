@@ -18,6 +18,7 @@ import {
   createInitialGomokuClientState,
   deriveTurnPresentation,
   describeGomokuResult,
+  getGameErrorMessage,
   isValidGomokuCoord,
   markCommandPending,
 } from "./gomoku-state.ts";
@@ -239,7 +240,7 @@ describe("서버 권위 snapshot 표시 및 클라이언트 자체 승패 판정
     );
 
     expect(html).not.toContain('data-testid="gomoku-result-panel"');
-    expect(html).toContain("진행 중 (playing)");
+    expect(html).toContain("상대 차례");
   });
 
   it("착수 명령(markCommandPending)을 전송해도 서버 snapshot 수신 전에는 보드에 돌을 미리 그리지 않는다", () => {
@@ -257,7 +258,7 @@ describe("서버 권위 snapshot 표시 및 클라이언트 자체 승패 판정
 });
 
 describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재접속 표시", () => {
-  it("내 차례와 상대 차례, 상대 착수 좌표를 정확히 계산하고 화면에 표시한다", () => {
+  it("내 차례와 상대 차례, 상대 착수 좌표와 조회된 상대 닉네임을 정확히 표시한다", () => {
     const initial = applyConnectionPhase(
       createInitialGomokuClientState(101, 10),
       "connected",
@@ -310,6 +311,7 @@ describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재�
       createElement(GomokuMatchView, {
         state: state2,
         viewerNickname: "재일",
+        playerNicknames: { 101: "재일", 202: "알파오목" },
         onPlaceStone: vi.fn(),
         onResign: vi.fn(),
         onReconnect: vi.fn(),
@@ -320,10 +322,12 @@ describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재�
     expect(html).toContain("내 차례");
     expect(html).toContain("상대 착수");
     expect(html).toContain("(7, 8)");
+    expect(html).toContain("알파오목");
+    expect(html).not.toContain("Player #202");
     expect(html).toContain('aria-label="7, 8 백돌 (최근 착수)"');
   });
 
-  it("서버가 확정한 종료 결과(승리·패배·무승부·무효 및 종료 사유)와 game.error를 표시한다", () => {
+  it("서버가 확정한 종료 결과(Win! / Lose / Draw / 경기 취소)를 보드 오버레이로 표시하고 game.error를 안내한다", () => {
     const finishedSnapshot = makeSnapshot({
       stateVersion: 15,
       status: "finished",
@@ -334,6 +338,33 @@ describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재�
         reason: "five_in_row",
       },
     });
+
+    // 패배 / 무승부 / 무효 문구도 각각 검증
+    expect(describeGomokuResult(finishedSnapshot, 202)?.headline).toBe("Lose");
+    expect(
+      describeGomokuResult(
+        makeSnapshot({
+          status: "finished",
+          currentPlayerId: null,
+          result: { outcome: "draw", winnerId: null, reason: "draw" },
+        }),
+        101,
+      )?.headline,
+    ).toBe("Draw");
+    expect(
+      describeGomokuResult(
+        makeSnapshot({
+          status: "finished",
+          currentPlayerId: null,
+          result: {
+            outcome: "void",
+            winnerId: null,
+            reason: "disconnect_timeout",
+          },
+        }),
+        101,
+      )?.headline,
+    ).toBe("경기 취소");
 
     let state = applyIncomingSnapshot(
       applyConnectionPhase(createInitialGomokuClientState(101, 10), "connected"),
@@ -354,6 +385,7 @@ describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재�
         onPlaceStone: vi.fn(),
         onResign: vi.fn(),
         onReconnect: vi.fn(),
+        onPlayAgain: vi.fn(),
         onBackToLobby: vi.fn(),
       }),
     );
@@ -361,11 +393,40 @@ describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재�
     expect(html).toContain('data-testid="gomoku-result-panel"');
     expect(html).toContain('data-result-outcome="win"');
     expect(html).toContain('data-result-reason="five_in_row"');
-    expect(html).toContain("승리!");
+    expect(html).toContain("Win!");
     expect(html).toContain("5목 완성");
+    expect(html).toContain("다시 하기");
+    expect(html).toContain("나가기");
+    expect(html).toContain("마지막 판 다시 보기");
+    expect(html).toContain("[종료]");
+    expect(html).not.toContain("[대기]");
+    expect(html).not.toContain("서버 권위 판정");
     expect(html).toContain('data-testid="game-error-banner"');
     expect(html).toContain('data-error-code="NOT_YOUR_TURN"');
     expect(html).toContain("상대방의 차례입니다");
+  });
+
+  it("서버가 전송하는 오류 코드(INVALID_MESSAGE, UNSUPPORTED_MESSAGE, INTERNAL_ERROR)를 한국어 안내 문구로 변환한다", () => {
+    expect(getGameErrorMessage("INVALID_MESSAGE", "Invalid message")).toBe(
+      "요청 메시지 형식이 올바르지 않습니다.",
+    );
+    expect(
+      getGameErrorMessage("UNSUPPORTED_MESSAGE", "Unsupported message"),
+    ).toBe("요청 메시지 형식이 올바르지 않습니다.");
+    expect(getGameErrorMessage("INTERNAL_ERROR", "Internal error")).toBe(
+      "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+    );
+  });
+
+  it("일시정지(paused) 상태에서는 기권 버튼(canResign)을 비활성화한다", () => {
+    const pausedState = applyIncomingSnapshot(
+      applyConnectionPhase(createInitialGomokuClientState(101, 10), "connected"),
+      makeSnapshot({ stateVersion: 3, status: "paused", currentPlayerId: 101 }),
+      "match.snapshot",
+    );
+    const turn = deriveTurnPresentation(pausedState);
+    expect(turn.canPlaceStone).toBe(false);
+    expect(turn.canResign).toBe(false);
   });
 
   it("연결 끊김·재접속 중 상태와 상대방 연결 끊김(일시정지) 배너를 각각 표시한다", () => {
@@ -538,6 +599,83 @@ describe("실시간 WebSocket 클라이언트(createGameWsClient) 프로토콜 �
       expect(client.getPhase()).toBe("connected");
       expect(ws2.sent[1]?.type).toBe("match.subscribe");
       expect(ws2.sent[1]?.payload).toEqual({ matchId: 10 });
+
+      client.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("앱 레벨 heartbeat ping을 주기적으로 전송하고 pong 응답이 없으면 자동으로 재연결을 시도한다", () => {
+    vi.useFakeTimers();
+    try {
+      const instances: Array<{
+        sent: WsEnvelope[];
+        readyState: number;
+        onopen: ((ev: unknown) => void) | null;
+        onmessage: ((ev: { data: string }) => void) | null;
+        onclose: ((ev: { code?: number; reason?: string }) => void) | null;
+        onerror: ((ev: unknown) => void) | null;
+        send: (data: string) => void;
+        close: (code?: number, reason?: string) => void;
+      }> = [];
+
+      const client = createGameWsClient({
+        url: "ws://localhost:3000/api/ws",
+        getAccessToken: () => "jwt-token-123",
+        reconnectDelaysMs: [100],
+        heartbeatIntervalMs: 1_000,
+        heartbeatTimeoutMs: 500,
+        createWebSocket: () => {
+          const mockWs = {
+            sent: [] as WsEnvelope[],
+            readyState: 1,
+            onopen: null as ((ev: unknown) => void) | null,
+            onmessage: null as ((ev: { data: string }) => void) | null,
+            onclose: null as
+              | ((ev: { code?: number; reason?: string }) => void)
+              | null,
+            onerror: null as ((ev: unknown) => void) | null,
+            send(data: string) {
+              this.sent.push(JSON.parse(data) as WsEnvelope);
+            },
+            close() {
+              this.readyState = 3;
+            },
+          };
+          instances.push(mockWs);
+          return mockWs as MinimalWebSocket;
+        },
+        handlers: {},
+      });
+
+      client.connect();
+      const ws1 = instances[0];
+      ws1.onopen?.({});
+      ws1.onmessage?.({
+        data: JSON.stringify({
+          type: "auth.ok",
+          payload: { userId: 101, activeMatchId: null },
+        }),
+      });
+      expect(client.getPhase()).toBe("connected");
+
+      // 1초 경과 시 앱 레벨 ping 전송
+      vi.advanceTimersByTime(1_000);
+      expect(ws1.sent.some((m) => m.type === "ping")).toBe(true);
+
+      // pong 응답 수신 시 연결 유지
+      ws1.onmessage?.({
+        data: JSON.stringify({ type: "pong", payload: {} }),
+      });
+      vi.advanceTimersByTime(500);
+      expect(client.getPhase()).toBe("connected");
+
+      // 다음 ping 후 500ms 동안 pong이 없으면 재연결 트리거
+      vi.advanceTimersByTime(1_000);
+      expect(ws1.sent.filter((m) => m.type === "ping").length).toBeGreaterThanOrEqual(2);
+      vi.advanceTimersByTime(550);
+      expect(client.getPhase()).toBe("reconnecting");
 
       client.disconnect();
     } finally {

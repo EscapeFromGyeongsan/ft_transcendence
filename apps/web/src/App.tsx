@@ -24,8 +24,10 @@ import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
 
 type ScreenView = "login" | "register" | "twoFactor" | "lobby" | "gomoku";
 
+const ACTIVE_MATCH_STORAGE_KEY = "cyber_board_cafe.active_match_id";
+
 /**
- * 현재 URL 경로(/match/:matchId) 또는 쿼리(?matchId=...)에서 초기 matchId를 추출합니다.
+ * 현재 URL 경로(/match/:matchId) 또는 쿼리(?matchId=...)에서 matchId를 추출합니다.
  */
 function parseMatchIdFromLocation(): number | null {
   if (typeof globalThis.window === "undefined" || !globalThis.window.location) {
@@ -45,6 +47,43 @@ function parseMatchIdFromLocation(): number | null {
     if (Number.isInteger(parsed) && parsed > 0) return parsed;
   }
   return null;
+}
+
+/**
+ * 새로고침 시 로비 깜빡임을 방지하기 위해 sessionStorage에 저장된 진행 중 matchId를 함께 조회합니다.
+ */
+function parseInitialMatchId(): number | null {
+  const fromLocation = parseMatchIdFromLocation();
+  if (fromLocation !== null) {
+    return fromLocation;
+  }
+  try {
+    const raw = globalThis.sessionStorage?.getItem(ACTIVE_MATCH_STORAGE_KEY);
+    if (raw) {
+      const parsed = Number.parseInt(raw, 10);
+      if (Number.isInteger(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // sessionStorage 접근 불가 환경 무시
+  }
+  return null;
+}
+
+function saveActiveMatchIdToStorage(matchId: number | null): void {
+  try {
+    if (matchId !== null && Number.isInteger(matchId) && matchId > 0) {
+      globalThis.sessionStorage?.setItem(
+        ACTIVE_MATCH_STORAGE_KEY,
+        String(matchId),
+      );
+    } else {
+      globalThis.sessionStorage?.removeItem(ACTIVE_MATCH_STORAGE_KEY);
+    }
+  } catch {
+    // sessionStorage 접근 불가 환경 무시
+  }
 }
 
 function BoardLogoSvg({ size = 32 }: { size?: number }) {
@@ -148,10 +187,14 @@ export function App() {
 
   // Realtime Gomoku & Matchmaking state
   const wsClientRef = useRef<GameWsClient | null>(null);
+  const fetchedPlayerIdsRef = useRef<Set<number>>(new Set());
+  const [playerNicknames, setPlayerNicknames] = useState<Record<number, string>>(
+    {},
+  );
   const [isQueuingGomoku, setIsQueuingGomoku] = useState(false);
   const [matchIdInput, setMatchIdInput] = useState("");
   const [gomokuState, setGomokuState] = useState<GomokuClientState>(() =>
-    createInitialGomokuClientState(null, parseMatchIdFromLocation()),
+    createInitialGomokuClientState(null, parseInitialMatchId()),
   );
 
   function resetMessages() {
@@ -175,6 +218,54 @@ export function App() {
     }));
   }, [currentUser?.id]);
 
+  // 대국 참가자(흑·백) userId에 대해 GET /api/users/:userId로 공개 닉네임을 조회합니다.
+  useEffect(() => {
+    const blackId = gomokuState.snapshot?.players.black ?? null;
+    const whiteId = gomokuState.snapshot?.players.white ?? null;
+    const candidateIds = [blackId, whiteId].filter(
+      (id): id is number => id !== null && Number.isInteger(id) && id > 0,
+    );
+
+    for (const playerId of candidateIds) {
+      if (currentUser && playerId === currentUser.id) {
+        if (playerNicknames[playerId] !== currentUser.nickname) {
+          setPlayerNicknames((prev) => ({
+            ...prev,
+            [playerId]: currentUser.nickname,
+          }));
+        }
+        continue;
+      }
+
+      if (fetchedPlayerIdsRef.current.has(playerId)) {
+        continue;
+      }
+      fetchedPlayerIdsRef.current.add(playerId);
+
+      void authApi
+        .request<{ id: number; nickname: string; avatarUrl: string | null }>(
+          `/api/users/${playerId}`,
+          { method: "GET", requiresAuth: true },
+        )
+        .then((profile) => {
+          if (profile && typeof profile.nickname === "string") {
+            setPlayerNicknames((prev) => ({
+              ...prev,
+              [playerId]: profile.nickname,
+            }));
+          }
+        })
+        .catch(() => {
+          fetchedPlayerIdsRef.current.delete(playerId);
+        });
+    }
+  }, [
+    currentUser,
+    gomokuState.snapshot?.players.black,
+    gomokuState.snapshot?.players.white,
+    playerNicknames,
+  ]);
+
   // 인증된 사용자 세션 동안 실시간 WebSocket(/api/ws) 연결을 유지합니다.
   useEffect(() => {
     if (!currentUser) {
@@ -183,10 +274,11 @@ export function App() {
         wsClientRef.current = null;
       }
       setIsQueuingGomoku(false);
+      saveActiveMatchIdToStorage(null);
       return;
     }
 
-    const initialUrlMatchId = parseMatchIdFromLocation();
+    const initialMatchId = parseInitialMatchId();
     const client = createGameWsClient({
       getAccessToken: () => authApi.storage.getTokens()?.accessToken ?? null,
       refreshAccessToken: async () => {
@@ -200,16 +292,20 @@ export function App() {
           );
         },
         onAuthOk({ userId, activeMatchId }) {
+          const urlMatchId = parseMatchIdFromLocation();
           const targetMatchId =
-            client.getSubscribedMatchId() ?? activeMatchId ?? initialUrlMatchId;
+            activeMatchId ?? urlMatchId ?? client.getSubscribedMatchId();
           setGomokuState((prev) => ({
             ...prev,
             viewerUserId: userId,
             matchId: targetMatchId ?? prev.matchId,
           }));
           if (targetMatchId !== null) {
+            saveActiveMatchIdToStorage(targetMatchId);
             client.setSubscribedMatchId(targetMatchId);
             setView("gomoku");
+          } else {
+            saveActiveMatchIdToStorage(null);
           }
         },
         onQueueJoined({ gameType }) {
@@ -225,6 +321,7 @@ export function App() {
         onQueueMatched({ matchId, gameType }) {
           setIsQueuingGomoku(false);
           if (gameType === "gomoku") {
+            saveActiveMatchIdToStorage(matchId);
             setGomokuState((prev) => ({
               ...createInitialGomokuClientState(
                 prev.viewerUserId ?? currentUser.id,
@@ -236,12 +333,18 @@ export function App() {
           }
         },
         onMatchSnapshot(snapshot) {
+          saveActiveMatchIdToStorage(
+            snapshot.status === "finished" ? null : snapshot.matchId,
+          );
           setGomokuState((prev) =>
             applyIncomingSnapshot(prev, snapshot, "match.snapshot"),
           );
           setView("gomoku");
         },
         onGameUpdated(snapshot) {
+          saveActiveMatchIdToStorage(
+            snapshot.status === "finished" ? null : snapshot.matchId,
+          );
           setGomokuState((prev) =>
             applyIncomingSnapshot(prev, snapshot, "game.updated"),
           );
@@ -267,8 +370,8 @@ export function App() {
       },
     });
 
-    if (initialUrlMatchId !== null) {
-      client.setSubscribedMatchId(initialUrlMatchId);
+    if (initialMatchId !== null) {
+      client.setSubscribedMatchId(initialMatchId);
     }
 
     wsClientRef.current = client;
@@ -310,6 +413,7 @@ export function App() {
       return;
     }
 
+    saveActiveMatchIdToStorage(parsedId);
     setGomokuState((prev) => ({
       ...createInitialGomokuClientState(
         prev.viewerUserId ?? currentUser?.id ?? null,
@@ -368,10 +472,27 @@ export function App() {
       activeMatchId !== null &&
       gomokuState.snapshot?.status === "finished"
     ) {
+      saveActiveMatchIdToStorage(null);
       wsClientRef.current?.unsubscribeMatch(activeMatchId);
       wsClientRef.current?.setSubscribedMatchId(null);
     }
     switchView("lobby");
+  }
+
+  function handlePlayAgainGomoku() {
+    const activeMatchId = gomokuState.matchId;
+    if (activeMatchId !== null) {
+      saveActiveMatchIdToStorage(null);
+      wsClientRef.current?.unsubscribeMatch(activeMatchId);
+      wsClientRef.current?.setSubscribedMatchId(null);
+    }
+    switchView("lobby");
+    const client = wsClientRef.current;
+    if (client && client.getPhase() === "connected") {
+      client.joinQueue("gomoku");
+    } else {
+      client?.reconnectNow();
+    }
   }
 
   useEffect(() => {
@@ -382,16 +503,19 @@ export function App() {
       return;
     }
 
+    const resumedMatchId = parseInitialMatchId();
+
     authApi
       .getMe()
       .then((user) => {
         if (!active) return;
         setCurrentUser(user);
-        setView("lobby");
+        setView(resumedMatchId !== null ? "gomoku" : "lobby");
       })
       .catch(() => {
         if (!active) return;
         authApi.storage.clearTokens();
+        saveActiveMatchIdToStorage(null);
         setCurrentUser(null);
         setView("login");
       })
@@ -1305,10 +1429,12 @@ export function App() {
           <GomokuMatchView
             state={gomokuState}
             viewerNickname={currentUser?.nickname}
+            playerNicknames={playerNicknames}
             onPlaceStone={handlePlaceGomokuStone}
             onResign={handleResignGomoku}
             onReconnect={handleReconnectGomoku}
             onDismissError={handleDismissGomokuError}
+            onPlayAgain={handlePlayAgainGomoku}
             onBackToLobby={handleBackToLobbyFromGomoku}
           />
         ) : (

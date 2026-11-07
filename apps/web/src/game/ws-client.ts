@@ -113,6 +113,8 @@ export interface GameWsClientOptions {
   createWebSocket?: WebSocketFactory;
   reconnectDelaysMs?: readonly number[];
   maxReconnectAttempts?: number;
+  heartbeatIntervalMs?: number;
+  heartbeatTimeoutMs?: number;
   handlers?: GameWsClientHandlers;
 }
 
@@ -135,6 +137,8 @@ export interface GameWsClient {
 const WS_READY_STATE_OPEN = 1;
 const DEFAULT_RECONNECT_DELAYS_MS = [600, 1200, 2400, 4000] as const;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
+const DEFAULT_HEARTBEAT_TIMEOUT_MS = 10_000;
 
 /**
  * 현재 브라우저 위치(window.location)를 기준으로 `/api/ws` 엔드포인트 URL을 생성합니다.
@@ -182,6 +186,10 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
     options.reconnectDelaysMs ?? DEFAULT_RECONNECT_DELAYS_MS;
   const maxReconnectAttempts =
     options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
+  const heartbeatIntervalMs =
+    options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+  const heartbeatTimeoutMs =
+    options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS;
   const createSocket: WebSocketFactory =
     options.createWebSocket ??
     ((url: string) => new globalThis.WebSocket(url) as unknown as MinimalWebSocket);
@@ -190,6 +198,8 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
   let phase: WsConnectionPhase = "disconnected";
   let reconnectAttempt = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let heartbeatIntervalTimer: ReturnType<typeof setInterval> | null = null;
+  let heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   let manualDisconnect = false;
   let sessionReplaced = false;
   let subscribedMatchId: MatchId | null = null;
@@ -206,6 +216,56 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+  }
+
+  function clearHeartbeatTimeout() {
+    if (heartbeatTimeoutTimer !== null) {
+      clearTimeout(heartbeatTimeoutTimer);
+      heartbeatTimeoutTimer = null;
+    }
+  }
+
+  function clearHeartbeatTimers() {
+    clearHeartbeatTimeout();
+    if (heartbeatIntervalTimer !== null) {
+      clearInterval(heartbeatIntervalTimer);
+      heartbeatIntervalTimer = null;
+    }
+  }
+
+  function startHeartbeat() {
+    clearHeartbeatTimers();
+    if (heartbeatIntervalMs <= 0) {
+      return;
+    }
+    heartbeatIntervalTimer = setInterval(() => {
+      if (
+        phase !== "connected" ||
+        !socket ||
+        socket.readyState !== WS_READY_STATE_OPEN
+      ) {
+        return;
+      }
+      sendEnvelope("ping", {});
+      if (heartbeatTimeoutTimer === null && heartbeatTimeoutMs > 0) {
+        heartbeatTimeoutTimer = setTimeout(() => {
+          heartbeatTimeoutTimer = null;
+          if (!socket || manualDisconnect || sessionReplaced) {
+            return;
+          }
+          const unresponsive = socket;
+          socket = null;
+          detachSocketListeners(unresponsive);
+          clearHeartbeatTimers();
+          try {
+            unresponsive.close(4000, "heartbeat timeout");
+          } catch {
+            // ignore close error
+          }
+          scheduleReconnect();
+        }, heartbeatTimeoutMs);
+      }
+    }, heartbeatIntervalMs);
   }
 
   function nextRequestId(prefix: string): string {
@@ -284,6 +344,9 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
       return;
     }
 
+    // 서버로부터 pong 또는 유효한 메시지를 수신하면 heartbeat 응답 대기 타이머를 해제합니다.
+    clearHeartbeatTimeout();
+
     const payload =
       typeof parsed.payload === "object" && parsed.payload !== null
         ? parsed.payload
@@ -297,6 +360,7 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
             ? payload.activeMatchId
             : null;
         setPhase("connected", 0);
+        startHeartbeat();
         options.handlers?.onAuthOk?.({ userId, activeMatchId });
 
         // 재접속 또는 초기 연결 직후 구독 대상 대국이 있으면 즉시 match.subscribe 전송
@@ -451,11 +515,13 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
             : (subscribedMatchId ?? 0);
         sessionReplaced = true;
         clearReconnectTimer();
+        clearHeartbeatTimers();
         setPhase("session_replaced", reconnectAttempt);
         options.handlers?.onSessionReplaced?.({ matchId });
         break;
       }
 
+      case "pong":
       default:
         break;
     }
@@ -471,6 +537,7 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
 
   function openSocket(isRetry: boolean) {
     clearReconnectTimer();
+    clearHeartbeatTimers();
     const token = options.getAccessToken();
     if (!token) {
       setPhase("disconnected", reconnectAttempt);
@@ -523,6 +590,7 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
     currentSocket.onclose = (event) => {
       if (socket !== currentSocket) return;
       socket = null;
+      clearHeartbeatTimers();
 
       if (manualDisconnect || sessionReplaced) {
         return;
@@ -550,6 +618,7 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
     disconnect() {
       manualDisconnect = true;
       clearReconnectTimer();
+      clearHeartbeatTimers();
       const current = socket;
       socket = null;
       detachSocketListeners(current);

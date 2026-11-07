@@ -17,28 +17,40 @@ import {
 export interface GomokuMatchViewProps {
   state: GomokuClientState;
   viewerNickname?: string;
+  playerNicknames?: Readonly<Record<number, string>>;
   onPlaceStone: (row: number, col: number) => void;
   onResign: () => void;
   onReconnect: () => void;
   onDismissError?: () => void;
+  onPlayAgain?: () => void;
   onBackToLobby: () => void;
 }
 
 /**
  * 플레이어 ID를 화면 표시용 이름 문자열로 변환합니다.
+ * `GET /api/users/:userId`로 조회된 닉네임이 있으면 우선 표시합니다.
  */
 function formatPlayerLabel(
   playerId: PlayerId | null,
   viewerUserId: PlayerId | null,
   viewerNickname?: string,
+  playerNicknames?: Readonly<Record<number, string>>,
 ): string {
   if (playerId === null) {
     return "대기 중";
   }
+  const resolvedNickname =
+    playerNicknames?.[playerId]?.trim() ||
+    (viewerUserId !== null && playerId === viewerUserId
+      ? viewerNickname?.trim()
+      : undefined);
+
   if (viewerUserId !== null && playerId === viewerUserId) {
-    return viewerNickname ? `${viewerNickname} (나)` : `Player #${playerId} (나)`;
+    return resolvedNickname
+      ? `${resolvedNickname} (나)`
+      : `Player #${playerId} (나)`;
   }
-  return `Player #${playerId}`;
+  return resolvedNickname || `Player #${playerId}`;
 }
 
 /**
@@ -48,13 +60,16 @@ function formatPlayerLabel(
 export function GomokuMatchView({
   state,
   viewerNickname,
+  playerNicknames,
   onPlaceStone,
   onResign,
   onReconnect,
   onDismissError,
+  onPlayAgain,
   onBackToLobby,
 }: GomokuMatchViewProps) {
   const [resignModalOpen, setResignModalOpen] = useState(false);
+  const [resultOverlayMinimized, setResultOverlayMinimized] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const cellRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -64,6 +79,11 @@ export function GomokuMatchView({
   const isOpponentDisconnected = Boolean(
     state.opponentDisconnect || snapshot?.status === "paused",
   );
+
+  // 새 대국이 시작되거나 종료 상태가 바뀌면 결과 오버레이를 기본 표시 상태로 초기화합니다.
+  useEffect(() => {
+    setResultOverlayMinimized(false);
+  }, [snapshot?.matchId, snapshot?.status]);
 
   // 상대방 연결 끊김 시 남은 유예 시간 카운트다운 표시용 타이머 (승패 판정은 절대 클라이언트에서 하지 않음)
   useEffect(() => {
@@ -89,6 +109,7 @@ export function GomokuMatchView({
   const stoneCounts = countPlacedStones(board);
   const turn = deriveTurnPresentation(state);
   const resultPresentation = describeGomokuResult(snapshot, viewerUserId);
+  const isFinished = snapshot?.status === "finished";
 
   const blackPlayerId = snapshot?.players.black ?? null;
   const whitePlayerId = snapshot?.players.white ?? null;
@@ -170,13 +191,23 @@ export function GomokuMatchView({
     onResign();
   }
 
+  function handlePlayAgainClick() {
+    if (onPlayAgain) {
+      onPlayAgain();
+      return;
+    }
+    onBackToLobby();
+  }
+
   return (
     <div className="cbc-gomoku-page" data-testid="gomoku-match-view">
       {/* 1. 자신의 WebSocket 연결 끊김 / 재접속 중 배너 */}
       {showOwnConnectionBanner && (
         <section
           className={`cbc-conn-banner ${
-            connectionPhase === "disconnected" ? "is-disconnected" : "is-reconnecting"
+            connectionPhase === "disconnected"
+              ? "is-disconnected"
+              : "is-reconnecting"
           }`}
           role={connectionPhase === "disconnected" ? "alert" : "status"}
           aria-live="polite"
@@ -194,7 +225,7 @@ export function GomokuMatchView({
                     : "실시간 대국 서버 연결 및 인증 확인 중..."}
               </div>
               <div className="cbc-conn-banner-desc">
-                재접속이 완료되면 서버의 최신 대국 스냅샷(match.snapshot)을 자동으로 다시 구독합니다.
+                재접속이 완료되면 서버의 최신 대국 상태를 자동으로 복구합니다.
               </div>
             </div>
           </div>
@@ -235,8 +266,8 @@ export function GomokuMatchView({
         </section>
       )}
 
-      {/* 3. 상대방 연결 끊김 / 경기 일시정지 배너 (13_gomoku_match 기준) */}
-      {isOpponentDisconnected && snapshot?.status !== "finished" && (
+      {/* 3. 상대방 연결 끊김 / 경기 일시정지 배너 */}
+      {isOpponentDisconnected && !isFinished && (
         <section
           className="cbc-pause-banner"
           role="status"
@@ -256,7 +287,7 @@ export function GomokuMatchView({
                   </strong>
                 </div>
                 <p className="cbc-pause-desc">
-                  상대방의 네트워크 연결이 불안정하여 대국이 일시정지되었습니다. 누적 유예 시간(60초) 내 복귀하지 않으면 서버가 시간패를 확정합니다.
+                  상대방의 네트워크 연결이 불안정하여 대국이 일시정지되었습니다. 누적 유예 시간(60초) 내 복귀하지 않으면 시간패 처리됩니다.
                 </p>
               </div>
             </div>
@@ -309,23 +340,8 @@ export function GomokuMatchView({
         </section>
       )}
 
-      {/* 5. 상단 대국 요약 바 (차례 · 상대 착수 · stateVersion 표시) */}
+      {/* 5. 상단 대국 요약 바 (현재 차례 · 최근 착수 표시) */}
       <section className="cbc-gomoku-statusbar" aria-label="대국 진행 상태">
-        <div className="cbc-gomoku-status-left">
-          <span className="cbc-gomoku-match-pill">
-            Match #{snapshot?.matchId ?? state.matchId ?? "-"}
-          </span>
-          <span
-            className="cbc-gomoku-version-pill"
-            data-testid="state-version-badge"
-          >
-            stateVersion: {snapshot?.stateVersion ?? 0}
-          </span>
-          <span className="cbc-gomoku-Rule-pill">
-            15×15 자유룰 (row/col 0~14)
-          </span>
-        </div>
-
         <div
           className={`cbc-gomoku-turn-banner ${
             turn.isMyTurn
@@ -336,12 +352,14 @@ export function GomokuMatchView({
           }`}
           data-testid="turn-indicator"
         >
-          <span
-            className={`cbc-stone-dot ${
-              turn.currentTurnColor === "white" ? "is-white" : "is-black"
-            }`}
-            aria-hidden="true"
-          />
+          {turn.currentTurnColor && (
+            <span
+              className={`cbc-stone-dot ${
+                turn.currentTurnColor === "white" ? "is-white" : "is-black"
+              }`}
+              aria-hidden="true"
+            />
+          )}
           <strong>{turn.turnLabel}</strong>
           <span className="cbc-gomoku-turn-sub">{turn.turnDescription}</span>
         </div>
@@ -366,12 +384,12 @@ export function GomokuMatchView({
               </span>
             </>
           ) : (
-            <span>최근 착수: 아직 착수된 돌이 없습니다</span>
+            <span>첫 착수를 기다리고 있습니다</span>
           )}
         </div>
       </section>
 
-      {/* 6. 메인 12컬럼 대국 레이아웃 (좌측 사이드바 4칸 + 우측 15x15 오목판 8칸) */}
+      {/* 6. 메인 대국 레이아웃 (좌측 플레이어/조작 패널 + 우측 15×15 오목판) */}
       <div className="cbc-gomoku-layout">
         {/* 좌측 플레이어 및 대국 제어 패널 */}
         <aside className="cbc-gomoku-sidebar">
@@ -389,6 +407,7 @@ export function GomokuMatchView({
                       blackPlayerId,
                       viewerUserId,
                       viewerNickname,
+                      playerNicknames,
                     )}
                   </div>
                   <div className="cbc-player-role-sub">
@@ -397,7 +416,9 @@ export function GomokuMatchView({
                 </div>
               </div>
 
-              {isBlackOpponentDisconnected ? (
+              {isFinished ? (
+                <span className="cbc-turn-chip">[종료]</span>
+              ) : isBlackOpponentDisconnected ? (
                 <span className="cbc-turn-chip is-disconnected">
                   [재접속 대기 중]
                 </span>
@@ -427,6 +448,7 @@ export function GomokuMatchView({
                       whitePlayerId,
                       viewerUserId,
                       viewerNickname,
+                      playerNicknames,
                     )}
                   </div>
                   <div className="cbc-player-role-sub">
@@ -435,7 +457,9 @@ export function GomokuMatchView({
                 </div>
               </div>
 
-              {isWhiteOpponentDisconnected ? (
+              {isFinished ? (
+                <span className="cbc-turn-chip">[종료]</span>
+              ) : isWhiteOpponentDisconnected ? (
                 <span className="cbc-turn-chip is-disconnected">
                   [재접속 대기 중]
                 </span>
@@ -451,42 +475,10 @@ export function GomokuMatchView({
             </div>
           </article>
 
-          {/* 대국 정보 및 조작 카드 */}
+          {/* 대국 조작 버튼 영역 (기권 / 다시 하기 / 나가기 단일화) */}
           <section className="cbc-match-info-card">
-            <h2 className="cbc-match-info-heading">대국 정보</h2>
-            <dl className="cbc-match-info-list">
-              <div className="cbc-match-info-row">
-                <dt>보드 규격</dt>
-                <dd>15 × 15 (0 ~ 14)</dd>
-              </div>
-              <div className="cbc-match-info-row">
-                <dt>경기 상태</dt>
-                <dd data-testid="snapshot-status-text">
-                  {snapshot?.status === "playing"
-                    ? "진행 중 (playing)"
-                    : snapshot?.status === "paused"
-                      ? "일시정지 (paused)"
-                      : snapshot?.status === "finished"
-                        ? "종료됨 (finished)"
-                        : "대기 중 (waiting)"}
-                </dd>
-              </div>
-              <div className="cbc-match-info-row">
-                <dt>총 착수 수</dt>
-                <dd>총 {stoneCounts.total}수</dd>
-              </div>
-              <div className="cbc-match-info-row">
-                <dt>최근 착수 좌표</dt>
-                <dd data-testid="sidebar-last-move">
-                  {lastMove
-                    ? `${lastMove.isOpponentMove ? "상대 착수" : "내 착수"} (${lastMove.row}, ${lastMove.col})`
-                    : "없음"}
-                </dd>
-              </div>
-            </dl>
-
             <div className="cbc-match-actions">
-              {snapshot?.status !== "finished" ? (
+              {!isFinished ? (
                 <button
                   type="button"
                   className="cbc-btn-resign"
@@ -497,21 +489,24 @@ export function GomokuMatchView({
                   기권하기
                 </button>
               ) : (
-                <button
-                  type="button"
-                  className="cbc-btn-primary"
-                  onClick={onBackToLobby}
-                >
-                  로비로 돌아가기
-                </button>
+                onPlayAgain && (
+                  <button
+                    type="button"
+                    className="cbc-btn-primary"
+                    onClick={handlePlayAgainClick}
+                  >
+                    다시 하기
+                  </button>
+                )
               )}
 
               <button
                 type="button"
                 className="cbc-btn-secondary"
+                data-testid="leave-match-btn"
                 onClick={onBackToLobby}
               >
-                로비 화면으로 이동
+                나가기
               </button>
             </div>
           </section>
@@ -534,189 +529,234 @@ export function GomokuMatchView({
               ))}
             </div>
 
-            {/* 행(row: 0..14) 및 15×15 교차점 그리드 */}
-            <div className="cbc-gomoku-rows-wrap">
-              {GOMOKU_COORDS.map((row) => (
-                <div
-                  key={`board-row-${row}`}
-                  className="cbc-gomoku-row"
-                  data-row-index={row}
-                >
+            {/* 좌측 행(row: 0..14) 헤더 + 우측 연속 SVG 격자 및 15×15 교차점 그리드 */}
+            <div className="cbc-gomoku-board-body">
+              <div className="cbc-gomoku-row-headers" aria-hidden="true">
+                {GOMOKU_COORDS.map((row) => (
                   <span
+                    key={`row-header-${row}`}
                     className="cbc-gomoku-coord-label cbc-gomoku-row-label"
-                    aria-hidden="true"
                     data-row-header={row}
                   >
                     {row}
                   </span>
+                ))}
+              </div>
 
-                  <div
-                    className="cbc-gomoku-row-cells"
-                    role="group"
-                    aria-label={`${row}행 교차점`}
-                  >
-                    {GOMOKU_COORDS.map((col) => {
-                      const cell = board[row]?.[col] ?? null;
-                      const isLastMove =
-                        lastMove !== null &&
-                        lastMove.row === row &&
-                        lastMove.col === col;
-                      const isStar = isGomokuStarPoint(row, col);
-                      const isDisabled = cell !== null || !turn.canPlaceStone;
+              <div className="cbc-gomoku-grid-area">
+                {/* 15개의 가로선과 15개의 세로선을 끊김 없이 일정한 굵기·진하기로 그리는 연속 SVG 격자 */}
+                <svg
+                  className="cbc-gomoku-grid-svg"
+                  viewBox="0 0 1500 1500"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  {GOMOKU_COORDS.map((index) => {
+                    const pos = 50 + index * 100;
+                    return (
+                      <g key={`grid-line-${index}`}>
+                        <line
+                          x1={50}
+                          y1={pos}
+                          x2={1450}
+                          y2={pos}
+                          stroke="#4a341b"
+                          strokeWidth={1.5}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <line
+                          x1={pos}
+                          y1={50}
+                          x2={pos}
+                          y2={1450}
+                          stroke="#4a341b"
+                          strokeWidth={1.5}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
 
-                      const stoneDescription =
-                        cell === "black"
-                          ? `흑돌${isLastMove ? " (최근 착수)" : ""}`
-                          : cell === "white"
-                            ? `백돌${isLastMove ? " (최근 착수)" : ""}`
-                            : "빈 칸";
+                {/* 행(row: 0..14) 및 열(col: 0..14) 225개 교차점 버튼 */}
+                <div className="cbc-gomoku-rows-wrap">
+                  {GOMOKU_COORDS.map((row) => (
+                    <div
+                      key={`board-row-${row}`}
+                      className="cbc-gomoku-row-cells"
+                      role="group"
+                      aria-label={`${row}행 교차점`}
+                      data-row-index={row}
+                    >
+                      {GOMOKU_COORDS.map((col) => {
+                        const cell = board[row]?.[col] ?? null;
+                        const isLastMove =
+                          lastMove !== null &&
+                          lastMove.row === row &&
+                          lastMove.col === col;
+                        const isStar = isGomokuStarPoint(row, col);
+                        const isDisabled =
+                          cell !== null || !turn.canPlaceStone;
 
-                      return (
-                        <button
-                          key={`cell-${row}-${col}`}
-                          ref={(node) => {
-                            cellRefs.current[row * GOMOKU_BOARD_SIZE + col] =
-                              node;
-                          }}
-                          type="button"
-                          className={`cbc-gomoku-cell ${
-                            cell ? `has-${cell}` : "is-empty"
-                          } ${isLastMove ? "is-last-move" : ""}`}
-                          data-row={row}
-                          data-col={col}
-                          data-cell-state={cell ?? "empty"}
-                          data-last-move={isLastMove ? "true" : undefined}
-                          aria-label={`${row}, ${col} ${stoneDescription}`}
-                          disabled={isDisabled}
-                          onKeyDown={(event) =>
-                            handleCellKeyDown(event, row, col)
-                          }
-                          onClick={() => handleCellClick(row, col)}
-                        >
-                          {/* 화점(별점) 표시 */}
-                          {cell === null && isStar && (
-                            <span
-                              className="cbc-gomoku-star-dot"
-                              aria-hidden="true"
-                            />
-                          )}
+                        const stoneDescription =
+                          cell === "black"
+                            ? `흑돌${isLastMove ? " (최근 착수)" : ""}`
+                            : cell === "white"
+                              ? `백돌${isLastMove ? " (최근 착수)" : ""}`
+                              : "빈 칸";
 
-                          {/* 서버 snapshot에 확정된 돌 렌더링 */}
-                          {cell !== null && (
-                            <span
-                              className={`cbc-gomoku-stone ${
-                                cell === "black" ? "is-black" : "is-white"
-                              }`}
-                            >
-                              {isLastMove && (
-                                <span
-                                  className="cbc-gomoku-last-marker"
-                                  aria-hidden="true"
-                                />
-                              )}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                        return (
+                          <button
+                            key={`cell-${row}-${col}`}
+                            ref={(node) => {
+                              cellRefs.current[row * GOMOKU_BOARD_SIZE + col] =
+                                node;
+                            }}
+                            type="button"
+                            className={`cbc-gomoku-cell ${
+                              cell ? `has-${cell}` : "is-empty"
+                            } ${isLastMove ? "is-last-move" : ""}`}
+                            data-row={row}
+                            data-col={col}
+                            data-cell-state={cell ?? "empty"}
+                            data-last-move={isLastMove ? "true" : undefined}
+                            aria-label={`${row}, ${col} ${stoneDescription}`}
+                            disabled={isDisabled}
+                            onKeyDown={(event) =>
+                              handleCellKeyDown(event, row, col)
+                            }
+                            onClick={() => handleCellClick(row, col)}
+                          >
+                            {/* 화점(별점) 표시 */}
+                            {cell === null && isStar && (
+                              <span
+                                className="cbc-gomoku-star-dot"
+                                aria-hidden="true"
+                              />
+                            )}
+
+                            {/* 서버 snapshot에 확정된 돌 렌더링 */}
+                            {cell !== null && (
+                              <span
+                                className={`cbc-gomoku-stone ${
+                                  cell === "black" ? "is-black" : "is-white"
+                                }`}
+                              >
+                                {isLastMove && (
+                                  <span
+                                    className="cbc-gomoku-last-marker"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
 
-          <p className="cbc-gomoku-board-caption">
-            * 모든 착수와 승패 판정은 서버가 확정한 <code>GomokuSnapshot</code>만 표시합니다 (좌표 범위: row 0~{GOMOKU_BOARD_SIZE - 1}, col 0~{GOMOKU_BOARD_SIZE - 1}).
-          </p>
+            {/* 7. 보드 위 간단한 종료 결과 오버레이 (snapshot.status === "finished" && snapshot.result !== null 일 때만 표시) */}
+            {resultPresentation && !resultOverlayMinimized && (
+              <div
+                className="cbc-board-result-overlay"
+                role="dialog"
+                aria-modal="false"
+                aria-labelledby="gomoku-result-headline"
+                data-testid="gomoku-result-panel"
+                data-result-outcome={resultPresentation.outcome}
+                data-result-reason={resultPresentation.reason}
+              >
+                <div className="cbc-board-result-card">
+                  <span
+                    className={`cbc-result-badge is-${resultPresentation.perspective}`}
+                  >
+                    {resultPresentation.badgeText}
+                  </span>
+                  <h2
+                    id="gomoku-result-headline"
+                    className="cbc-result-headline"
+                  >
+                    {resultPresentation.headline}
+                  </h2>
+                  <p
+                    className="cbc-result-subheadline"
+                    data-testid="result-reason-title"
+                  >
+                    {resultPresentation.subheadline}
+                  </p>
+
+                  <div className="cbc-board-result-actions">
+                    <button
+                      type="button"
+                      className="cbc-btn-primary"
+                      data-testid="result-play-again-btn"
+                      onClick={handlePlayAgainClick}
+                    >
+                      다시 하기
+                    </button>
+                    <button
+                      type="button"
+                      className="cbc-btn-secondary"
+                      data-testid="result-leave-btn"
+                      onClick={onBackToLobby}
+                    >
+                      나가기
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="cbc-board-result-minimize"
+                    data-testid="result-minimize-btn"
+                    onClick={() => setResultOverlayMinimized(true)}
+                  >
+                    마지막 판 다시 보기
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 결과 오버레이를 최소화했을 때 다시 열 수 있는 플로팅 바 */}
+            {resultPresentation && resultOverlayMinimized && (
+              <div
+                className="cbc-board-result-minimized-bar"
+                data-testid="gomoku-result-minimized-bar"
+              >
+                <strong>
+                  {resultPresentation.headline} ({resultPresentation.reasonTitle})
+                </strong>
+                <div className="cbc-board-result-minimized-actions">
+                  <button
+                    type="button"
+                    className="cbc-btn-secondary"
+                    onClick={() => setResultOverlayMinimized(false)}
+                  >
+                    결과 창 열기
+                  </button>
+                  <button
+                    type="button"
+                    className="cbc-btn-primary"
+                    onClick={handlePlayAgainClick}
+                  >
+                    다시 하기
+                  </button>
+                  <button
+                    type="button"
+                    className="cbc-btn-secondary"
+                    onClick={onBackToLobby}
+                  >
+                    나가기
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </section>
       </div>
-
-      {/* 7. 서버 확정 대국 결과 섹션 (15_gomoku_result 기준, snapshot.status === "finished" && snapshot.result !== null 일 때만 표시) */}
-      {resultPresentation && (
-        <section
-          className="cbc-gomoku-result-panel"
-          aria-labelledby="gomoku-result-headline"
-          data-testid="gomoku-result-panel"
-          data-result-outcome={resultPresentation.outcome}
-          data-result-reason={resultPresentation.reason}
-        >
-          <div className="cbc-result-hero">
-            <span
-              className={`cbc-result-badge is-${resultPresentation.perspective}`}
-            >
-              {resultPresentation.badgeText}
-            </span>
-            <h2 id="gomoku-result-headline" className="cbc-result-headline">
-              {resultPresentation.headline}
-            </h2>
-            <p className="cbc-result-subheadline">
-              {resultPresentation.subheadline}
-            </p>
-
-            <div className="cbc-result-summary-strip">
-              <div className="cbc-result-summary-item">
-                <span className="cbc-result-summary-label">확정 결과 (outcome)</span>
-                <strong>{resultPresentation.outcome.toUpperCase()}</strong>
-              </div>
-              <div className="cbc-result-summary-item">
-                <span className="cbc-result-summary-label">승자 (winnerId)</span>
-                <strong>
-                  {resultPresentation.winnerId !== null
-                    ? formatPlayerLabel(
-                        resultPresentation.winnerId,
-                        viewerUserId,
-                        viewerNickname,
-                      )
-                    : "없음 (무승부 / 무효)"}
-                </strong>
-              </div>
-              <div className="cbc-result-summary-item">
-                <span className="cbc-result-summary-label">종료 사유 (reason)</span>
-                <strong data-testid="result-reason-title">
-                  {resultPresentation.reasonTitle} ({resultPresentation.reason})
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="cbc-result-criteria-section">
-            <h3 className="cbc-result-criteria-heading">
-              오목 종료 사유 판정 기준 (서버 권위 판정)
-            </h3>
-            <div className="cbc-result-criteria-grid">
-              {resultPresentation.criteria.map((criterion) => (
-                <div
-                  key={criterion.reason}
-                  className={`cbc-result-criterion-card ${
-                    criterion.active ? "is-active" : ""
-                  }`}
-                  data-criterion-reason={criterion.reason}
-                  data-criterion-active={criterion.active ? "true" : "false"}
-                >
-                  <div className="cbc-result-criterion-top">
-                    <strong>{criterion.title}</strong>
-                    {criterion.active && (
-                      <span className="cbc-result-criterion-badge">적용됨</span>
-                    )}
-                  </div>
-                  <p>{criterion.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="cbc-result-footer">
-            <button
-              type="button"
-              className="cbc-btn-primary"
-              style={{ maxWidth: "280px" }}
-              onClick={onBackToLobby}
-            >
-              로비로 돌아가기
-            </button>
-          </div>
-        </section>
-      )}
 
       {/* 8. 기권 확인 모달 */}
       {resignModalOpen && (
@@ -772,4 +812,3 @@ export function GomokuMatchView({
     </div>
   );
 }
-

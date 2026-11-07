@@ -415,10 +415,11 @@ export function getGameErrorMessage(
       return "이미 참가 중인 대국이 있거나 매칭 대기열에 등록되어 있습니다.";
     case "ALREADY_MATCHED":
       return "이미 매칭이 성사되어 대기열을 취소할 수 없습니다.";
-    case "INVALID_ENVELOPE":
-    case "INVALID_PAYLOAD":
-    case "UNKNOWN_TYPE":
+    case "INVALID_MESSAGE":
+    case "UNSUPPORTED_MESSAGE":
       return "요청 메시지 형식이 올바르지 않습니다.";
+    case "INTERNAL_ERROR":
+      return "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
     default:
       return fallbackMessage?.trim() || "게임 요청 처리 중 오류가 발생했습니다.";
   }
@@ -724,10 +725,7 @@ export function deriveTurnPresentation(
 
   const canPlaceStone = Boolean(isMyTurn && isOnline && !pendingCommand);
   const canResign = Boolean(
-    isParticipant &&
-      (snapshot.status === "playing" || snapshot.status === "paused") &&
-      isOnline &&
-      !pendingCommand,
+    isParticipant && isPlaying && isOnline && !pendingCommand,
   );
 
   let turnLabel = "대국 대기 중";
@@ -848,30 +846,30 @@ export function describeGomokuResult(
 
   if (outcome === "draw") {
     perspective = "draw";
-    headline = "무승부";
+    headline = "Draw";
     badgeText = "DRAW";
-    subheadline = `사유: ${reasonMeta.title} — 양측 플레이어 모두 끝까지 최선을 다했습니다.`;
+    subheadline = `무승부 · ${reasonMeta.title}`;
   } else if (outcome === "void") {
     perspective = "void";
-    headline = "무효 경기";
+    headline = "경기 취소";
     badgeText = "VOID";
-    subheadline = `사유: ${reasonMeta.title} — 전적 및 레이팅에 반영되지 않습니다.`;
+    subheadline = `경기 취소 · ${reasonMeta.title}`;
   } else if (outcome === "win") {
     if (isParticipant && winnerId === viewerUserId) {
       perspective = "victory";
-      headline = "승리!";
-      badgeText = "VICTORY";
-      subheadline = `사유: ${reasonMeta.title} — 서버가 확정한 최종 결과로 승리하셨습니다.`;
+      headline = "Win!";
+      badgeText = "WIN";
+      subheadline = `승리! · ${reasonMeta.title}`;
     } else if (isParticipant) {
       perspective = "defeat";
-      headline = "패배";
-      badgeText = "DEFEAT";
-      subheadline = `사유: ${reasonMeta.title} — 상대방(Player #${winnerId ?? "-"})의 승리로 확정되었습니다.`;
+      headline = "Lose";
+      badgeText = "LOSE";
+      subheadline = `패배 · ${reasonMeta.title}`;
     } else {
       perspective = "finished";
-      headline = `Player #${winnerId ?? "-"} 승리`;
-      badgeText = "VICTORY";
-      subheadline = `사유: ${reasonMeta.title}`;
+      headline = "경기 종료";
+      badgeText = "FINISHED";
+      subheadline = `${reasonMeta.title}`;
     }
   }
 
