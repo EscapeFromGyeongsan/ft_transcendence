@@ -67,8 +67,9 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   OAUTH_EMAIL_MISSING: "42 계정에서 이메일 정보를 확인할 수 없습니다.",
   OAUTH_PROVIDER_ERROR: "현재 42 로그인 서비스를 이용할 수 없습니다.",
   BAD_REQUEST: "요청 형식이 올바르지 않습니다.",
-  PAYLOAD_TOO_LARGE: "요청 데이터 크기가 제한을 초과했습니다.",
-  UNSUPPORTED_MEDIA_TYPE: "지원하지 않는 데이터 형식입니다.",
+  PAYLOAD_TOO_LARGE: "파일 크기는 2MB 이하여야 합니다.",
+  UNSUPPORTED_MEDIA_TYPE: "PNG 또는 JPEG 이미지 파일만 업로드할 수 있습니다.",
+  IMAGE_TOO_BIG: "이미지는 가로·세로 1024px 이하여야 합니다.",
   NOT_FOUND: "요청한 정보를 찾을 수 없습니다.",
   RATE_LIMITED: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   SERVICE_UNAVAILABLE:

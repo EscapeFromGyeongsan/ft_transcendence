@@ -299,7 +299,10 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
       ...reqOptions.headers,
     };
 
-    if (reqOptions.body !== undefined) {
+    // FormData는 브라우저가 multipart boundary를 포함한 Content-Type을 직접 설정해야 합니다.
+    const isFormData =
+      typeof FormData !== "undefined" && reqOptions.body instanceof FormData;
+    if (reqOptions.body !== undefined && !isFormData) {
       headers["Content-Type"] = "application/json";
     }
 
@@ -313,8 +316,9 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     const response = await fetchFn(`${baseUrl}${path}`, {
       method,
       headers,
-      body:
-        reqOptions.body !== undefined
+      body: isFormData
+        ? (reqOptions.body as FormData)
+        : reqOptions.body !== undefined
           ? JSON.stringify(reqOptions.body)
           : undefined,
     });

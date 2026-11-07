@@ -21,8 +21,18 @@ import {
   type GomokuClientState,
 } from "./game/gomoku-state.ts";
 import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
+import { Avatar } from "./profile/Avatar.tsx";
+import { LeaderboardView } from "./profile/LeaderboardView.tsx";
+import { ProfileView } from "./profile/ProfileView.tsx";
 
-type ScreenView = "login" | "register" | "twoFactor" | "lobby" | "gomoku";
+type ScreenView =
+  | "login"
+  | "register"
+  | "twoFactor"
+  | "lobby"
+  | "gomoku"
+  | "profile"
+  | "leaderboard";
 
 const ACTIVE_MATCH_STORAGE_KEY = "cyber_board_cafe.active_match_id";
 
@@ -185,6 +195,9 @@ export function App() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
+  // 프로필 화면에서 조회 중인 사용자 (본인 또는 다른 사용자)
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
+
   // Realtime Gomoku & Matchmaking state
   const wsClientRef = useRef<GameWsClient | null>(null);
   const fetchedPlayerIdsRef = useRef<Set<number>>(new Set());
@@ -266,9 +279,12 @@ export function App() {
     playerNicknames,
   ]);
 
+  // 닉네임·아바타 변경으로 currentUser 객체가 바뀌어도 WebSocket이 재연결되지 않도록 id만 의존합니다.
+  const currentUserId = currentUser?.id ?? null;
+
   // 인증된 사용자 세션 동안 실시간 WebSocket(/api/ws) 연결을 유지합니다.
   useEffect(() => {
-    if (!currentUser) {
+    if (currentUserId === null) {
       if (wsClientRef.current) {
         wsClientRef.current.disconnect();
         wsClientRef.current = null;
@@ -324,7 +340,7 @@ export function App() {
             saveActiveMatchIdToStorage(matchId);
             setGomokuState((prev) => ({
               ...createInitialGomokuClientState(
-                prev.viewerUserId ?? currentUser.id,
+                prev.viewerUserId ?? currentUserId,
                 matchId,
               ),
               connectionPhase: "connected",
@@ -383,7 +399,12 @@ export function App() {
         wsClientRef.current = null;
       }
     };
-  }, [currentUser]);
+  }, [currentUserId]);
+
+  function openProfile(userId: number) {
+    setProfileUserId(userId);
+    switchView("profile");
+  }
 
   function handleJoinGomokuQueue() {
     resetMessages();
@@ -686,9 +707,6 @@ export function App() {
     }
   }
 
-  const avatarInitial =
-    currentUser?.nickname?.trim().charAt(0).toUpperCase() || "A";
-
   return (
     <div className="cbc-shell">
       {/* Top Fixed Header */}
@@ -705,7 +723,11 @@ export function App() {
             <span className="cbc-brand-title">Cyber Board Cafe</span>
           </button>
 
-          {currentUser && (view === "lobby" || view === "gomoku") ? (
+          {currentUser &&
+          (view === "lobby" ||
+            view === "gomoku" ||
+            view === "profile" ||
+            view === "leaderboard") ? (
             <div className="cbc-account-area">
               <span className="cbc-security-pill">
                 <span className="cbc-pulse-dot" />
@@ -724,7 +746,10 @@ export function App() {
                 aria-haspopup="menu"
                 onClick={() => setAccountMenuOpen((prev) => !prev)}
               >
-                <span className="cbc-avatar-circle">{avatarInitial}</span>
+                <Avatar
+                  nickname={currentUser.nickname}
+                  avatarUrl={currentUser.avatarUrl}
+                />
                 <span>{currentUser.nickname}</span>
               </button>
 
@@ -735,7 +760,10 @@ export function App() {
                   aria-label="계정 메뉴"
                 >
                   <div className="cbc-dropdown-profile">
-                    <div className="cbc-avatar-circle">{avatarInitial}</div>
+                    <Avatar
+                      nickname={currentUser.nickname}
+                      avatarUrl={currentUser.avatarUrl}
+                    />
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div
                         style={{
@@ -761,6 +789,50 @@ export function App() {
                       </div>
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    id="menu-my-profile"
+                    className="cbc-dropdown-btn"
+                    role="menuitem"
+                    onClick={() => openProfile(currentUser.id)}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "13px" }}>
+                        내 프로필
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--on-surface-variant)",
+                        }}
+                      >
+                        닉네임·프로필 이미지·전적 관리
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="menu-leaderboard"
+                    className="cbc-dropdown-btn"
+                    role="menuitem"
+                    onClick={() => switchView("leaderboard")}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "13px" }}>
+                        리더보드
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--on-surface-variant)",
+                        }}
+                      >
+                        게임별 승수 순위
+                      </div>
+                    </div>
+                  </button>
 
                   <button
                     type="button"
@@ -1425,6 +1497,20 @@ export function App() {
               </div>
             </div>
           </div>
+        ) : view === "profile" && currentUser ? (
+          <ProfileView
+            userId={profileUserId ?? currentUser.id}
+            currentUser={currentUser}
+            onCurrentUserUpdated={setCurrentUser}
+            onOpenProfile={openProfile}
+            onOpenLeaderboard={() => switchView("leaderboard")}
+            onBack={() => switchView("lobby")}
+          />
+        ) : view === "leaderboard" && currentUser ? (
+          <LeaderboardView
+            currentUserId={currentUser.id}
+            onOpenProfile={openProfile}
+          />
         ) : view === "gomoku" ? (
           <GomokuMatchView
             state={gomokuState}
@@ -1503,6 +1589,22 @@ export function App() {
                     #{currentUser?.id}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="cbc-btn-secondary"
+                  style={{ width: "auto" }}
+                  onClick={() => currentUser && openProfile(currentUser.id)}
+                >
+                  내 프로필
+                </button>
+                <button
+                  type="button"
+                  className="cbc-btn-secondary"
+                  style={{ width: "auto" }}
+                  onClick={() => switchView("leaderboard")}
+                >
+                  리더보드
+                </button>
                 <button
                   type="button"
                   className="cbc-btn-secondary"
