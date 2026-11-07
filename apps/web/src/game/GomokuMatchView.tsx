@@ -72,9 +72,27 @@ export function GomokuMatchView({
   const [resultOverlayMinimized, setResultOverlayMinimized] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const cellRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const resignTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
 
   const { snapshot, viewerUserId, lastMove, gameError, connectionPhase } =
     state;
+
+  // 기권 확인 모달이 열려 있을 때 Escape 키로 닫고 기권 버튼으로 포커스를 되돌립니다 (NFR-UX-02).
+  useEffect(() => {
+    if (!resignModalOpen || typeof globalThis.window === "undefined") {
+      return undefined;
+    }
+    function handleWindowKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setResignModalOpen(false);
+        resignTriggerBtnRef.current?.focus();
+      }
+    }
+    globalThis.window.addEventListener("keydown", handleWindowKeyDown);
+    return () =>
+      globalThis.window.removeEventListener("keydown", handleWindowKeyDown);
+  }, [resignModalOpen]);
 
   const isOpponentDisconnected = Boolean(
     state.opponentDisconnect || snapshot?.status === "paused",
@@ -480,6 +498,7 @@ export function GomokuMatchView({
             <div className="cbc-match-actions">
               {!isFinished ? (
                 <button
+                  ref={resignTriggerBtnRef}
                   type="button"
                   className="cbc-btn-resign"
                   disabled={!turn.canResign}
@@ -793,7 +812,10 @@ export function GomokuMatchView({
               <button
                 type="button"
                 className="cbc-btn-secondary"
-                onClick={() => setResignModalOpen(false)}
+                onClick={() => {
+                  setResignModalOpen(false);
+                  resignTriggerBtnRef.current?.focus();
+                }}
               >
                 취소
               </button>

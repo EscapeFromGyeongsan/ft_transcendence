@@ -42,6 +42,16 @@ import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
 import { Avatar } from "./profile/Avatar.tsx";
 import { LeaderboardView } from "./profile/LeaderboardView.tsx";
 import { ProfileView } from "./profile/ProfileView.tsx";
+import {
+  LegalDocumentView,
+  NotFoundView,
+} from "./legal/LegalDocumentView.tsx";
+import {
+  parseAppRoute,
+  resolvePathForScreen,
+  type LegalDocKind,
+  type ParsedAppRoute,
+} from "./legal/legal-routing.ts";
 
 type ScreenView =
   | "login"
@@ -51,9 +61,26 @@ type ScreenView =
   | "matchmaking"
   | "gomoku"
   | "profile"
-  | "leaderboard";
+  | "leaderboard"
+  | "terms"
+  | "privacy"
+  | "notFound";
 
 const ACTIVE_MATCH_STORAGE_KEY = "cyber_board_cafe.active_match_id";
+
+/**
+ * 현재 브라우저 주소창의 경로·쿼리·해시를 파싱합니다.
+ */
+function parseInitialAppRoute(): ParsedAppRoute {
+  if (typeof globalThis.window === "undefined" || !globalThis.window.location) {
+    return { kind: "lobby" };
+  }
+  return parseAppRoute(
+    globalThis.window.location.pathname,
+    globalThis.window.location.search,
+    globalThis.window.location.hash,
+  );
+}
 
 /**
  * 현재 URL 경로(/match/:matchId) 또는 쿼리(?matchId=...)에서 matchId를 추출합니다.
@@ -183,10 +210,26 @@ function EyeIcon({ visible }: { visible: boolean }) {
  * 사이버 보드게임 카페의 인증(회원가입·로그인·2FA·토큰 갱신·로그아웃) 및 로비 진입 화면을 관리하는 최상위 컴포넌트입니다.
  */
 export function App() {
-  const [view, setView] = useState<ScreenView>("login");
+  const [notFoundPath, setNotFoundPath] = useState<string>(() => {
+    const initial = parseInitialAppRoute();
+    return initial.kind === "notFound" ? initial.pathname : "/";
+  });
+  const [view, setView] = useState<ScreenView>(() => {
+    const initial = parseInitialAppRoute();
+    if (initial.kind === "terms") return "terms";
+    if (initial.kind === "privacy") return "privacy";
+    if (initial.kind === "register") return "register";
+    if (initial.kind === "notFound") return "notFound";
+    return "login";
+  });
+  const [previousViewBeforeLegal, setPreviousViewBeforeLegal] =
+    useState<ScreenView | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const avatarTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+  const lastLogoutTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -254,7 +297,66 @@ export function App() {
     setView(next);
   }
 
-  // 화면 전환 시 브라우저 주소창 경로(/, /matching, /match/:matchId)를 동기화합니다.
+  function openLegalDoc(doc: LegalDocKind) {
+    resetMessages();
+    setAccountMenuOpen(false);
+    setLogoutModalOpen(false);
+    setView((current) => {
+      if (
+        current !== "terms" &&
+        current !== "privacy" &&
+        current !== "notFound"
+      ) {
+        setPreviousViewBeforeLegal(current);
+      }
+      return doc;
+    });
+  }
+
+  function handleBackFromLegal() {
+    resetMessages();
+    if (
+      previousViewBeforeLegal &&
+      previousViewBeforeLegal !== "terms" &&
+      previousViewBeforeLegal !== "privacy" &&
+      previousViewBeforeLegal !== "notFound"
+    ) {
+      const target = previousViewBeforeLegal;
+      setPreviousViewBeforeLegal(null);
+      setView(target);
+      return;
+    }
+    setView(currentUser ? "lobby" : "login");
+  }
+
+  // 모달·드롭다운 메뉴가 열려 있을 때 Escape 키 입력 시 닫고 포커스를 트리거 버튼으로 복원합니다 (NFR-UX-02).
+  useEffect(() => {
+    if (!logoutModalOpen && !accountMenuOpen) {
+      return;
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (logoutModalOpen) {
+          if (!submitting) {
+            setLogoutModalOpen(false);
+            lastLogoutTriggerRef.current?.focus();
+          }
+          return;
+        }
+        if (accountMenuOpen) {
+          setAccountMenuOpen(false);
+          avatarTriggerBtnRef.current?.focus();
+        }
+      }
+    }
+    globalThis.window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      globalThis.window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [logoutModalOpen, accountMenuOpen, submitting]);
+
+  // 화면 전환 시 브라우저 주소창 경로(/, /terms, /privacy, /me, /leaderboard, /matching, /match/:matchId)를 동기화합니다.
   useEffect(() => {
     if (
       typeof globalThis.window === "undefined" ||
@@ -263,14 +365,15 @@ export function App() {
     ) {
       return;
     }
-    let targetPath: string | null = null;
-    if (view === "gomoku" && gomokuState.matchId !== null) {
-      targetPath = `/match/${gomokuState.matchId}`;
-    } else if (view === "matchmaking") {
-      targetPath = "/matching";
-    } else if (view === "lobby") {
-      targetPath = "/";
+    if (initializing && view !== "terms" && view !== "privacy") {
+      return;
     }
+    const targetPath = resolvePathForScreen({
+      view,
+      matchId: gomokuState.matchId,
+      profileUserId,
+      currentUserId: currentUser?.id ?? null,
+    });
     if (
       targetPath !== null &&
       globalThis.window.location?.pathname !== targetPath
@@ -281,7 +384,89 @@ export function App() {
         // 테스트·제한 환경에서 history.replaceState 예외 무시
       }
     }
-  }, [view, gomokuState.matchId]);
+  }, [
+    initializing,
+    view,
+    gomokuState.matchId,
+    profileUserId,
+    currentUser?.id,
+  ]);
+
+  // 브라우저 뒤로가기/앞으로가기(popstate) 시 라우트 상태를 동기화합니다.
+  useEffect(() => {
+    if (
+      typeof globalThis.window === "undefined" ||
+      typeof globalThis.window.addEventListener !== "function"
+    ) {
+      return;
+    }
+    function handlePopState() {
+      const route = parseInitialAppRoute();
+      switch (route.kind) {
+        case "terms":
+          setView("terms");
+          break;
+        case "privacy":
+          setView("privacy");
+          break;
+        case "register":
+          setView(currentUser ? "lobby" : "register");
+          break;
+        case "login":
+          setView(currentUser ? "lobby" : "login");
+          break;
+        case "twoFactor":
+          setView(
+            challengeToken ? "twoFactor" : currentUser ? "lobby" : "login",
+          );
+          break;
+        case "lobby":
+          setView(currentUser ? "lobby" : "login");
+          break;
+        case "matchmaking":
+          setView(currentUser ? "matchmaking" : "login");
+          break;
+        case "match":
+          if (currentUser) {
+            setGomokuState((prev) => ({
+              ...prev,
+              matchId: route.matchId,
+            }));
+            setView("gomoku");
+          } else {
+            setView("login");
+          }
+          break;
+        case "myProfile":
+          if (currentUser) {
+            setProfileUserId(currentUser.id);
+            setView("profile");
+          } else {
+            setView("login");
+          }
+          break;
+        case "userProfile":
+          if (currentUser) {
+            setProfileUserId(route.userId);
+            setView("profile");
+          } else {
+            setView("login");
+          }
+          break;
+        case "leaderboard":
+          setView(currentUser ? "leaderboard" : "login");
+          break;
+        case "notFound":
+          setNotFoundPath(route.pathname);
+          setView("notFound");
+          break;
+      }
+    }
+    globalThis.window.addEventListener("popstate", handlePopState);
+    return () => {
+      globalThis.window.removeEventListener("popstate", handlePopState);
+    };
+  }, [currentUser, challengeToken]);
 
   // 로그인된 사용자의 viewerUserId를 gomokuState와 동기화합니다.
   useEffect(() => {
@@ -392,7 +577,13 @@ export function App() {
             saveActiveMatchIdToStorage(targetMatchId);
             client.setSubscribedMatchId(targetMatchId);
             setMatchmakingState((prev) => applyQueueLeft(prev));
-            setView("gomoku");
+            setView((current) =>
+              current === "terms" ||
+              current === "privacy" ||
+              current === "notFound"
+                ? current
+                : "gomoku",
+            );
           } else {
             saveActiveMatchIdToStorage(null);
           }
@@ -617,8 +808,19 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    const initialRoute = parseInitialAppRoute();
     const savedTokens = authApi.storage.getTokens();
     if (!savedTokens) {
+      if (initialRoute.kind === "terms") {
+        setView("terms");
+      } else if (initialRoute.kind === "privacy") {
+        setView("privacy");
+      } else if (initialRoute.kind === "register") {
+        setView("register");
+      } else if (initialRoute.kind === "notFound") {
+        setNotFoundPath(initialRoute.pathname);
+        setView("notFound");
+      }
       setInitializing(false);
       return;
     }
@@ -630,14 +832,49 @@ export function App() {
       .then((user) => {
         if (!active) return;
         setCurrentUser(user);
-        setView(resumedMatchId !== null ? "gomoku" : "lobby");
+        setView((current) => {
+          if (
+            current === "terms" ||
+            current === "privacy" ||
+            current === "notFound"
+          ) {
+            return current;
+          }
+          if (initialRoute.kind === "terms") return "terms";
+          if (initialRoute.kind === "privacy") return "privacy";
+          if (initialRoute.kind === "notFound") {
+            setNotFoundPath(initialRoute.pathname);
+            return "notFound";
+          }
+          if (initialRoute.kind === "myProfile") {
+            setProfileUserId(user.id);
+            return "profile";
+          }
+          if (initialRoute.kind === "userProfile") {
+            setProfileUserId(initialRoute.userId);
+            return "profile";
+          }
+          if (initialRoute.kind === "leaderboard") {
+            return "leaderboard";
+          }
+          if (initialRoute.kind === "matchmaking") {
+            return "matchmaking";
+          }
+          return resumedMatchId !== null ? "gomoku" : "lobby";
+        });
       })
       .catch(() => {
         if (!active) return;
         authApi.storage.clearTokens();
         saveActiveMatchIdToStorage(null);
         setCurrentUser(null);
-        setView("login");
+        setView((current) =>
+          current === "terms" ||
+          current === "privacy" ||
+          current === "notFound"
+            ? current
+            : "login",
+        );
       })
       .finally(() => {
         if (active) setInitializing(false);
@@ -827,7 +1064,10 @@ export function App() {
             view === "matchmaking" ||
             view === "gomoku" ||
             view === "profile" ||
-            view === "leaderboard") ? (
+            view === "leaderboard" ||
+            view === "terms" ||
+            view === "privacy" ||
+            view === "notFound") ? (
             <div className="cbc-account-area">
               <span className="cbc-security-pill">
                 <span className="cbc-pulse-dot" />
@@ -840,6 +1080,7 @@ export function App() {
                       : "동기화 중"}
               </span>
               <button
+                ref={avatarTriggerBtnRef}
                 type="button"
                 className="cbc-avatar-trigger"
                 aria-expanded={accountMenuOpen}
@@ -962,6 +1203,7 @@ export function App() {
                     className="cbc-dropdown-btn is-danger"
                     role="menuitem"
                     onClick={() => {
+                      lastLogoutTriggerRef.current = avatarTriggerBtnRef.current;
                       setAccountMenuOpen(false);
                       setLogoutModalOpen(true);
                     }}
@@ -989,7 +1231,28 @@ export function App() {
 
       {/* Main Content */}
       <main className="cbc-main">
-        {initializing ? (
+        {view === "terms" || view === "privacy" ? (
+          <LegalDocumentView
+            activeDoc={view}
+            onSelectDoc={(doc) => openLegalDoc(doc)}
+            onBack={handleBackFromLegal}
+            backLabel={
+              previousViewBeforeLegal === "register"
+                ? "회원가입 화면으로 돌아가기"
+                : previousViewBeforeLegal === "login"
+                  ? "로그인 화면으로 돌아가기"
+                  : currentUser
+                    ? "이전 화면으로 돌아가기"
+                    : "로그인 화면으로 돌아가기"
+            }
+          />
+        ) : view === "notFound" ? (
+          <NotFoundView
+            pathname={notFoundPath}
+            isAuthenticated={Boolean(currentUser)}
+            onNavigateHome={() => switchView(currentUser ? "lobby" : "login")}
+          />
+        ) : initializing ? (
           <div className="cbc-login-card" style={{ textAlign: "center" }}>
             <h1 className="cbc-heading-login">사이버 보드게임 카페</h1>
             <p className="cbc-subheading">인증 세션을 확인하는 중입니다...</p>
@@ -1484,17 +1747,38 @@ export function App() {
                         if (errorMessage) resetMessages();
                       }}
                     />
-                    <label
-                      htmlFor="agree-terms"
-                      style={{
-                        fontSize: "14px",
-                        lineHeight: "20px",
-                        cursor: "pointer",
-                        userSelect: "none",
-                      }}
-                    >
-                      <span>이용약관 및 개인정보처리방침에 동의합니다</span>
-                    </label>
+                    <div className="cbc-terms-copy-wrap">
+                      <label
+                        htmlFor="agree-terms"
+                        style={{
+                          fontSize: "14px",
+                          lineHeight: "20px",
+                          cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                      >
+                        <span>이용약관 및 개인정보처리방침에 동의합니다</span>
+                      </label>
+                      <div className="cbc-terms-inline-links">
+                        <button
+                          type="button"
+                          className="cbc-link cbc-terms-inline-btn"
+                          data-testid="signup-open-terms"
+                          onClick={() => openLegalDoc("terms")}
+                        >
+                          이용약관 전문 보기
+                        </button>
+                        <span aria-hidden="true">·</span>
+                        <button
+                          type="button"
+                          className="cbc-link cbc-terms-inline-btn"
+                          data-testid="signup-open-privacy"
+                          onClick={() => openLegalDoc("privacy")}
+                        >
+                          개인정보처리방침 전문 보기
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {errorMessage && (
@@ -1740,7 +2024,10 @@ export function App() {
                   type="button"
                   className="cbc-btn-secondary"
                   style={{ width: "auto" }}
-                  onClick={() => setLogoutModalOpen(true)}
+                  onClick={(e) => {
+                    lastLogoutTriggerRef.current = e.currentTarget;
+                    setLogoutModalOpen(true);
+                  }}
                 >
                   로그아웃
                 </button>
@@ -1888,7 +2175,10 @@ export function App() {
         <div
           id="modalOverlay"
           className="cbc-modal-backdrop"
-          onClick={() => setLogoutModalOpen(false)}
+          onClick={() => {
+            setLogoutModalOpen(false);
+            lastLogoutTriggerRef.current?.focus();
+          }}
         >
           <div
             role="dialog"
@@ -1932,7 +2222,10 @@ export function App() {
                 id="cancelLogoutBtn"
                 className="cbc-btn-secondary"
                 disabled={submitting}
-                onClick={() => setLogoutModalOpen(false)}
+                onClick={() => {
+                  setLogoutModalOpen(false);
+                  lastLogoutTriggerRef.current?.focus();
+                }}
               >
                 취소
               </button>
@@ -1954,10 +2247,26 @@ export function App() {
       <footer className="cbc-footer">
         <div className="cbc-footer-inner">
           <nav className="cbc-footer-nav" aria-label="정책 안내">
-            <a className="cbc-footer-link" href="#terms">
+            <a
+              className="cbc-footer-link"
+              href="/terms"
+              data-testid="footer-link-terms"
+              onClick={(e) => {
+                e.preventDefault();
+                openLegalDoc("terms");
+              }}
+            >
               이용약관
             </a>
-            <a className="cbc-footer-link" href="#privacy">
+            <a
+              className="cbc-footer-link"
+              href="/privacy"
+              data-testid="footer-link-privacy"
+              onClick={(e) => {
+                e.preventDefault();
+                openLegalDoc("privacy");
+              }}
+            >
               개인정보처리방침
             </a>
           </nav>
