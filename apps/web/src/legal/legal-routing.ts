@@ -166,6 +166,7 @@ export function resolvePathForScreen(options: {
     | "lobby"
     | "matchmaking"
     | "gomoku"
+    | "othello"
     | "profile"
     | "leaderboard"
     | "terms"
@@ -193,6 +194,7 @@ export function resolvePathForScreen(options: {
     case "matchmaking":
       return "/matching";
     case "gomoku":
+    case "othello":
       return options.matchId !== null && options.matchId !== undefined
         ? `/match/${options.matchId}`
         : "/";

@@ -13,6 +13,7 @@ import {
 } from "./api/errors.ts";
 import { GomokuMatchView } from "./game/GomokuMatchView.tsx";
 import { MatchmakingView } from "./game/MatchmakingView.tsx";
+import { OthelloMatchView } from "./game/OthelloMatchView.tsx";
 import {
   applyConnectionPhase,
   applyGameAck,
@@ -27,6 +28,20 @@ import {
   markCommandPending,
   type GomokuClientState,
 } from "./game/gomoku-state.ts";
+import {
+  applyOthelloConnectionPhase,
+  applyOthelloGameAck,
+  applyOthelloGameError,
+  applyOthelloIncomingSnapshot,
+  applyOthelloPlayerDisconnected,
+  applyOthelloPlayerReconnected,
+  applyOthelloSessionReplaced,
+  buildOthelloPlaceCommand,
+  buildOthelloResignCommand,
+  createInitialOthelloClientState,
+  markOthelloCommandPending,
+  type OthelloClientState,
+} from "./game/othello-state.ts";
 import {
   GAME_CATALOG_LIST,
   applyMatchmakingError,
@@ -66,6 +81,7 @@ type ScreenView =
   | "lobby"
   | "matchmaking"
   | "gomoku"
+  | "othello"
   | "profile"
   | "leaderboard"
   | "terms"
@@ -281,6 +297,9 @@ export function App() {
   const [gomokuState, setGomokuState] = useState<GomokuClientState>(() =>
     createInitialGomokuClientState(null, parseInitialMatchId()),
   );
+  const [othelloState, setOthelloState] = useState<OthelloClientState>(() =>
+    createInitialOthelloClientState(null, parseInitialMatchId()),
+  );
 
   function resetMessages() {
     setErrorMessage(null);
@@ -296,6 +315,7 @@ export function App() {
     if (
       next !== "matchmaking" &&
       next !== "gomoku" &&
+      next !== "othello" &&
       isMatchmakingBusy(matchmakingState)
     ) {
       wsClientRef.current?.leaveQueue();
@@ -377,7 +397,7 @@ export function App() {
     }
     const targetPath = resolvePathForScreen({
       view,
-      matchId: gomokuState.matchId,
+      matchId: view === "othello" ? othelloState.matchId : gomokuState.matchId,
       profileUserId,
       currentUserId: currentUser?.id ?? null,
     });
@@ -395,6 +415,7 @@ export function App() {
     initializing,
     view,
     gomokuState.matchId,
+    othelloState.matchId,
     profileUserId,
     currentUser?.id,
   ]);
@@ -438,11 +459,19 @@ export function App() {
           break;
         case "match":
           if (currentUser) {
-            setGomokuState((prev) => ({
-              ...prev,
-              matchId: route.matchId,
-            }));
-            setView("gomoku");
+            if (othelloState.snapshot?.matchId === route.matchId) {
+              setOthelloState((prev) => ({
+                ...prev,
+                matchId: route.matchId,
+              }));
+              setView("othello");
+            } else {
+              setGomokuState((prev) => ({
+                ...prev,
+                matchId: route.matchId,
+              }));
+              setView("gomoku");
+            }
           } else {
             setView("login");
           }
@@ -478,9 +507,13 @@ export function App() {
     };
   }, [currentUser, challengeToken]);
 
-  // 로그인된 사용자의 viewerUserId를 gomokuState와 동기화합니다.
+  // 로그인된 사용자의 viewerUserId를 gomokuState 및 othelloState와 동기화합니다.
   useEffect(() => {
     setGomokuState((prev) => ({
+      ...prev,
+      viewerUserId: currentUser?.id ?? null,
+    }));
+    setOthelloState((prev) => ({
       ...prev,
       viewerUserId: currentUser?.id ?? null,
     }));
@@ -488,9 +521,16 @@ export function App() {
 
   // 대국 참가자(흑·백) userId에 대해 GET /api/users/:userId로 공개 닉네임을 조회합니다.
   useEffect(() => {
-    const blackId = gomokuState.snapshot?.players.black ?? null;
-    const whiteId = gomokuState.snapshot?.players.white ?? null;
-    const candidateIds = [blackId, whiteId].filter(
+    const gomokuBlackId = gomokuState.snapshot?.players.black ?? null;
+    const gomokuWhiteId = gomokuState.snapshot?.players.white ?? null;
+    const othelloBlackId = othelloState.snapshot?.players.black ?? null;
+    const othelloWhiteId = othelloState.snapshot?.players.white ?? null;
+    const candidateIds = [
+      gomokuBlackId,
+      gomokuWhiteId,
+      othelloBlackId,
+      othelloWhiteId,
+    ].filter(
       (id): id is number => id !== null && Number.isInteger(id) && id > 0,
     );
 
@@ -531,6 +571,8 @@ export function App() {
     currentUser,
     gomokuState.snapshot?.players.black,
     gomokuState.snapshot?.players.white,
+    othelloState.snapshot?.players.black,
+    othelloState.snapshot?.players.white,
     playerNicknames,
   ]);
 
@@ -561,6 +603,9 @@ export function App() {
           setGomokuState((prev) =>
             applyConnectionPhase(prev, phase, reconnectAttempt),
           );
+          setOthelloState((prev) =>
+            applyOthelloConnectionPhase(prev, phase, reconnectAttempt),
+          );
           setMatchmakingState((prev) =>
             applyMatchmakingWsPhaseChange(prev, phase),
           );
@@ -583,6 +628,11 @@ export function App() {
             viewerUserId: userId,
             matchId: targetMatchId ?? prev.matchId,
           }));
+          setOthelloState((prev) => ({
+            ...prev,
+            viewerUserId: userId,
+            matchId: targetMatchId ?? prev.matchId,
+          }));
           if (targetMatchId !== null) {
             saveActiveMatchIdToStorage(targetMatchId);
             client.setSubscribedMatchId(targetMatchId);
@@ -591,7 +641,8 @@ export function App() {
               current === "terms" ||
               current === "privacy" ||
               current === "oauthCallback" ||
-              current === "notFound"
+              current === "notFound" ||
+              current === "othello"
                 ? current
                 : "gomoku",
             );
@@ -601,7 +652,11 @@ export function App() {
         },
         onQueueJoined({ gameType }) {
           setMatchmakingState((prev) => applyQueueJoined(prev, { gameType }));
-          setView((current) => (current === "gomoku" ? current : "matchmaking"));
+          setView((current) =>
+            current === "gomoku" || current === "othello"
+              ? current
+              : "matchmaking",
+          );
         },
         onQueueLeft() {
           setMatchmakingState((prev) => applyQueueLeft(prev));
@@ -613,40 +668,67 @@ export function App() {
           setMatchmakingState((prev) =>
             applyQueueMatched(prev, { matchId, gameType }),
           );
-          setGomokuState((prev) => ({
-            ...createInitialGomokuClientState(
-              prev.viewerUserId ?? currentUserId,
-              matchId,
-            ),
-            connectionPhase: "connected",
-          }));
-          setView("gomoku");
+          if (gameType === "othello") {
+            setOthelloState((prev) => ({
+              ...createInitialOthelloClientState(
+                prev.viewerUserId ?? currentUserId,
+                matchId,
+              ),
+              connectionPhase: "connected",
+            }));
+            setView("othello");
+          } else {
+            setGomokuState((prev) => ({
+              ...createInitialGomokuClientState(
+                prev.viewerUserId ?? currentUserId,
+                matchId,
+              ),
+              connectionPhase: "connected",
+            }));
+            setView("gomoku");
+          }
         },
         onMatchSnapshot(snapshot) {
           saveActiveMatchIdToStorage(
             snapshot.status === "finished" ? null : snapshot.matchId,
           );
-          setGomokuState((prev) =>
-            applyIncomingSnapshot(prev, snapshot, "match.snapshot"),
-          );
-          setView("gomoku");
+          if (snapshot.gameType === "othello") {
+            setOthelloState((prev) =>
+              applyOthelloIncomingSnapshot(prev, snapshot, "match.snapshot"),
+            );
+            setView("othello");
+          } else {
+            setGomokuState((prev) =>
+              applyIncomingSnapshot(prev, snapshot, "match.snapshot"),
+            );
+            setView("gomoku");
+          }
         },
         onGameUpdated(snapshot) {
           saveActiveMatchIdToStorage(
             snapshot.status === "finished" ? null : snapshot.matchId,
           );
-          setGomokuState((prev) =>
-            applyIncomingSnapshot(prev, snapshot, "game.updated"),
-          );
+          if (snapshot.gameType === "othello") {
+            setOthelloState((prev) =>
+              applyOthelloIncomingSnapshot(prev, snapshot, "game.updated"),
+            );
+          } else {
+            setGomokuState((prev) =>
+              applyIncomingSnapshot(prev, snapshot, "game.updated"),
+            );
+          }
         },
         onGameAck(payload) {
           setGomokuState((prev) => applyGameAck(prev, payload));
+          setOthelloState((prev) => applyOthelloGameAck(prev, payload));
         },
         onGameError(payload) {
           setGomokuState((prev) => applyGameError(prev, payload));
+          setOthelloState((prev) => applyOthelloGameError(prev, payload));
         },
         onError(payload) {
           setGomokuState((prev) => applyGameError(prev, payload));
+          setOthelloState((prev) => applyOthelloGameError(prev, payload));
           setMatchmakingState((prev) => applyMatchmakingError(prev, payload));
           if (payload.code !== "ALREADY_MATCHED") {
             setView((current) =>
@@ -656,12 +738,19 @@ export function App() {
         },
         onPlayerDisconnected(payload) {
           setGomokuState((prev) => applyPlayerDisconnected(prev, payload));
+          setOthelloState((prev) =>
+            applyOthelloPlayerDisconnected(prev, payload),
+          );
         },
         onPlayerReconnected(payload) {
           setGomokuState((prev) => applyPlayerReconnected(prev, payload));
+          setOthelloState((prev) =>
+            applyOthelloPlayerReconnected(prev, payload),
+          );
         },
         onSessionReplaced({ matchId }) {
           setGomokuState((prev) => applySessionReplaced(prev, matchId));
+          setOthelloState((prev) => applyOthelloSessionReplaced(prev, matchId));
         },
       },
     });
@@ -815,6 +904,60 @@ export function App() {
       wsClientRef.current?.setSubscribedMatchId(null);
     }
     handleStartMatchmaking("gomoku");
+  }
+
+  function handlePlaceOthelloDisc(row: number, col: number) {
+    const snapshot = othelloState.snapshot;
+    if (!snapshot) return;
+    const command = buildOthelloPlaceCommand(
+      snapshot.matchId,
+      snapshot.stateVersion,
+      row,
+      col,
+    );
+    setOthelloState((prev) => markOthelloCommandPending(prev, command));
+    wsClientRef.current?.sendGameCommand(command);
+  }
+
+  function handleResignOthello() {
+    const snapshot = othelloState.snapshot;
+    if (!snapshot) return;
+    const command = buildOthelloResignCommand(
+      snapshot.matchId,
+      snapshot.stateVersion,
+    );
+    setOthelloState((prev) => markOthelloCommandPending(prev, command));
+    wsClientRef.current?.sendGameCommand(command);
+  }
+
+  function handleDismissOthelloError() {
+    setOthelloState((prev) => ({
+      ...prev,
+      gameError: null,
+    }));
+  }
+
+  function handleBackToLobbyFromOthello() {
+    const activeMatchId = othelloState.matchId;
+    if (
+      activeMatchId !== null &&
+      othelloState.snapshot?.status === "finished"
+    ) {
+      saveActiveMatchIdToStorage(null);
+      wsClientRef.current?.unsubscribeMatch(activeMatchId);
+      wsClientRef.current?.setSubscribedMatchId(null);
+    }
+    switchView("lobby");
+  }
+
+  function handlePlayAgainOthello() {
+    const activeMatchId = othelloState.matchId;
+    if (activeMatchId !== null) {
+      saveActiveMatchIdToStorage(null);
+      wsClientRef.current?.unsubscribeMatch(activeMatchId);
+      wsClientRef.current?.setSubscribedMatchId(null);
+    }
+    handleStartMatchmaking("othello");
   }
 
   useEffect(() => {
@@ -1151,6 +1294,7 @@ export function App() {
           (view === "lobby" ||
             view === "matchmaking" ||
             view === "gomoku" ||
+            view === "othello" ||
             view === "profile" ||
             view === "leaderboard" ||
             view === "terms" ||
@@ -2064,6 +2208,18 @@ export function App() {
             onPlayAgain={handlePlayAgainGomoku}
             onBackToLobby={handleBackToLobbyFromGomoku}
           />
+        ) : view === "othello" ? (
+          <OthelloMatchView
+            state={othelloState}
+            viewerNickname={currentUser?.nickname}
+            playerNicknames={playerNicknames}
+            onPlaceDisc={handlePlaceOthelloDisc}
+            onResign={handleResignOthello}
+            onReconnect={handleReconnectGomoku}
+            onDismissError={handleDismissOthelloError}
+            onPlayAgain={handlePlayAgainOthello}
+            onBackToLobby={handleBackToLobbyFromOthello}
+          />
         ) : (
           /* Authenticated Lobby View (04_home_lobby + 20_logout_modal) */
           <div className="cbc-lobby-container" data-testid="lobby-view">
@@ -2270,6 +2426,20 @@ export function App() {
                           </button>
                         )}
                       </div>
+
+                      {entry.gameType === "othello" &&
+                        othelloState.matchId !== null &&
+                        othelloState.snapshot?.gameType === "othello" &&
+                        othelloState.snapshot.status !== "finished" && (
+                          <button
+                            type="button"
+                            className="cbc-btn-primary"
+                            data-testid="return-active-othello-match-btn"
+                            onClick={() => switchView("othello")}
+                          >
+                            진행 중인 오델로 대국(#{othelloState.matchId}) 복귀
+                          </button>
+                        )}
 
                       {entry.gameType === "gomoku" && (
                         <>

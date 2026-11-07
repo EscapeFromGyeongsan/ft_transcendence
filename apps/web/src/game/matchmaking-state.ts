@@ -100,8 +100,8 @@ export const GAME_CATALOG: Readonly<Record<GameType, GameCatalogEntry>> = {
     ruleBadge: "표준룰",
     boardSizeLabel: "8 × 8",
     boardSubLabel: "중앙 4칸 교차 초기 배치 (0~7 좌표)",
-    playable: false,
-    statusBadge: "실시간 대국 준비 중",
+    playable: true,
+    statusBadge: "실시간 대국 가능",
     description:
       "상대방의 돌을 8방향으로 끼워 뒤집어 자신의 색으로 만들고, 대국 종료 시 더 많은 돌을 차지하는 두뇌 전략 게임입니다.",
     waitingTitle: "오델로 일반 매칭 대기실",

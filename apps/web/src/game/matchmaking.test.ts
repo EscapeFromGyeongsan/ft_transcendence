@@ -37,10 +37,10 @@ describe("게임 선택 카탈로그 및 사전 규칙 안내 (FR-CAT-01, FR-CAT
     expect(gomoku.rules.some((r) => r.value.includes("금수 없음"))).toBe(true);
 
     const othello = getGameCatalogEntry("othello");
-    expect(othello.playable).toBe(false);
+    expect(othello.playable).toBe(true);
     expect(othello.boardSizeLabel).toBe("8 × 8");
     expect(othello.rulesVersion).toBe("othello-standard-v1");
-    expect(GAME_CATALOG.othello.statusBadge).toContain("준비 중");
+    expect(GAME_CATALOG.othello.statusBadge).toBe("실시간 대국 가능");
   });
 });
 
