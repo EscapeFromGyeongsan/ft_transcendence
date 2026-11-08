@@ -4,7 +4,7 @@
 
 ## Description
 
-A turn-based online board game platform offering Omok (15 × 15, free rules). Planned features include accounts, profiles, friends, chat, game rooms, real-time play over WebSocket, reconnection, match history and statistics. See [the roadmap](Document/roadmap.md) for scope and schedule.
+A turn-based board game platform. Create an account, join the Omok (15 × 15, free rules) queue, and play a real-time match over WebSocket. The app restores your active match after reconnecting and shows completed matches in your profile. See [the roadmap](Document/roadmap.md) for planned features.
 
 ## Technical stack
 
@@ -20,7 +20,7 @@ Choose the local development workflow below, or the separate [full application H
 
 ### Local development
 
-Start Docker Desktop (or your Docker engine). Install dependencies from the repository root, create `.env` from `.env.example` if it does not exist, and set the local PostgreSQL credentials and matching `DATABASE_URL`. Keep existing credentials if `.env` already exists.
+Start Docker Desktop (or your Docker engine). Install dependencies from the repository root, create `.env` from `.env.example` if it does not exist, and set the local PostgreSQL credentials, matching `DATABASE_URL`, and a private `JWT_SECRET` of at least 32 characters. Keep existing credentials if `.env` already exists.
 
 ```sh
 npm ci
@@ -39,11 +39,11 @@ npm run dev
 
 The API checks database readiness before listening. `/api/health` reports server liveness; `/api/health/db` queries the `connection_probe` table and returns 200 when available, or a generic 503 on failure. Apply migrations before starting the API.
 
-Only the connection test table is implemented. `npm run db:check` verifies an insert/read/delete through Drizzle and the Fastify DB health route, leaving no test rows behind. Account, session and game tables are still planned.
+`npm run db:check` verifies an insert/read/delete through Drizzle and the Fastify DB health route, leaving no probe rows behind. Application migrations create accounts, sessions, matches and move history.
 
 `infra/compose.yaml` runs only the local development database, bound to `127.0.0.1:5432` by default. Data persists in a Docker volume. `npm run db:stop` stops the database without deleting that volume. Full application containers and HTTPS/WSS are not provided by this development setup. PostgreSQL initialization credentials apply to a new volume; editing `.env` does not change credentials inside an existing database.
 
-By default the local development servers listen on `127.0.0.1`. The API listen address can be overridden with `API_HOST`. Vite forwards `/api` requests to the API server. Swagger UI is served by the API server only and is not reachable through the web port. The API server does not watch source changes; restart `npm run dev` after changing server code.
+By default the local development servers listen on `127.0.0.1`. The API listen address can be overridden with `API_HOST`. Vite forwards `/api` requests and WebSocket upgrades to the API server. Swagger UI is served by the API server only and is not reachable through the web port. The API server does not watch source changes; restart `npm run dev` after changing server code.
 
 Other commands:
 
@@ -51,7 +51,7 @@ Other commands:
 npm run build       # Type-check and build apps/web/dist
 npm run dev:server  # API server only
 npm run preview     # Serve the production build (run the API separately)
-npm test            # Unit tests
+npm test            # Unit tests and DB tests if TEST_DATABASE_URL is set
 npm run test:watch
 npx playwright install chromium
 npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:up and db:migrate first)
@@ -63,9 +63,8 @@ Prepare `.env.full` from `.env.full.example`, the password file, and certificate
 
 Set a private `JWT_SECRET` of at least 32 characters in `.env.full`. Compose passes
 authentication settings explicitly and mounts a separate `avatars` volume at
-`/data/avatars`, writable by the API's `node` user. These settings prepare the
-server/avatar integration; the corresponding server routes must be included in
-the checkout to use them. An empty `TWO_FACTOR_KEY` disables the optional 2FA key.
+`/data/avatars`, writable by the API's `node` user. Avatar uploads are served by the API.
+An empty `TWO_FACTOR_KEY` disables the optional 2FA endpoints.
 
 ```sh
 docker compose --env-file .env.full --project-directory . \
@@ -74,7 +73,7 @@ docker compose --env-file .env.full --project-directory . \
 
 Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
 
-The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. WebSocket upgrade forwarding is prepared under `/api/`; actual WSS validation requires the real endpoint. See [the validation record](Document/runtime-validation.md).
+The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. Nginx forwards `/api/ws` to the real-time API. See the [isolated browser checks](Document/runtime.md#격리된-수용-기준-검증) for running the Omok smoke test through HTTPS.
 
 ## Environment variables
 
