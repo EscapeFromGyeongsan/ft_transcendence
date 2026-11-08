@@ -1,0 +1,103 @@
+{
+  "project": "cafe-issue28-82282569",
+  "checks": {
+    "missing_jwt_config_rejected": {
+      "exit": 1,
+      "names_jwt": true
+    },
+    "resolved_api_config": {
+      "keys": [
+        "API_HOST",
+        "AVATAR_DIR",
+        "FT_OAUTH_CLIENT_ID",
+        "FT_OAUTH_CLIENT_SECRET",
+        "FT_OAUTH_REDIRECT_URI",
+        "JWT_SECRET",
+        "PORT",
+        "POSTGRES_DB",
+        "POSTGRES_PASSWORD_FILE",
+        "POSTGRES_USER",
+        "TRUST_PROXY",
+        "TWO_FACTOR_KEY"
+      ],
+      "optional_two_factor_empty": true,
+      "avatar_dir": "/data/avatars",
+      "volume_targets": [
+        "/data/avatars"
+      ]
+    },
+    "full_compose_up_build_wait": {
+      "exit": 0
+    },
+    "https_health": 200,
+    "fresh_volume_permissions": {
+      "uid": 1000,
+      "owner": 1000,
+      "mode": "750",
+      "directory": "/data/avatars"
+    },
+    "existing_tests": {
+      "exit": 0,
+      "summary": [
+        "Test Files  13 passed (13)",
+        "Tests  104 passed (104)"
+      ]
+    },
+    "https_account_flow": {
+      "register": 201,
+      "login": 200
+    },
+    "empty_2fa_key_disables_only_2fa": 503,
+    "https_large_avatar_upload": {
+      "bytes": 1180586,
+      "status": 200
+    },
+    "avatar_served_same_bytes": true,
+    "over_2m_rejected_by_api": {
+      "bytes": 2360847,
+      "status": 413,
+      "code": "PAYLOAD_TOO_LARGE"
+    },
+    "spoofed_forwarded_ip_rate_limit": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      429,
+      429
+    ],
+    "avatar_after_api_recreation": {
+      "status": 200,
+      "same_bytes": true
+    },
+    "session_after_api_recreation": 200,
+    "avatar_after_full_down_up": {
+      "status": 200,
+      "same_bytes": true
+    },
+    "session_after_full_down_up": 200,
+    "configured_2fa_key_endpoint": 200
+  },
+  "compose_overrides": false,
+  "complete": true,
+  "cleanup_exit": 0,
+  "source_commits": {
+    "runtime": "afeb74a42fa1dfe7d34c779bc8bcaa577f5d0ac6",
+    "server": "fbd32d49cbdbf54b180eac68be410ab9e3f4dad6",
+    "avatar": "7e21ce7daec4536a785d4bd341662e3349265023",
+    "integration_base": "8d23d6cc7ecd04e5cc0f549dcc942c727146a3ea"
+  },
+  "execution_files_sha256": {
+    "infra/compose.full.yaml": "d670a2d7b23d6ee1e9823b24603b7998794c7ed42eec5415309949f8d8d7adc0",
+    "infra/Dockerfile": "a8bc950a07ee1ed95d05ca1aeb61b5700084dc7593ee1f02174620532c453d89",
+    "infra/nginx/default.conf.template": "9e577573d66b4ab6f6ff58ad98bb220841dbf312b762e6f2cd7b28ad673787d2",
+    "infra/nginx/api-proxy.conf": "c627f5183a4c114012c32d00f3590bc174607b6bd8a6fbd44c5d0dddc7fc3c36",
+    "scripts/container-start.mjs": "c5d11eaa4876a33cd980e31aa063888d4baf548a990cce88a53d96066ad4601e",
+    "apps/server/src/index.ts": "13f38393dec53b30afbcf88bafd35d457142e4b741cab3fd5694f4e81e42e5b6"
+  }
+}
