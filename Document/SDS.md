@@ -755,9 +755,9 @@ erDiagram
         bigint id PK "계획 (E)"
         bigint user_low_id FK "CHECK user_low_id < user_high_id"
         bigint user_high_id FK "UNIQUE(user_low_id, user_high_id)"
-        bigint requested_by_id FK
+        bigint requested_by_id FK "CHECK requested_by_id IN (user_low_id, user_high_id)"
         text status "pending | accepted | declined"
-        timestamptz created_at
+        timestamptz created_at "재요청 시 현재 요청 시각으로 갱신 제안"
         timestamptz accepted_at "NULL"
         timestamptz declined_at "NULL"
     }
@@ -1344,19 +1344,19 @@ flowchart TD
 | 컨테이너 | 역할 | 내부 포트 | 공개 포트 | 네트워크 | Volume | 주요 환경 변수 | Health check | 시작 조건 |
 |---|---|---|---|---|---|---|---|---|
 | web | 정적 파일, reverse proxy, HTTPS 종료 | 80, 443 | `127.0.0.1:8080`, `127.0.0.1:8443` | edge | 인증서 (읽기 전용) | `PUBLIC_HTTPS_PORT` | `https://127.0.0.1/api/health/db` | api healthy |
-| api | REST, (계획) WebSocket | 3001 | 없음 | edge, data | - | `POSTGRES_*`, `API_HOST`, `PORT`, **`JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY=uniquelocal` (추가 필요)** | `/api/health/db` | migrate 성공 |
+| api | REST, WebSocket (통합 PR) | 3001 | 없음 | edge, data | avatars | `POSTGRES_*`, `API_HOST`, `PORT`, `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY`, `AVATAR_DIR` | `/api/health/db` | migrate 성공 |
 | migrate | migration 적용 후 종료 | - | 없음 | data | - | `POSTGRES_*` | - | db healthy |
 | db | PostgreSQL | 5432 | 없음 | data (internal) | postgres_data | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD_FILE` | `pg_isready` | - |
 
 - DB 포트는 외부에 공개하지 않는다. 호스트에서 포트를 여는 컨테이너는 web 하나다.
 - DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면 오류가 나고 공통 처리기가 503(연결 계열) 또는 500으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
-- **PR #10 병합 시 합칠 것**: 현재 `index.ts`는 `127.0.0.1`에 고정 listen한다. PR #10은 `API_HOST`로 listen 주소를 받는다. 병합할 때 `API_HOST`와 위 인증·프록시 환경 변수를 함께 반영한다.
-- 비밀번호는 Compose secret 파일로 전달한다. B 구현으로 추가된 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`도 secret 또는 env 파일로 전달해야 한다(PR #10 병합 후 반영 필요).
+- 배포 브랜치에서 `index.ts`는 `API_HOST`와 `PORT`를 읽는다. 로컬 기본값은 `127.0.0.1:3001`이고 Compose는 컨테이너 간 접근을 위해 `0.0.0.0:3001`을 지정한다. 실시간 서버를 통합할 때 시작 코드에서 이 설정과 게임 엔진 등록을 함께 유지한다(#27).
+- PostgreSQL 비밀번호는 Compose secret 파일로 전달한다. API의 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`는 Compose의 `environment`로 전달한다.
 - 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
 
-##### PR #10·인증·아바타 통합 시 반영할 항목 (`B 초안`, E 확인, #28·#40)
+##### 배포 브랜치의 인증·아바타·WSS 설정 (E 확인, #28·#40)
 
-아래 항목은 PR #40에서 구현·검증 자료를 보완하고 있으며 아직 병합 전이다. PR #10의 기본 실행 환경과 구분하고, 전체 통합 상태는 #28에서 추적한다.
+PR #40은 PR #10의 배포 브랜치에 병합됐다. 아래는 그 브랜치에서 확인한 구성이다. 실시간 서버와의 통합 상태는 #27·#28에서 추적한다.
 
 | 대상 | 추가 내용 | 이유 |
 |---|---|---|
@@ -1911,9 +1911,9 @@ flowchart TD
 
 ---
 
-#### 2.10.29 친구 (E, `B 초안`, FR-SOC-01~03)
+#### 2.10.29 친구 (E 검토안, FR-SOC-01~03)
 
-스키마는 2.4 계획 스키마의 `friendships`를 쓴다. 두 사용자 쌍은 `(user_low_id, user_high_id)` 한 행이라 A→B, B→A 요청이 동시에 와도 UNIQUE가 하나만 남긴다.
+스키마는 2.4의 계획 스키마를 사용한다. 정렬한 사용자 쌍을 UNIQUE로 유지하고 요청자는 반드시 쌍에 속해야 한다. 아래 응답과 경합 처리 방식은 [#38의 B·E 검토](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38)를 반영했다. 5장의 남은 결정은 담당자 확인 후 확정한다.
 
 | Endpoint | 성공 | 오류 |
 |---|---|---|
@@ -1922,7 +1922,7 @@ flowchart TD
 | `POST /api/friends/requests` `{ userId }` | 201 (pending 생성), 200 (상대가 보낸 pending 요청에 맞요청하여 수락) | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
 | `POST /api/friends/requests/{id}/accept` | 200 | 401, 403 (받는 사람 아님), 404, 409 (pending 아님) |
 | `POST /api/friends/requests/{id}/decline` | 204 | 401, 403, 404, 409 |
-| `DELETE /api/friends/{userId}` | 204 | 401, 404 |
+| `DELETE /api/friends/{userId}` | 204 (호출자와 대상의 accepted 관계 삭제) | 401, 404 (accepted 관계 없음) |
 
 ```mermaid
 flowchart TD
@@ -1937,10 +1937,18 @@ flowchart TD
     Row -->|"pending, 상대가 보냄"| Acc["accepted로 변경 (맞요청은 수락으로 처리)"] --> R200[200]
     Row -->|"declined, 내가 보냈다가 거절당함"| R409c[409 REQUEST_DECLINED]
     Row -->|"declined, 내가 거절했었음"| Re["pending, requested_by = 나로 갱신"] --> R201
-    Ins -.->|"UNIQUE 위반 (동시 요청)"| Row
+    Ins -.->|"ON CONFLICT: 삽입 결과 0행"| Retry{"재조회 결과?"}
+    Retry -->|"행이 있으면 잠근 뒤 상태 판정"| Row
+    Retry -->|"수락·삭제가 겹쳐 0행"| Recheck["상한 내 조회·삽입 재시도"]
+    Recheck --> Row
 ```
 
-- 온라인 상태는 DB에 저장하지 않는다. D의 연결 관리가 사용자별 연결 수를 세고, 0 ↔ 1 이상 변할 때 그 사용자의 친구들에게 `presence`를 보낸다. `GET /api/friends`의 `online`도 같은 메모리 값을 읽는다.
+- `GET /api/friends`의 공통 사용자 정보는 `{ userId, nickname, avatarUrl }`이다. `friends`에는 `online`을, `incoming`과 `outgoing`에는 `requestId`와 `createdAt`을 붙인다. `declined` 행은 목록에 포함하지 않는다.
+- 신규 요청 201, 맞요청 수락 200, 명시적 수락 200은 공통 사용자 정보에 `requestId`와 `status`를 붙인다. `requestId`는 `friendships.id`이며 `status`는 `pending` 또는 `accepted`다. 거절 204에는 응답 본문이 없다.
+- 요청은 정렬한 사용자 쌍을 `SELECT ... FOR UPDATE`로 조회한 뒤, 행이 없으면 `INSERT ... ON CONFLICT DO NOTHING RETURNING id`를 시도한다. 삽입이 0행이면 새 쿼리로 다시 조회한다. 그 사이 수락과 삭제가 일어나면 재조회도 0행일 수 있다. 재시도 상한과 상한 도달 시 HTTP 응답은 B와 확정한다.
+- 수락과 거절은 관계 행을 잠근 뒤 수신자 권한과 `pending` 상태를 확인한다. 수락 후 도착한 거절은 409다. 친구 삭제는 호출자와 대상의 `accepted` 행에만 적용한다. `declined` 행을 유지해야 재요청 차단이 유지된다.
+- 거절한 사용자는 검색이나 상대 프로필에서 먼저 요청할 수 있다. 화면에는 거절 전에 상대의 재요청이 차단된다는 점을 표시한다. 같은 행을 `pending`으로 재사용할 때 현재 요청 시각으로 `created_at`을 갱신하고 이전 처리 시각을 지우는 안은 B·A 확인이 필요하다.
+- 온라인 상태는 DB에 저장하지 않는다. D의 사용자별 인증 연결 수가 0 ↔ 1 이상으로 바뀔 때 수락된 친구에게 `presence`를 보낸다. `GET /api/friends`도 같은 집계를 사용한다. 수락 응답에 `online`이 없으므로 성공 후 목록을 다시 조회한다는 안을 제안한다. 목록 갱신과 `presence`가 겹칠 때의 적용 순서는 A·D와 정한다.
 - 탈퇴 시 그 사용자의 `friendships` 행을 모두 지운다(2.10.27).
 - 상태 코드는 구현 시 `schema.response`와 contracts.md 11장에 함께 기록한다(프로젝트 규칙).
 
@@ -2016,7 +2024,9 @@ flowchart TD
 | WebSocket 라이브러리 | 결정: `@fastify/websocket`(#41). 토큰 전달·heartbeat·이벤트는 2.5의 9번 | 문서화 명세 19장 |
 | 준비·시작 절차, 색상 배정, 초대 유효기간 | B 초안: 준비 단계 없음, 매칭 무작위·초대는 보낸 사람 흑, 초대 60초 (2.7). D, A 확인 | DEC-06 |
 | 이탈 시간 저장 위치·감지 지연 | 결정: 메모리, 최대 20초, `paused`·복귀 전환 시 `stateVersion`을 올리지 않음 (2.6의 13번) | DEC-03, DEC-07 |
-| 초대(`invite.*`)·`presence` 담당 | #16~#20에 초대 이슈가 없음. D가 맡을지 이슈를 따로 만들지, `presence`를 E와 어떻게 나눌지 | FR-ROOM, FR-SOC-03 |
+| 초대(`invite.*`)·`presence` 담당 | #16~#20에 초대 이슈가 없음. D가 맡을지 이슈를 따로 만들지, `presence`를 E와 어떻게 나눌지 | FR-ROOM, FR-SOC-02~03 |
+| 친구 요청 경합·시각 | B·E 확인. 재조회 0행의 재시도 상한·HTTP 응답, 같은 행 재사용 시 현재 요청 시각 및 처리 시각 초기화 | FR-SOC-01, #38 |
+| 친구 거절 안내·온라인 초기화 | A·D·E 확인. 거절 전 안내와 재요청 동선, 수락 직후 목록 갱신과 `presence` 적용 순서 | FR-SOC-01~02, #38 |
 | 아바타 저장 위치 | B (PNG/JPEG 2MiB 이하 제안) | DEC-05 |
 | 전적 비공개, 탈퇴 표시·닉네임 스냅샷, 경기 기록 보존 기간 | B, A. 보존 기간은 B 제안 영구 보존(2.10.27) | DEC-05, DEC-09 |
 | 같은 commandId·다른 payload | payload 해시 저장 후 불일치 거절할지 | B, C, D |
