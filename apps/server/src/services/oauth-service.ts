@@ -43,6 +43,11 @@ function nicknameCandidates(login: string) {
   ];
 }
 
+/**
+ * 42 OAuth 로그인·계정 연결 흐름을 맡는 서비스를 만듭니다.
+ *
+ * @param auth - 로그인 완료(2FA 정책 포함)를 비밀번호 로그인과 같은 경로로 처리하기 위한 {@link AuthService}
+ */
 export function createOAuthService(
   db: Database,
   client: OAuth42Client,
@@ -117,10 +122,34 @@ export function createOAuthService(
   }
 
   return {
+    /**
+     * 42 로그인 흐름을 시작합니다.
+     *
+     * @returns 42 인가 URL과 `flowToken`. `flowToken`은 시작한 브라우저가 보관했다가 callback에 함께 보내야 합니다.
+     *
+     * @remarks state는 10분 동안 한 번만 쓸 수 있고 DB에는 해시만 남습니다.
+     */
     startLogin: () => createAuthorizeUrl("login", null),
+    /**
+     * 로그인한 계정에 42 계정을 연결하는 흐름을 시작합니다.
+     *
+     * @remarks 시작한 사용자와 세션을 state에 기록하고, callback에서 그 세션이 아직 유효한지 다시 확인합니다.
+     */
     startLink: (userId: number, sessionId: string) =>
       createAuthorizeUrl("link", { userId, sessionId }),
 
+    /**
+     * 42 callback을 처리합니다. state를 소비한 뒤 code를 교환하고, mode에 따라 로그인 또는 계정 연결을 끝냅니다.
+     *
+     * @param flowToken - 흐름을 시작한 브라우저가 보관한 값. 다르면 `OAUTH_STATE_INVALID`
+     * @throws OAuthProviderError 42에 연결할 수 없거나 응답이 예상과 다른 경우
+     *
+     * @remarks
+     * state는 code 교환 전에 소비하므로 같은 callback은 한 번만 처리됩니다.
+     * 처음 보는 42 사용자는 새 계정을 만듭니다. 같은 이메일의 기존 계정은 가져오지 않고 `EMAIL_TAKEN`으로 거절합니다(FR-AUTH-05).
+     * 같은 42 사용자의 첫 로그인이 동시에 들어오면 먼저 만든 계정을 씁니다.
+     * 로그인 결과는 비밀번호 로그인과 같은 2FA 정책을 따릅니다.
+     */
     async callback(
       code: string,
       state: string,
