@@ -2,6 +2,7 @@ import type { PlayerColor } from "@cafe/game-contracts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { gameCommands, gamePlayers, games, moves } from "../db/schema/games.ts";
+import { users } from "../db/schema/users.ts";
 
 export type Seat = PlayerColor;
 
@@ -26,7 +27,10 @@ export async function insertPlayer(
   db: Executor,
   values: { gameId: number; userId: number; seat: Seat },
 ) {
-  await db.insert(gamePlayers).values(values);
+  await db.insert(gamePlayers).values({
+    ...values,
+    nicknameSnapshot: sql`(SELECT ${users.nickname} FROM ${users} WHERE ${users.id} = ${values.userId})`,
+  });
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   timestamp,
   unique,
   uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { users } from "./users.ts";
 
@@ -91,6 +92,9 @@ export const gamePlayers = pgTable(
       .notNull()
       .references(() => users.id),
     seat: text("seat").notNull(),
+    // Nickname at match creation. Match history shows this, so a later rename
+    // or account deletion does not change past records (DEC-09).
+    nicknameSnapshot: varchar("nickname_snapshot", { length: 32 }).notNull(),
     result: text("result"),
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .defaultNow()

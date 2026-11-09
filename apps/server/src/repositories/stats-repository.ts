@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Executor } from "../db/client.ts";
 import { gamePlayers, games } from "../db/schema/games.ts";
@@ -49,7 +49,9 @@ export function findFinishedMatches(
         reason: games.resultReason,
         seat: gamePlayers.seat,
         opponentId: users.id,
-        opponentNickname: users.nickname,
+        // Nickname at match time, so renames and deletion keep the record.
+        opponentNickname: opponent.nicknameSnapshot,
+        opponentDeleted: sql<boolean>`${users.deletedAt} IS NOT NULL`,
         finishedAt: games.finishedAt,
       })
       .from(gamePlayers)
@@ -78,7 +80,7 @@ export function findFinishedMatches(
  *
  * @remarks
  * DEC-08 순서: 승수 내림차순, 승률 내림차순, 사용자 ID 오름차순. 무효 경기는 세지 않고,
- * 집계되는 경기가 한 판 이상인 사용자만 나옵니다.
+ * 집계되는 경기가 한 판 이상인 사용자만 나옵니다. 탈퇴한 사용자는 빠집니다(DEC-09).
  */
 export function findLeaderboard(db: Executor, gameType: string, limit: number) {
   const wins = sql<number>`count(*) filter (where ${gamePlayers.result} = 'win')::int`;
@@ -96,7 +98,7 @@ export function findLeaderboard(db: Executor, gameType: string, limit: number) {
     .from(gamePlayers)
     .innerJoin(games, eq(games.id, gamePlayers.gameId))
     .innerJoin(users, eq(users.id, gamePlayers.userId))
-    .where(eq(games.gameType, gameType))
+    .where(and(eq(games.gameType, gameType), isNull(users.deletedAt)))
     .groupBy(users.id)
     .having(sql`${played} > 0`)
     .orderBy(desc(wins), sql`${winRate} desc nulls last`, users.id)
@@ -107,6 +109,6 @@ export async function userExists(db: Executor, userId: number) {
   const [row] = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.id, userId));
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)));
   return Boolean(row);
 }

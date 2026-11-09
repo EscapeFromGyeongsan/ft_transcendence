@@ -481,7 +481,8 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 | `POST /api/auth/oauth/42/callback` | 200 | 400, 401 (`OAUTH_STATE_INVALID`, `OAUTH_FAILED`, `UNAUTHENTICATED`), 409 (`EMAIL_TAKEN`, `OAUTH_ACCOUNT_LINKED`, `OAUTH_ALREADY_LINKED`), 413, 415, 422 (`VALIDATION_ERROR`, `OAUTH_EMAIL_MISSING`), 429, 500, 502 (`OAUTH_PROVIDER_ERROR`), 503 |
 | `GET /api/users/me` | 200 | 401, 500, 503 |
 | `PATCH /api/users/me` | 200 | 400, 401, 409 (`NICKNAME_TAKEN`), 413, 415, 422, 500, 503 |
-| `GET /api/users/{userId}` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `DELETE /api/users/me` (#84) | 204 | 400 (`BAD_REQUEST`, `INVALID_CREDENTIALS`, `INVALID_TWO_FACTOR_CODE`), 401, 403 (`RECENT_LOGIN_REQUIRED`), 409 (`ACTIVE_MATCH`), 413, 415, 422, 429, 500, 503 |
+| `GET /api/users/{userId}` | 200 | 401, 404 (`NOT_FOUND`, 탈퇴한 사용자 포함), 422, 500, 503 |
 | `GET /api/users/{userId}/stats` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/users/{userId}/matches` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |

@@ -58,7 +58,11 @@ export function createStatsService(db: Database) {
           result: row.result,
           reason: row.reason,
           seat: row.seat,
-          opponent: { id: row.opponentId, nickname: row.opponentNickname },
+          opponent: {
+            id: row.opponentId,
+            nickname: row.opponentNickname,
+            deleted: row.opponentDeleted,
+          },
           finishedAt: row.finishedAt,
         })),
         // Pass as `before` to get the next (older) page.

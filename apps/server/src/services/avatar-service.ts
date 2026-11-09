@@ -92,6 +92,13 @@ export function createAvatarService(db: Database, avatarDir: string) {
       return true;
     },
 
+    // Deletes the file behind a stored URL. Used after account deletion
+    // commits, when the URL is already cleared from the user row.
+    async removeFile(avatarUrl: string | null) {
+      const path = storedPath(avatarUrl);
+      if (path) await removeQuietly(path);
+    },
+
     async read(name: string) {
       if (!fileNamePattern.test(name)) return undefined;
       try {

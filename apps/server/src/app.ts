@@ -40,6 +40,10 @@ import {
   createAvatarService,
   type AvatarService,
 } from "./services/avatar-service.ts";
+import {
+  createAccountService,
+  type AccountService,
+} from "./services/account-service.ts";
 
 const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
 
@@ -139,6 +143,13 @@ export async function buildApp(
   const getAvatars = (): AvatarService => {
     if (!avatars) throw new ServiceUnavailableError();
     return avatars;
+  };
+  const accounts = database
+    ? createAccountService(database.db, twoFactor, avatars)
+    : undefined;
+  const getAccounts = (): AccountService => {
+    if (!accounts) throw new ServiceUnavailableError();
+    return accounts;
   };
   app.addHook("onClose", async () => {
     await database?.close();
@@ -284,7 +295,7 @@ export async function buildApp(
   registerAuthRoutes(app, getAuth);
   registerTwoFactorRoutes(app, getAuth, getTwoFactor);
   registerOAuthRoutes(app, getAuth, getOAuth);
-  registerUserRoutes(app, getAuth, getUsers);
+  registerUserRoutes(app, getAuth, getUsers, getAccounts);
   registerStatsRoutes(app, getAuth, getStats);
   registerAvatarRoutes(app, getAuth, getAvatars);
   return app;

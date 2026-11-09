@@ -630,14 +630,14 @@ erDiagram
     users {
         bigint id PK
         boolean records_public "계획, NOT NULL DEFAULT true (DEC-05)"
-        timestamptz deleted_at "계획, NULL = 활성 (DEC-09)"
+        timestamptz deleted_at "구현됨 (#84), NULL = 활성 (DEC-09)"
         text avatar_url "업로드 시 /api/media/avatars/{id}-{rand}.png|jpg"
-        varchar_254 email "탈퇴 시 NULL 또는 익명값으로 교체 (UNIQUE 해제)"
-        varchar_32 nickname "탈퇴 시 NULL로 비워 재사용 허용"
+        varchar_254 email "탈퇴 시 deleted:{id}로 교체 (원래 값 재사용 가능)"
+        varchar_32 nickname "탈퇴 시 deleted:{id}로 교체 (원래 값 재사용 가능)"
     }
     game_players {
         bigint id PK
-        varchar_32 nickname_snapshot "계획, 경기 생성 시 당시 닉네임 저장 (DEC-09)"
+        varchar_32 nickname_snapshot "구현됨 (#84), 경기 생성 시 당시 닉네임 저장 (DEC-09)"
     }
     friendships {
         bigint id PK "계획 (E)"
@@ -654,8 +654,8 @@ erDiagram
 | 계획 변경 | 이유 | 담당 | 상태 |
 |---|---|---|---|
 | `users.records_public` | 전적 공개 설정 (FR-PRO-04) | B | `계획` |
-| `users.deleted_at`, email·nickname nullable 전환 | 탈퇴 후 닉네임 재사용과 경기 기록 보존 (DATA-01~05, DEC-09) | B | `계획` (DEC-09 확정 후) |
-| `game_players.nickname_snapshot` | 경기 당시 닉네임 표시. 전적 조회는 이 값을 우선 사용 | B | `계획` |
+| `users.deleted_at`, 탈퇴 시 email·nickname을 `deleted:{id}`로 교체 | 탈퇴 후 닉네임 재사용과 경기 기록 보존 (DATA-01~05, DEC-09). NOT NULL·UNIQUE는 유지하고, 검증 규칙이 `:`를 허용하지 않아 실제 계정과 겹치지 않는다 | B | `구현됨` (#84, migration `0004`) |
+| `game_players.nickname_snapshot` | 경기 당시 닉네임 표시. 전적 조회는 이 값을 사용. 기존 행은 migration에서 현재 닉네임으로 채움 | B | `구현됨` (#84, migration `0004`) |
 | `friendships` | 친구 요청·수락 (FR-SOC-01~03). 제안 규칙: 거절 시 행을 지우지 않고 `declined`로 남김, 거절당한 요청자의 재요청은 차단, 거절한 쪽의 요청은 허용, 친구 삭제는 행 삭제 후 재요청 허용 | E (스키마 리뷰 B) | `계획` |
 
 #### 14. Statistics design
@@ -695,7 +695,7 @@ flowchart TD
 | Users | `GET /api/users/me`, `PATCH /api/users/me`, `GET /api/users/{userId}` | B | `구현됨` |
 | Avatar | `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar`, `GET /api/media/avatars/{name}` (2.10.25) | B | `구현됨` |
 | 전적 공개 설정 | `PATCH /api/users/me`의 `recordsPublic`, stats·matches의 403 (2.10.26) | B | `계획` |
-| 탈퇴 | `DELETE /api/users/me` (2.10.27) | B | `계획` |
+| 탈퇴 | `DELETE /api/users/me` (2.10.27) | B | `구현됨` (#84) |
 | Statistics | `GET /api/users/{userId}/stats`, `GET /api/users/{userId}/matches`, `GET /api/leaderboard` | B | `구현됨` |
 | 매칭·초대·방 | 미정 | D | `계획` |
 | 친구 | 미정 | E | `계획` |
@@ -1630,25 +1630,33 @@ flowchart TD
 - 구현 시 `StatsService.getStats/getMatches`에 조회자 `viewerId`를 추가로 넘긴다(현재는 대상만 받음).
 - 상태 코드 추가: stats·matches에 403 `RECORDS_PRIVATE`.
 
-#### 2.10.27 회원 탈퇴 `DELETE /api/users/me` (B, `계획`, DEC-09 확정 후)
+#### 2.10.27 회원 탈퇴 `DELETE /api/users/me` (B, `구현됨`, #84)
 
 ```mermaid
 flowchart TD
-    S([requireAuth 통과]) --> Re{"본인 재확인: 비밀번호, 또는 OAuth 전용이면 2FA 코드/최근 로그인"}
-    Re -->|실패| R401[401]
-    Re -->|성공| Act{진행 중 경기·대기 참가 있음?}
-    Act -->|예| Leave["D: 대기 참가 해제, 진행 중 경기는 기권 처리 (DEC-09 미정)"]
-    Act -->|아니오| Tx
-    Leave --> Tx["BEGIN"]
-    Tx --> Rev[모든 sessions 폐기]
-    Rev --> Wipe["삭제: refresh_tokens, oauth_accounts, two_factor_*, friendships (E), 아바타 파일"]
-    Wipe --> Anon["users: email·nickname·password_hash·avatar_url 비움, deleted_at = now()"]
-    Anon --> Keep["유지: games, game_players(nickname_snapshot 포함), moves"]
-    Keep --> C[COMMIT] --> R204[204]
+    S([requireAuth 통과]) --> Lock["BEGIN, 사용자 행 잠금 (탈퇴하지 않은 계정)"]
+    Lock -->|없음| R401[401]
+    Lock --> Act{"끝나지 않은 경기 (waiting·playing·paused)?"}
+    Act -->|예| R409["409 ACTIVE_MATCH"]
+    Act -->|아니오| Re{본인 확인}
+    Re -->|"비밀번호 계정: password 불일치"| R400P["400 INVALID_CREDENTIALS"]
+    Re -->|"OAuth 전용 + 2FA: code 불일치"| R400C["400 INVALID_TWO_FACTOR_CODE"]
+    Re -->|"OAuth 전용, 2FA 없음: 로그인 10분 초과"| R403["403 RECENT_LOGIN_REQUIRED"]
+    Re -->|성공| Rev["모든 sessions 폐기, refresh_tokens 삭제"]
+    Rev --> Wipe["삭제: oauth_accounts, oauth_states, two_factor_*"]
+    Wipe --> Anon["users: email·nickname = deleted:{id}, password_hash·avatar_url = NULL, deleted_at = now()"]
+    Anon --> Keep["유지: games, game_players(nickname_snapshot), moves"]
+    Keep --> C[COMMIT] --> File[아바타 파일 삭제] --> R204[204]
 ```
 
-- 전적 표시: `nickname_snapshot` + "(탈퇴한 사용자)". 현재 프로필 링크는 만들지 않는다. 같은 닉네임을 새 계정이 써도 과거 기록과 연결되지 않는다(불변 user id 기준).
-- 보존 기간·백업 반영·탈퇴자 리더보드 처리는 DEC-09 결정 전이라 미정(5장).
+- 본문: `{ password?, code? }`. 본문 없이 보내도 된다(최근 로그인 OAuth 계정).
+- 끝나지 않은 경기 검사를 본인 확인보다 먼저 한다. 거절될 요청이 복구 코드나 TOTP 단계를 쓰지 않게 하기 위해서다.
+- 진행 중 경기는 기권 처리하지 않고 거절한다(409). 경기를 끝낸 뒤 탈퇴한다. 자동 매칭 대기열(메모리, D)에 있는 상태는 서버가 확인하지 않는다.
+- 아바타 파일은 commit 뒤에 지운다. 지우기 실패로 남은 파일은 무해하지만, rollback된 탈퇴에서 아바타가 사라지면 안 되기 때문이다.
+- 전적 표시: 경기 기록 응답의 `opponent.nickname`은 `nickname_snapshot`, `opponent.deleted`가 `true`면 화면이 "(탈퇴한 사용자)"를 붙이고 프로필 링크를 만들지 않는다. 같은 닉네임을 새 계정이 써도 과거 기록과 연결되지 않는다(불변 user id 기준).
+- 탈퇴한 사용자는 리더보드에서 빠지고, 프로필·통계·경기 기록 조회는 404다.
+- 경기 기록 보존 기간(B 제안): **영구 보존**. 개인정보(email, 비밀번호 해시, OAuth·2FA 비밀, 아바타)는 탈퇴 즉시 삭제한다. 개인정보처리방침에 같은 내용을 적는다(NFR-PRIV-01, A #85).
+- 후속: 친구 관계(`friendships`, #69) 삭제와 열린 WebSocket 연결 종료(#86)는 해당 기능이 merge된 뒤 연결한다.
 
 #### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 저장 `구현됨`·시계 `계획`(D), 서버 재시작 `구현됨`)
 

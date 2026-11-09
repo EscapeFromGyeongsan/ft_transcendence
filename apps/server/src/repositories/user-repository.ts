@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { users } from "../db/schema/users.ts";
 import type { PublicUser } from "./auth-repository.ts";
@@ -28,7 +28,7 @@ export async function updateNickname(
   return user;
 }
 
-/** 다른 사용자에게 보여도 되는 프로필 필드만 읽습니다. 이메일은 본인에게만 공개하므로 포함하지 않습니다. */
+/** 다른 사용자에게 보여도 되는 프로필 필드만 읽습니다. 이메일은 본인에게만 공개하므로 포함하지 않습니다. 탈퇴한 사용자는 프로필이 없습니다. */
 export async function findProfile(db: Executor, userId: number) {
   const [profile] = await db
     .select({
@@ -37,7 +37,7 @@ export async function findProfile(db: Executor, userId: number) {
       avatarUrl: users.avatarUrl,
     })
     .from(users)
-    .where(eq(users.id, userId));
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)));
   return profile;
 }
 

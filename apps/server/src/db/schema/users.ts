@@ -21,6 +21,9 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
+  // Set on account deletion (DEC-09). The row stays so match history keeps
+  // its user id; email and nickname are replaced with placeholders.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
 /**
