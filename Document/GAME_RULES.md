@@ -42,7 +42,7 @@
 - 대국 중 한 플레이어의 연결이 끊기면 경기를 일시정지(`paused`) 상태로 전환하고, 재접속 시 최신 스냅샷(`match.snapshot`)으로 복원하여 재개(`playing`)한다.
 - **경기당 개인별 누적 부재 시간 60초 예산(`DEC-03`)**:
   - 한 경기 안에서 플레이어별로 연결이 끊긴 시간을 누적 추적한다.
-  - 누적 부재 시간이 60초를 초과할 때 한 명만 부재 상태이면 남아 있는 상대방의 승리(`outcome: "win"`, `reason: "disconnect_timeout"`)로 종료한다.
+  - 누적 부재 시간이 60초에 도달했을 때 한 명만 부재 상태이면 남아 있는 상대방의 승리(`outcome: "win"`, `reason: "disconnect_timeout"`)로 종료한다.
   - 만료 시점에 양쪽 플레이어가 모두 부재 상태이면 무효(`outcome: "void"`, `reason: "disconnect_timeout"`)로 처리한다.
 - 서버 재시작 시 끝나지 않은 진행 중(`waiting`/`playing`/`paused`) 경기는 모두 무효(`outcome: "void"`, `reason: "server_restart"`, `DEC-07`)로 종료한다.
 
@@ -51,8 +51,8 @@
 - 통계와 리더보드는 게임 종류(`gomoku`, `othello`)별로 분리하여 집계한다.
 - 무효(`void`) 경기는 승·패·무, 완료 경기 수(`completed_games`), 승률, 진행도, 리더보드에서 제외한다.
 - 무승부(`draw`)는 완료 경기 수(`completed_games`)에 포함한다.
-- 승률(`winRate`) = `wins / completed_games` (퍼센트 반올림)
-- **리더보드 정렬 기준 (`DEC-08`)**: **승수(`wins`) 내림차순 → 승률(`winRate`) 내림차순 → 사용자 ID(`userId`) 오름차순**
+- 승률 비율(`winRate`) = `wins / completed_games` (서버 순위 정렬은 반올림 전 실수 비율을 기준으로 수행하며, 퍼센트 반올림은 화면 표시 단계에 적용된다)
+- **리더보드 정렬 기준 (`DEC-08`)**: **승수(`wins`) 내림차순 → 승률 비율(`winRate`) 내림차순 → 사용자 ID(`userId`) 오름차순**
 
 ## 5. 업적·진행도
 
