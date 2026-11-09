@@ -62,10 +62,7 @@ import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
 import { Avatar } from "./profile/Avatar.tsx";
 import { LeaderboardView } from "./profile/LeaderboardView.tsx";
 import { ProfileView } from "./profile/ProfileView.tsx";
-import {
-  LegalDocumentView,
-  NotFoundView,
-} from "./legal/LegalDocumentView.tsx";
+import { LegalDocumentView, NotFoundView } from "./legal/LegalDocumentView.tsx";
 import {
   parseAppRoute,
   resolvePathForScreen,
@@ -253,6 +250,9 @@ export function App() {
 
   const avatarTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
   const lastLogoutTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // User navigation creates history; bootstrap, socket redirects and popstate
+  // only correct the current entry so Back/Forward remain usable.
+  const navigationModeRef = useRef<"push" | "replace">("replace");
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -286,9 +286,9 @@ export function App() {
   // Realtime Gomoku & Matchmaking state
   const wsClientRef = useRef<GameWsClient | null>(null);
   const fetchedPlayerIdsRef = useRef<Set<number>>(new Set());
-  const [playerNicknames, setPlayerNicknames] = useState<Record<number, string>>(
-    {},
-  );
+  const [playerNicknames, setPlayerNicknames] = useState<
+    Record<number, string>
+  >({});
   const [matchmakingState, setMatchmakingState] =
     useState<MatchmakingClientState>(() =>
       createInitialMatchmakingState("gomoku"),
@@ -308,6 +308,7 @@ export function App() {
   }
 
   function switchView(next: ScreenView) {
+    if (next !== view) navigationModeRef.current = "push";
     resetMessages();
     setAccountMenuOpen(false);
     setLogoutModalOpen(false);
@@ -325,6 +326,7 @@ export function App() {
   }
 
   function openLegalDoc(doc: LegalDocKind) {
+    if (doc !== view) navigationModeRef.current = "push";
     resetMessages();
     setAccountMenuOpen(false);
     setLogoutModalOpen(false);
@@ -341,6 +343,7 @@ export function App() {
   }
 
   function handleBackFromLegal() {
+    navigationModeRef.current = "push";
     resetMessages();
     if (
       previousViewBeforeLegal &&
@@ -401,12 +404,18 @@ export function App() {
       profileUserId,
       currentUserId: currentUser?.id ?? null,
     });
+    const navigationMode = navigationModeRef.current;
+    navigationModeRef.current = "replace";
     if (
       targetPath !== null &&
       globalThis.window.location?.pathname !== targetPath
     ) {
       try {
-        globalThis.window.history.replaceState(null, "", targetPath);
+        if (navigationMode === "push") {
+          globalThis.window.history.pushState(null, "", targetPath);
+        } else {
+          globalThis.window.history.replaceState(null, "", targetPath);
+        }
       } catch {
         // 테스트·제한 환경에서 history.replaceState 예외 무시
       }
@@ -429,6 +438,7 @@ export function App() {
       return;
     }
     function handlePopState() {
+      navigationModeRef.current = "replace";
       const route = parseInitialAppRoute();
       switch (route.kind) {
         case "terms":
@@ -505,7 +515,7 @@ export function App() {
     return () => {
       globalThis.window.removeEventListener("popstate", handlePopState);
     };
-  }, [currentUser, challengeToken]);
+  }, [currentUser, challengeToken, othelloState.snapshot?.matchId]);
 
   // 로그인된 사용자의 viewerUserId를 gomokuState 및 othelloState와 동기화합니다.
   useEffect(() => {
@@ -771,6 +781,7 @@ export function App() {
   }, [currentUserId]);
 
   function openProfile(userId: number) {
+    if (userId !== profileUserId) navigationModeRef.current = "push";
     setProfileUserId(userId);
     switchView("profile");
   }
@@ -864,10 +875,7 @@ export function App() {
   function handleResignGomoku() {
     const snapshot = gomokuState.snapshot;
     if (!snapshot) return;
-    const command = buildResignCommand(
-      snapshot.matchId,
-      snapshot.stateVersion,
-    );
+    const command = buildResignCommand(snapshot.matchId, snapshot.stateVersion);
     setGomokuState((prev) => markCommandPending(prev, command));
     wsClientRef.current?.sendGameCommand(command);
   }
@@ -885,10 +893,7 @@ export function App() {
 
   function handleBackToLobbyFromGomoku() {
     const activeMatchId = gomokuState.matchId;
-    if (
-      activeMatchId !== null &&
-      gomokuState.snapshot?.status === "finished"
-    ) {
+    if (activeMatchId !== null && gomokuState.snapshot?.status === "finished") {
       saveActiveMatchIdToStorage(null);
       wsClientRef.current?.unsubscribeMatch(activeMatchId);
       wsClientRef.current?.setSubscribedMatchId(null);
@@ -1082,9 +1087,7 @@ export function App() {
         saveActiveMatchIdToStorage(null);
         setCurrentUser(null);
         setView((current) =>
-          current === "terms" ||
-          current === "privacy" ||
-          current === "notFound"
+          current === "terms" || current === "privacy" || current === "notFound"
             ? current
             : "login",
         );
@@ -1435,7 +1438,8 @@ export function App() {
                     className="cbc-dropdown-btn is-danger"
                     role="menuitem"
                     onClick={() => {
-                      lastLogoutTriggerRef.current = avatarTriggerBtnRef.current;
+                      lastLogoutTriggerRef.current =
+                        avatarTriggerBtnRef.current;
                       setAccountMenuOpen(false);
                       setLogoutModalOpen(true);
                     }}
@@ -1601,8 +1605,9 @@ export function App() {
                       aria-describedby={
                         errorMessage ? "loginErrorMessage" : undefined
                       }
-                      className={`cbc-input ${errorMessage || fieldErrors.email ? "is-error" : ""
-                        }`}
+                      className={`cbc-input ${
+                        errorMessage || fieldErrors.email ? "is-error" : ""
+                      }`}
                     />
                   </div>
                   {fieldErrors.email && (
@@ -1639,8 +1644,9 @@ export function App() {
                       aria-describedby={
                         errorMessage ? "loginErrorMessage" : undefined
                       }
-                      className={`cbc-input ${errorMessage || fieldErrors.password ? "is-error" : ""
-                        }`}
+                      className={`cbc-input ${
+                        errorMessage || fieldErrors.password ? "is-error" : ""
+                      }`}
                     />
                     <button
                       type="button"
@@ -1915,8 +1921,9 @@ export function App() {
                         aria-describedby={
                           fieldErrors.email ? "email-error-msg" : undefined
                         }
-                        className={`cbc-input ${fieldErrors.email ? "is-error" : ""
-                          }`}
+                        className={`cbc-input ${
+                          fieldErrors.email ? "is-error" : ""
+                        }`}
                       />
                     </div>
                     {fieldErrors.email && (
@@ -1958,8 +1965,9 @@ export function App() {
                             ? "password-error-msg"
                             : undefined
                         }
-                        className={`cbc-input ${fieldErrors.password ? "is-error" : ""
-                          }`}
+                        className={`cbc-input ${
+                          fieldErrors.password ? "is-error" : ""
+                        }`}
                       />
                       <button
                         type="button"
@@ -2016,8 +2024,9 @@ export function App() {
                             ? "nickname-error-msg"
                             : undefined
                         }
-                        className={`cbc-input ${fieldErrors.nickname ? "is-error" : ""
-                          }`}
+                        className={`cbc-input ${
+                          fieldErrors.nickname ? "is-error" : ""
+                        }`}
                       />
                     </div>
                     {fieldErrors.nickname && (
@@ -2261,8 +2270,7 @@ export function App() {
             {gomokuState.gameError && (
               <div className="cbc-error-banner" role="alert">
                 <span>
-                  [{gomokuState.gameError.code}]{" "}
-                  {gomokuState.gameError.message}
+                  [{gomokuState.gameError.code}] {gomokuState.gameError.message}
                 </span>
               </div>
             )}

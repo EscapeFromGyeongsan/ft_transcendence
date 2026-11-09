@@ -1,4 +1,4 @@
-import { gomoku } from "@cafe/game-engine";
+import { gomoku, othello } from "@cafe/game-engine";
 import type { GameType } from "@cafe/game-contracts";
 import type { RegisteredRules } from "./services/game-command-service.ts";
 
@@ -17,5 +17,10 @@ export const gameEngines: Partial<Record<GameType, RegisteredRules>> = {
     version: gomoku.GOMOKU_RULES_VERSION,
     rules: gomoku.rules,
     board: gomoku.board,
+  },
+  othello: {
+    version: othello.OTHELLO_RULES_VERSION,
+    rules: othello.rules,
+    board: othello.board,
   },
 };
