@@ -46,6 +46,7 @@ interface ProfileViewProps {
   onCurrentUserUpdated: (user: AuthUser) => void;
   onOpenProfile: (userId: number) => void;
   onOpenLeaderboard: () => void;
+  onOpenFriends: (nickname?: string) => void;
   onBack: () => void;
   api?: ProfileApi;
   authClient?: AuthApiClient;
@@ -117,6 +118,7 @@ export function ProfileView({
   onCurrentUserUpdated,
   onOpenProfile,
   onOpenLeaderboard,
+  onOpenFriends,
   onBack,
   api = profileApi,
   authClient = authApi,
@@ -575,6 +577,13 @@ export function ProfileView({
               />
               <h2 className="cbc-profile-name">{displayName}</h2>
               <p className="cbc-profile-id">회원 번호 #{userId}</p>
+              <button
+                type="button"
+                className="cbc-btn-secondary cbc-btn-compact"
+                onClick={() => onOpenFriends(isMine ? undefined : displayName)}
+              >
+                {isMine ? "친구 관리" : "친구 검색·요청"}
+              </button>
 
               {isMine && (
                 <>

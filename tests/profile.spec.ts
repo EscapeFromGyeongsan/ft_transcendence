@@ -188,4 +188,18 @@ test("profile edits persist and records privacy protects real match data while p
     identity.getByRole("img", { name: `${nickname} 기본 프로필 이미지` }),
   ).toBeVisible();
   expect((await page.request.get(avatarURL!)).status()).toBe(404);
+
+  // The real server has no #69 endpoint yet: an actual 404 must remain an error.
+  const unavailable = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/friends",
+  );
+  await page.getByRole("button", { name: "친구 관리", exact: true }).click();
+  expect((await unavailable).status()).toBe(404);
+  await expect(page.getByTestId("friends-view")).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "친구 정보를 찾을 수 없습니다.",
+  );
+  await expect(
+    page.getByText("아직 친구가 없습니다.", { exact: true }),
+  ).toHaveCount(0);
 });

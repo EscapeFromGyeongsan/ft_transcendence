@@ -62,6 +62,7 @@ import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
 import { Avatar } from "./profile/Avatar.tsx";
 import { LeaderboardView } from "./profile/LeaderboardView.tsx";
 import { ProfileView } from "./profile/ProfileView.tsx";
+import { FriendsView } from "./friends/FriendsView.tsx";
 import { LegalDocumentView, NotFoundView } from "./legal/LegalDocumentView.tsx";
 import {
   parseAppRoute,
@@ -81,6 +82,7 @@ type ScreenView =
   | "othello"
   | "profile"
   | "leaderboard"
+  | "friends"
   | "terms"
   | "privacy"
   | "notFound";
@@ -282,6 +284,7 @@ export function App() {
 
   // 프로필 화면에서 조회 중인 사용자 (본인 또는 다른 사용자)
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
+  const [friendsQuery, setFriendsQuery] = useState("");
 
   // Realtime Gomoku & Matchmaking state
   const wsClientRef = useRef<GameWsClient | null>(null);
@@ -323,6 +326,11 @@ export function App() {
       setMatchmakingState((prev) => applyQueueLeft(prev));
     }
     setView(next);
+  }
+
+  function openFriends(nickname = "") {
+    setFriendsQuery(nickname);
+    switchView("friends");
   }
 
   function openLegalDoc(doc: LegalDocKind) {
@@ -504,6 +512,10 @@ export function App() {
           break;
         case "leaderboard":
           setView(currentUser ? "leaderboard" : "login");
+          break;
+        case "friends":
+          setFriendsQuery("");
+          setView(currentUser ? "friends" : "login");
           break;
         case "notFound":
           setNotFoundPath(route.pathname);
@@ -1075,6 +1087,9 @@ export function App() {
           if (initialRoute.kind === "leaderboard") {
             return "leaderboard";
           }
+          if (initialRoute.kind === "friends") {
+            return "friends";
+          }
           if (initialRoute.kind === "matchmaking") {
             return "matchmaking";
           }
@@ -1300,6 +1315,7 @@ export function App() {
             view === "othello" ||
             view === "profile" ||
             view === "leaderboard" ||
+            view === "friends" ||
             view === "terms" ||
             view === "privacy" ||
             view === "notFound") ? (
@@ -1408,6 +1424,16 @@ export function App() {
                         게임별 승수 순위
                       </div>
                     </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="menu-friends"
+                    className="cbc-dropdown-btn"
+                    role="menuitem"
+                    onClick={() => openFriends()}
+                  >
+                    친구 관리
                   </button>
 
                   <button
@@ -2191,6 +2217,16 @@ export function App() {
             onCurrentUserUpdated={setCurrentUser}
             onOpenProfile={openProfile}
             onOpenLeaderboard={() => switchView("leaderboard")}
+            onOpenFriends={openFriends}
+            onBack={() => switchView("lobby")}
+          />
+        ) : view === "friends" && currentUser ? (
+          <FriendsView
+            key={currentUser.id}
+            currentUserId={currentUser.id}
+            connected={gomokuState.connectionPhase === "connected"}
+            initialQuery={friendsQuery}
+            onOpenProfile={openProfile}
             onBack={() => switchView("lobby")}
           />
         ) : view === "leaderboard" && currentUser ? (
@@ -2333,6 +2369,14 @@ export function App() {
                   onClick={() => switchView("leaderboard")}
                 >
                   리더보드
+                </button>
+                <button
+                  type="button"
+                  className="cbc-btn-secondary"
+                  style={{ width: "auto" }}
+                  onClick={() => openFriends()}
+                >
+                  친구 관리
                 </button>
                 <button
                   type="button"

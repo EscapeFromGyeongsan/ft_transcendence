@@ -511,3 +511,22 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 - 내 프로필 토글은 저장 응답을 확인한 뒤 반영한다. 실패 시 기존 값을 유지하며 오류를 표시한다. 타인 프로필에서 `RECORDS_PRIVATE`를 받으면 통계·업적·최근 대국 대신 비공개 안내를 표시하고 이전 조회 데이터를 비운다.
 
 SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 별도다. 실제 PostgreSQL·두 세션 브라우저 검증은 [검증 기록](profile-records-privacy-validation.md)을 따른다.
+
+### 11.5 친구 웹 클라이언트 검토안 (#80, 실제 API 통합 대기)
+
+친구 REST·스키마 구현은 [#69](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/69)에서 E가 담당한다. `feat/web-friends`의 클라이언트는 [PR #68 `a14ba86`](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/68) SDS 2.10.29의 검토안을 소비한다. 이 절은 구현된 서버 API의 상태 코드 표(11.3)에 친구 endpoint를 추가하는 것이 아니며, B·E의 최종 계약 확인이 필요하다.
+
+| 클라이언트 동작 | 소비하는 초안 |
+|---|---|
+| 목록 | `GET /api/friends` → `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }`. 두 요청 목록에는 `requestId`, `createdAt`이 필요하다. |
+| 검색 | `GET /api/users?nickname=접두사` → 최대 20명. JSON 구조는 미확정이다. **프런트 임시 읽기 형식은 `{ id, nickname, avatarUrl }[]`**이며 `userId`로 정규화한다. 서버 계약을 확정한 것으로 취급하지 않는다. |
+| 요청 | `POST /api/friends/requests { userId }` → 공통 사용자 정보와 `requestId`, `status: pending 또는 accepted` |
+| 수락 | `POST /api/friends/requests/{requestId}/accept` → 해당 요청 ID의 `accepted` 결과 |
+| 거절 | `POST /api/friends/requests/{requestId}/decline` → 204 |
+| 친구 삭제 | `DELETE /api/friends/{userId}` → 204 |
+
+목록·검색·성공 응답은 클라이언트에서 형태를 확인하며 누락된 `online`을 false로 채우지 않는다. 부적합한 성공 응답은 로컬 `FRIENDS_INVALID_RESPONSE`로 표시한다. 이 코드는 서버가 반환하는 HTTP 오류 계약이 아니다. `REQUEST_DECLINED` 등 SDS 초안 코드는 사용자 안내에 연결하며, 404·409가 나면 목록을 다시 확인하고 변경 요청을 자동 재전송하지 않는다.
+
+서버 성공 이후 재조회가 실패하면 성공 안내를 유지하면서 목록 실패를 별도로 표시한다. 새 조회가 확인될 때까지 이전 목록의 변경 동작과 온라인 표시를 확정하지 않는다. WS 인증 연결 복구는 재조회를 유발한다. `presence` 및 친구 관계 변경 알림의 최종 이벤트·집계·전송 순서는 D·E 확인 후 연결한다.
+
+실제 서버가 없는 상태의 응답 대체 검증과 실제 API·WS·DB 통합 결과는 [친구 화면 검증 기록](friends-web-validation.md)에서 구분한다.

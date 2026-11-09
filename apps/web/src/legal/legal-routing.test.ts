@@ -24,9 +24,7 @@ describe("legal-routing and policy content (Issue #64)", () => {
     expect(parseAppRoute("/signup")).toEqual({ kind: "register" });
     expect(parseAppRoute("/register")).toEqual({ kind: "register" });
     expect(parseAppRoute("/login/2fa")).toEqual({ kind: "twoFactor" });
-    expect(
-      parseAppRoute("/oauth/42/callback", "?code=abc&state=xyz"),
-    ).toEqual({
+    expect(parseAppRoute("/oauth/42/callback", "?code=abc&state=xyz")).toEqual({
       kind: "oauthCallback",
       code: "abc",
       state: "xyz",
@@ -44,6 +42,8 @@ describe("legal-routing and policy content (Issue #64)", () => {
       userId: 15,
     });
     expect(parseAppRoute("/leaderboard")).toEqual({ kind: "leaderboard" });
+    expect(parseAppRoute("/friends")).toEqual({ kind: "friends" });
+    expect(parseAppRoute("/friends/")).toEqual({ kind: "friends" });
   });
 
   it("returns notFound route for unknown paths or invalid IDs", () => {
@@ -87,6 +87,7 @@ describe("legal-routing and policy content (Issue #64)", () => {
       }),
     ).toBe("/users/9");
     expect(resolvePathForScreen({ view: "leaderboard" })).toBe("/leaderboard");
+    expect(resolvePathForScreen({ view: "friends" })).toBe("/friends");
     expect(resolvePathForScreen({ view: "notFound" })).toBeNull();
   });
 
