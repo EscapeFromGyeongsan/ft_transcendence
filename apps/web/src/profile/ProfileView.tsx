@@ -42,7 +42,7 @@ interface ProfileViewProps {
   /** 조회할 사용자 ID. 로그인한 본인의 ID이면 편집 가능한 "내 프로필"로 표시합니다. */
   userId: number;
   currentUser: AuthUser;
-  /** 닉네임·아바타 변경 후 최신 내 정보를 상위 상태에 반영합니다. */
+  /** 닉네임·아바타·전적 공개 설정 변경 후 최신 내 정보를 상위 상태에 반영합니다. */
   onCurrentUserUpdated: (user: AuthUser) => void;
   onOpenProfile: (userId: number) => void;
   onOpenLeaderboard: () => void;
@@ -129,6 +129,8 @@ export function ProfileView({
   const [stats, setStats] = useState<StatsMap>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [recordsPrivate, setRecordsPrivate] = useState(false);
+  const recordsDeniedRef = useRef(false);
 
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [nextBefore, setNextBefore] = useState<number | null>(null);
@@ -141,6 +143,7 @@ export function ProfileView({
   const [busy, setBusy] = useState<
     | "nickname"
     | "avatar"
+    | "recordsPublic"
     | "twoFactorSetup"
     | "twoFactorEnable"
     | "twoFactorDisable"
@@ -150,6 +153,16 @@ export function ProfileView({
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Once either endpoint denies access, late successes must not re-display
+  // earlier data. A fresh profile load is required before revealing records.
+  const hidePrivateRecords = useCallback(() => {
+    recordsDeniedRef.current = true;
+    setRecordsPrivate(true);
+    setStats({});
+    setMatches([]);
+    setNextBefore(null);
+  }, []);
 
   // TOTP 2FA & 42 OAuth 상태 (FR-AUTH-05, FR-AUTH-06)
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -211,19 +224,36 @@ export function ProfileView({
     setLoadError(null);
     setPublicProfile(null);
     setStats({});
+    recordsDeniedRef.current = false;
+    setRecordsPrivate(false);
 
     Promise.all([
       isMine ? Promise.resolve(null) : api.getProfile(userId),
-      ...GAME_TYPES.map((gameType) => api.getStats(userId, gameType)),
+      Promise.all(GAME_TYPES.map((gameType) => api.getStats(userId, gameType)))
+        .then((gameStats) => {
+          if (!active || recordsDeniedRef.current) return;
+          const next: StatsMap = {};
+          GAME_TYPES.forEach((gameType, index) => {
+            next[gameType] = gameStats[index];
+          });
+          setStats(next);
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          if (
+            !isMine &&
+            error instanceof ApiError &&
+            error.code === "RECORDS_PRIVATE"
+          ) {
+            hidePrivateRecords();
+            return;
+          }
+          throw error;
+        }),
     ])
-      .then(([profile, ...gameStats]) => {
+      .then(([profile]) => {
         if (!active) return;
         setPublicProfile(profile);
-        const next: StatsMap = {};
-        GAME_TYPES.forEach((gameType, index) => {
-          next[gameType] = gameStats[index] as GameStats;
-        });
-        setStats(next);
       })
       .catch((error) => {
         if (active) setLoadError(getErrorMessage(error));
@@ -235,7 +265,7 @@ export function ProfileView({
     return () => {
       active = false;
     };
-  }, [api, userId, isMine]);
+  }, [api, userId, isMine, hidePrivateRecords]);
 
   const loadMatches = useCallback(
     async (
@@ -251,18 +281,28 @@ export function ProfileView({
           before,
           limit: MATCH_PAGE_SIZE,
         });
-        if (!isActive()) return;
+        if (!isActive() || recordsDeniedRef.current) return;
         setMatches((prev) =>
           replace ? page.matches : [...prev, ...page.matches],
         );
         setNextBefore(page.nextBefore);
       } catch (error) {
-        if (isActive()) setMatchesError(getErrorMessage(error));
+        if (isActive()) {
+          if (
+            !isMine &&
+            error instanceof ApiError &&
+            error.code === "RECORDS_PRIVATE"
+          ) {
+            hidePrivateRecords();
+          } else {
+            setMatchesError(getErrorMessage(error));
+          }
+        }
       } finally {
         if (isActive()) setMatchesLoading(false);
       }
     },
-    [api, userId, matchFilter],
+    [api, userId, matchFilter, isMine, hidePrivateRecords],
   );
 
   // 전적 첫 페이지 (사용자·종목 필터 변경 시 재조회).
@@ -302,6 +342,26 @@ export function ProfileView({
     (s) => s.progress.current >= s.progress.target,
   );
   const achievementCount = Number(hasFirstWin) + Number(hasParticipation);
+
+  async function handleRecordsPublicChange(recordsPublic: boolean) {
+    if (busy !== null) return;
+    setBusy("recordsPublic");
+    setNotice(null);
+    setActionError(null);
+    try {
+      const user = await api.updateRecordsPublic(recordsPublic);
+      onCurrentUserUpdated(user);
+      setNotice(
+        recordsPublic
+          ? "전적을 공개로 설정했습니다."
+          : "전적을 비공개로 설정했습니다.",
+      );
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function handleNicknameSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -388,7 +448,9 @@ export function ProfileView({
     }
   }
 
-  async function handleEnableTwoFactorSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleEnableTwoFactorSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
     setNotice(null);
     setActionError(null);
@@ -618,6 +680,48 @@ export function ProfileView({
             {isMine && (
               <section
                 className="cbc-profile-card"
+                data-testid="profile-records-settings"
+              >
+                <h2 className="cbc-profile-section-title">전적 공개 설정</h2>
+                <div className="cbc-profile-privacy-toggle">
+                  <input
+                    id="profile-records-public"
+                    type="checkbox"
+                    role="switch"
+                    checked={currentUser.recordsPublic === true}
+                    disabled={
+                      busy !== null ||
+                      typeof currentUser.recordsPublic !== "boolean"
+                    }
+                    aria-describedby="profile-records-scope"
+                    onChange={(event) =>
+                      void handleRecordsPublicChange(
+                        event.currentTarget.checked,
+                      )
+                    }
+                  />
+                  <label htmlFor="profile-records-public">전적 공개</label>
+                  <span aria-live="polite">
+                    {busy === "recordsPublic"
+                      ? "저장 중..."
+                      : typeof currentUser.recordsPublic !== "boolean"
+                        ? "설정 확인 불가"
+                        : currentUser.recordsPublic
+                          ? "공개"
+                          : "비공개"}
+                  </span>
+                </div>
+                <p id="profile-records-scope" className="cbc-profile-hint">
+                  비공개로 설정하면 다른 사용자는 내 프로필의 통계·업적·경기
+                  기록을 볼 수 없습니다. 리더보드와 상대방 자신의 대국 기록에는
+                  계속 표시됩니다.
+                </p>
+              </section>
+            )}
+
+            {isMine && (
+              <section
+                className="cbc-profile-card"
                 data-testid="profile-security-section"
               >
                 <div className="cbc-profile-section-head">
@@ -636,9 +740,13 @@ export function ProfileView({
                 </div>
 
                 <div className="cbc-security-block">
-                  <p className="cbc-profile-hint" style={{ marginBottom: "0.75rem" }}>
-                    인증 앱(Google Authenticator, Authy 등) 기반 TOTP 2단계 인증으로
-                    계정을 보호하거나 42 Intra 계정을 연결할 수 있습니다.
+                  <p
+                    className="cbc-profile-hint"
+                    style={{ marginBottom: "0.75rem" }}
+                  >
+                    인증 앱(Google Authenticator, Authy 등) 기반 TOTP 2단계
+                    인증으로 계정을 보호하거나 42 Intra 계정을 연결할 수
+                    있습니다.
                   </p>
 
                   {!twoFactorEnabled && !twoFactorSetupData && (
@@ -840,139 +948,167 @@ export function ProfileView({
           </aside>
 
           <div className="cbc-profile-main">
-            <section className="cbc-profile-card">
-              <h2 className="cbc-profile-section-title">게임별 전적 및 승률</h2>
-              <div className="cbc-profile-total">
-                <strong>
-                  총 {total.played}전 {total.wins}승 {total.losses}패{" "}
-                  {total.draws}무
-                </strong>
-                <span>종합 승률 {formatWinRate(total.winRate)}</span>
-              </div>
-              <div className="cbc-profile-game-grid">
-                {GAME_TYPES.map((gameType) => {
-                  const gameStats = stats[gameType];
-                  return gameStats ? (
-                    <GameStatCard
-                      key={gameType}
-                      gameType={gameType}
-                      stats={gameStats}
-                    />
-                  ) : null;
-                })}
-              </div>
-            </section>
+            {recordsPrivate ? (
+              <section
+                className="cbc-profile-card"
+                role="status"
+                data-testid="records-private-notice"
+              >
+                <h2 className="cbc-profile-section-title">
+                  전적이 비공개입니다
+                </h2>
+                <p>
+                  이 사용자는 통계·업적·경기 기록을 비공개로 설정했습니다.
+                  닉네임과 프로필 이미지는 볼 수 있습니다.
+                </p>
+              </section>
+            ) : (
+              <>
+                <section className="cbc-profile-card">
+                  <h2 className="cbc-profile-section-title">
+                    게임별 전적 및 승률
+                  </h2>
+                  <div className="cbc-profile-total">
+                    <strong>
+                      총 {total.played}전 {total.wins}승 {total.losses}패{" "}
+                      {total.draws}무
+                    </strong>
+                    <span>종합 승률 {formatWinRate(total.winRate)}</span>
+                  </div>
+                  <div className="cbc-profile-game-grid">
+                    {GAME_TYPES.map((gameType) => {
+                      const gameStats = stats[gameType];
+                      return gameStats ? (
+                        <GameStatCard
+                          key={gameType}
+                          gameType={gameType}
+                          stats={gameStats}
+                        />
+                      ) : null;
+                    })}
+                  </div>
+                </section>
 
-            <section className="cbc-profile-card">
-              <div className="cbc-profile-section-head">
-                <h2 className="cbc-profile-section-title">보드카페 업적</h2>
-                <span className="cbc-chip">
-                  달성 완료: {achievementCount} / 2
-                </span>
-              </div>
-              <ul className="cbc-achievements">
-                <li className={hasFirstWin ? "is-done" : ""}>
-                  <strong>첫 승리</strong>
-                  <span>오목 또는 오델로 대국에서 첫 1승 달성</span>
-                  <em>{hasFirstWin ? "달성 완료" : "미달성"}</em>
-                </li>
-                <li className={hasParticipation ? "is-done" : ""}>
-                  <strong>10경기 참여</strong>
-                  <span>한 종목에서 대국을 10회 이상 완료</span>
-                  <em>{hasParticipation ? "달성 완료" : "미달성"}</em>
-                </li>
-              </ul>
-            </section>
+                <section className="cbc-profile-card">
+                  <div className="cbc-profile-section-head">
+                    <h2 className="cbc-profile-section-title">보드카페 업적</h2>
+                    <span className="cbc-chip">
+                      달성 완료: {achievementCount} / 2
+                    </span>
+                  </div>
+                  <ul className="cbc-achievements">
+                    <li className={hasFirstWin ? "is-done" : ""}>
+                      <strong>첫 승리</strong>
+                      <span>오목 또는 오델로 대국에서 첫 1승 달성</span>
+                      <em>{hasFirstWin ? "달성 완료" : "미달성"}</em>
+                    </li>
+                    <li className={hasParticipation ? "is-done" : ""}>
+                      <strong>10경기 참여</strong>
+                      <span>한 종목에서 대국을 10회 이상 완료</span>
+                      <em>{hasParticipation ? "달성 완료" : "미달성"}</em>
+                    </li>
+                  </ul>
+                </section>
 
-            <section className="cbc-profile-card">
-              <div className="cbc-profile-section-head">
-                <h2 className="cbc-profile-section-title">최근 경기 기록</h2>
-                <div className="cbc-tabs" role="tablist" aria-label="종목 필터">
-                  {(["all", ...GAME_TYPES] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="tab"
-                      aria-selected={matchFilter === value}
-                      className={matchFilter === value ? "is-active" : ""}
-                      onClick={() => setMatchFilter(value)}
+                <section className="cbc-profile-card">
+                  <div className="cbc-profile-section-head">
+                    <h2 className="cbc-profile-section-title">
+                      최근 경기 기록
+                    </h2>
+                    <div
+                      className="cbc-tabs"
+                      role="tablist"
+                      aria-label="종목 필터"
                     >
-                      {value === "all"
-                        ? "전체"
-                        : value === "gomoku"
-                          ? "오목"
-                          : "오델로"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {matchesError && (
-                <div className="cbc-error-banner" role="alert">
-                  <span>{matchesError}</span>
-                </div>
-              )}
-
-              {matches.length === 0 && !matchesLoading && !matchesError ? (
-                <p className="cbc-subheading">
-                  아직 종료된 경기 기록이 없습니다.
-                </p>
-              ) : (
-                <div className="cbc-table-wrap">
-                  <table className="cbc-table">
-                    <thead>
-                      <tr>
-                        <th>상대 플레이어</th>
-                        <th>종목</th>
-                        <th>결과</th>
-                        <th>일시</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {matches.map((match) => (
-                        <tr key={match.matchId}>
-                          <td>
-                            <button
-                              type="button"
-                              className="cbc-table-user"
-                              onClick={() => onOpenProfile(match.opponent.id)}
-                            >
-                              <Avatar
-                                nickname={match.opponent.nickname}
-                                size={32}
-                              />
-                              <span>{match.opponent.nickname}</span>
-                            </button>
-                          </td>
-                          <td>{GAME_LABELS[match.gameType]}</td>
-                          <td>
-                            <ResultBadge result={match.result} />
-                          </td>
-                          <td>{formatMatchDate(match.finishedAt)}</td>
-                        </tr>
+                      {(["all", ...GAME_TYPES] as const).map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          role="tab"
+                          aria-selected={matchFilter === value}
+                          className={matchFilter === value ? "is-active" : ""}
+                          onClick={() => setMatchFilter(value)}
+                        >
+                          {value === "all"
+                            ? "전체"
+                            : value === "gomoku"
+                              ? "오목"
+                              : "오델로"}
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                    </div>
+                  </div>
 
-              {matchesLoading && (
-                <p className="cbc-subheading" role="status">
-                  전적을 불러오는 중입니다...
-                </p>
-              )}
-              {nextBefore !== null && !matchesLoading && (
-                <button
-                  type="button"
-                  className="cbc-btn-secondary cbc-btn-compact"
-                  onClick={() =>
-                    void loadMatches(nextBefore, false, () => true)
-                  }
-                >
-                  더 보기
-                </button>
-              )}
-            </section>
+                  {matchesError && (
+                    <div className="cbc-error-banner" role="alert">
+                      <span>{matchesError}</span>
+                    </div>
+                  )}
+
+                  {matches.length === 0 && !matchesLoading && !matchesError ? (
+                    <p className="cbc-subheading">
+                      아직 종료된 경기 기록이 없습니다.
+                    </p>
+                  ) : (
+                    <div className="cbc-table-wrap">
+                      <table className="cbc-table">
+                        <thead>
+                          <tr>
+                            <th>상대 플레이어</th>
+                            <th>종목</th>
+                            <th>결과</th>
+                            <th>일시</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {matches.map((match) => (
+                            <tr key={match.matchId}>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="cbc-table-user"
+                                  onClick={() =>
+                                    onOpenProfile(match.opponent.id)
+                                  }
+                                >
+                                  <Avatar
+                                    nickname={match.opponent.nickname}
+                                    size={32}
+                                  />
+                                  <span>{match.opponent.nickname}</span>
+                                </button>
+                              </td>
+                              <td>{GAME_LABELS[match.gameType]}</td>
+                              <td>
+                                <ResultBadge result={match.result} />
+                              </td>
+                              <td>{formatMatchDate(match.finishedAt)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {matchesLoading && (
+                    <p className="cbc-subheading" role="status">
+                      전적을 불러오는 중입니다...
+                    </p>
+                  )}
+                  {nextBefore !== null && !matchesLoading && (
+                    <button
+                      type="button"
+                      className="cbc-btn-secondary cbc-btn-compact"
+                      onClick={() =>
+                        void loadMatches(nextBefore, false, () => true)
+                      }
+                    >
+                      더 보기
+                    </button>
+                  )}
+                </section>
+              </>
+            )}
           </div>
         </div>
       )}

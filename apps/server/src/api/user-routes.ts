@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { AuthService } from "../services/auth-service.ts";
 import type { UserService } from "../services/user-service.ts";
+import type { ProfileUpdate } from "../repositories/user-repository.ts";
 import {
   bodyErrorResponses,
   errorBody,
@@ -28,7 +29,7 @@ const signedOut = () =>
   errorBody("UNAUTHENTICATED", "Authentication required.");
 
 /**
- * 내 정보 조회·닉네임 변경·공개 프로필 route를 등록합니다.
+ * 내 정보 조회·닉네임/전적 공개 설정 변경·공개 프로필 route를 등록합니다.
  *
  * @remarks 서비스 getter가 설정 없음으로 {@link ServiceUnavailableError}를 던지면 503이 됩니다.
  */
@@ -62,18 +63,39 @@ export function registerUserRoutes(
     },
   );
 
-  app.patch<{ Body: { nickname: string } }>(
+  app.patch<{ Body: ProfileUpdate }>(
     "/api/users/me",
     {
       onRequest: requireAuth,
+      // Reject malformed settings before Ajv can coerce "false", 0 or null
+      // into a boolean, or remove unknown properties before checking emptiness.
+      preValidation: async (request, reply) => {
+        const body: unknown = request.body;
+        if (body !== null && typeof body === "object" && !Array.isArray(body)) {
+          const fields = Object.keys(body);
+          if (
+            fields.some(
+              (key) => key !== "nickname" && key !== "recordsPublic",
+            ) ||
+            ("recordsPublic" in body && typeof body.recordsPublic !== "boolean")
+          ) {
+            return reply
+              .code(422)
+              .send(errorBody("VALIDATION_ERROR", "Invalid profile fields."));
+          }
+        }
+      },
       schema: {
         tags: ["users"],
-        summary: "내 닉네임 변경",
+        summary: "내 닉네임·전적 공개 설정 변경",
         security: [{ bearerAuth: [] }],
         body: {
           type: "object",
-          properties: { nickname: nicknameSchema },
-          required: ["nickname"],
+          properties: {
+            nickname: nicknameSchema,
+            recordsPublic: { type: "boolean" },
+          },
+          anyOf: [{ required: ["nickname"] }, { required: ["recordsPublic"] }],
           additionalProperties: false,
         },
         response: {
@@ -86,9 +108,9 @@ export function registerUserRoutes(
       },
     },
     async (request, reply) => {
-      const result = await getUsers().updateNickname(
+      const result = await getUsers().updateProfile(
         request.auth!.userId,
-        request.body.nickname,
+        request.body,
       );
       if (result.ok) return result.user;
       if (result.code === "NOT_FOUND") return reply.code(401).send(signedOut());

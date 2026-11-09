@@ -103,10 +103,12 @@ export function findLeaderboard(db: Executor, gameType: string, limit: number) {
     .limit(limit);
 }
 
-export async function userExists(db: Executor, userId: number) {
+/** Read access policy inside a transaction and hold it until the records are read. */
+export async function findRecordsAccess(db: Executor, userId: number) {
   const [row] = await db
-    .select({ id: users.id })
+    .select({ recordsPublic: users.recordsPublic })
     .from(users)
-    .where(eq(users.id, userId));
-  return Boolean(row);
+    .where(eq(users.id, userId))
+    .for("share");
+  return row;
 }

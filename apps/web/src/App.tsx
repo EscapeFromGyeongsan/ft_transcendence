@@ -2185,6 +2185,7 @@ export function App() {
           </div>
         ) : view === "profile" && currentUser ? (
           <ProfileView
+            key={profileUserId ?? currentUser.id}
             userId={profileUserId ?? currentUser.id}
             currentUser={currentUser}
             onCurrentUserUpdated={setCurrentUser}

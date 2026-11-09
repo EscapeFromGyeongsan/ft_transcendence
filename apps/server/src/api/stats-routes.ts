@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import type { AuthService } from "../services/auth-service.ts";
-import type { StatsService } from "../services/stats-service.ts";
+import {
+  RecordsPrivateError,
+  type StatsService,
+} from "../services/stats-service.ts";
 import {
   bodyErrorResponses,
   errorBody,
@@ -19,6 +22,7 @@ const userParams = {
   required: ["userId"],
 };
 const notFound = errorSchema("존재하지 않는 사용자", ["NOT_FOUND"]);
+const recordsPrivate = errorSchema("타인의 비공개 전적", ["RECORDS_PRIVATE"]);
 
 /**
  * 전적 통계·경기 기록·리더보드 route를 등록합니다.
@@ -89,6 +93,7 @@ export function registerStatsRoutes(
             ],
           },
           401: unauthenticatedResponse,
+          403: recordsPrivate,
           404: notFound,
           422: bodyErrorResponses[422],
           ...serverErrorResponses,
@@ -96,14 +101,27 @@ export function registerStatsRoutes(
       },
     },
     async (request, reply) => {
-      const stats = await getStats().getStats(
-        request.params.userId,
-        request.query.gameType,
-      );
-      if (!stats) {
-        return reply.code(404).send(errorBody("NOT_FOUND", "User not found."));
+      reply.header("Cache-Control", "no-store");
+      try {
+        const stats = await getStats().getStats(
+          request.params.userId,
+          request.query.gameType,
+          request.auth!.userId,
+        );
+        if (!stats) {
+          return reply
+            .code(404)
+            .send(errorBody("NOT_FOUND", "User not found."));
+        }
+        return stats;
+      } catch (error) {
+        if (error instanceof RecordsPrivateError) {
+          return reply
+            .code(403)
+            .send(errorBody("RECORDS_PRIVATE", error.message));
+        }
+        throw error;
       }
-      return stats;
     },
   );
 
@@ -177,6 +195,7 @@ export function registerStatsRoutes(
             required: ["matches", "nextBefore"],
           },
           401: unauthenticatedResponse,
+          403: recordsPrivate,
           404: notFound,
           422: bodyErrorResponses[422],
           ...serverErrorResponses,
@@ -184,14 +203,27 @@ export function registerStatsRoutes(
       },
     },
     async (request, reply) => {
-      const page = await getStats().getMatches(
-        request.params.userId,
-        request.query,
-      );
-      if (!page) {
-        return reply.code(404).send(errorBody("NOT_FOUND", "User not found."));
+      reply.header("Cache-Control", "no-store");
+      try {
+        const page = await getStats().getMatches(
+          request.params.userId,
+          request.query,
+          request.auth!.userId,
+        );
+        if (!page) {
+          return reply
+            .code(404)
+            .send(errorBody("NOT_FOUND", "User not found."));
+        }
+        return page;
+      } catch (error) {
+        if (error instanceof RecordsPrivateError) {
+          return reply
+            .code(403)
+            .send(errorBody("RECORDS_PRIVATE", error.message));
+        }
+        throw error;
       }
-      return page;
     },
   );
 

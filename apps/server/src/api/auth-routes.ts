@@ -30,9 +30,17 @@ export const userSchema = {
     email: { type: "string" },
     nickname: { type: "string" },
     avatarUrl: { type: ["string", "null"] },
+    recordsPublic: { type: "boolean" },
     createdAt: { type: "string", format: "date-time" },
   },
-  required: ["id", "email", "nickname", "avatarUrl", "createdAt"],
+  required: [
+    "id",
+    "email",
+    "nickname",
+    "avatarUrl",
+    "recordsPublic",
+    "createdAt",
+  ],
 };
 
 export const tokenPairSchema = {

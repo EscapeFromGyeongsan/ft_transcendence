@@ -1,5 +1,6 @@
 import {
   bigint,
+  boolean,
   index,
   pgTable,
   text,
@@ -15,6 +16,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   nickname: varchar("nickname", { length: 32 }).notNull().unique(),
   avatarUrl: text("avatar_url"),
+  recordsPublic: boolean("records_public").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

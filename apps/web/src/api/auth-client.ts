@@ -5,6 +5,7 @@ export interface AuthUser {
   email: string;
   nickname: string;
   avatarUrl: string | null;
+  recordsPublic: boolean;
   createdAt: string;
 }
 
@@ -95,7 +96,9 @@ export function saveOAuthFlowToken(flowToken: string): void {
 export function getOAuthFlowToken(): string | null {
   if (typeof globalThis.window === "undefined") return null;
   try {
-    return globalThis.window.sessionStorage?.getItem(OAUTH_FLOW_TOKEN_KEY) ?? null;
+    return (
+      globalThis.window.sessionStorage?.getItem(OAUTH_FLOW_TOKEN_KEY) ?? null
+    );
   } catch {
     return null;
   }

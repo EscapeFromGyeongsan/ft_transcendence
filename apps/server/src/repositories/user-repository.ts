@@ -1,30 +1,30 @@
 import { eq, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { users } from "../db/schema/users.ts";
-import type { PublicUser } from "./auth-repository.ts";
+import { publicUserColumns, type PublicUser } from "./auth-repository.ts";
+
+/** Fields a signed-in user may change on their own profile. */
+export interface ProfileUpdate {
+  nickname?: string;
+  recordsPublic?: boolean;
+}
 
 /**
- * 닉네임을 바꿉니다.
+ * 전달된 프로필 필드만 하나의 UPDATE로 저장합니다. 닉네임 충돌 시 설정도 저장되지 않습니다.
  *
  * @returns 바뀐 계정 정보. 사용자가 없으면 `undefined`
  * @throws 닉네임 UNIQUE 위반(23505)
  */
-export async function updateNickname(
+export async function updateProfile(
   db: Executor,
   userId: number,
-  nickname: string,
+  changes: ProfileUpdate,
 ): Promise<PublicUser | undefined> {
   const [user] = await db
     .update(users)
-    .set({ nickname, updatedAt: sql`now()` })
+    .set({ ...changes, updatedAt: sql`now()` })
     .where(eq(users.id, userId))
-    .returning({
-      id: users.id,
-      email: users.email,
-      nickname: users.nickname,
-      avatarUrl: users.avatarUrl,
-      createdAt: users.createdAt,
-    });
+    .returning(publicUserColumns);
   return user;
 }
 
@@ -60,12 +60,6 @@ export async function updateAvatarUrl(
     .update(users)
     .set({ avatarUrl, updatedAt: sql`now()` })
     .where(eq(users.id, userId))
-    .returning({
-      id: users.id,
-      email: users.email,
-      nickname: users.nickname,
-      avatarUrl: users.avatarUrl,
-      createdAt: users.createdAt,
-    });
+    .returning(publicUserColumns);
   return user;
 }

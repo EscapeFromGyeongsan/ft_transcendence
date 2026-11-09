@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { register } from "./helpers/accounts.ts";
+import { finishGomoku } from "./helpers/matches.ts";
 
-test("nickname and avatar persist, public profiles hide email, and avatar deletion restores the default", async ({
+test("profile edits persist and records privacy protects real match data while preserving leaderboard and opponent history", async ({
   page,
   browser,
   baseURL,
 }) => {
+  test.setTimeout(90_000);
   const user = await register(page, "profile");
   const nickname = `${user.nickname}_new`;
   await page
@@ -16,6 +18,11 @@ test("nickname and avatar persist, public profiles hide email, and avatar deleti
     page.getByRole("heading", { name: "내 프로필 및 활동" }),
   ).toBeVisible();
   const identity = page.locator(".cbc-profile-identity");
+  const recordsSwitch = page.getByRole("switch", {
+    name: "전적 공개",
+    exact: true,
+  });
+  await expect(recordsSwitch).toBeChecked();
   await expect(
     identity.getByRole("img", { name: `${user.nickname} 기본 프로필 이미지` }),
   ).toBeVisible();
@@ -59,11 +66,12 @@ test("nickname and avatar persist, public profiles hide email, and avatar deleti
     nickname,
   );
   await expect(avatar).toHaveAttribute("src", avatarURL!);
+  await expect(recordsSwitch).toBeChecked();
 
   const outsiderContext = await browser.newContext({ baseURL });
   try {
     const outsider = await outsiderContext.newPage();
-    await register(outsider, "viewer");
+    const viewer = await register(outsider, "viewer");
     await outsider.goto(`/users/${user.id}`);
     await expect(
       outsider.getByRole("heading", {
@@ -78,6 +86,91 @@ test("nickname and avatar persist, public profiles hide email, and avatar deleti
     await expect(
       outsider.getByRole("button", { name: "변경 저장", exact: true }),
     ).toHaveCount(0);
+
+    // Reuse the same two accounts for actual game records and privacy checks.
+    await finishGomoku(page, outsider, [nickname, viewer.nickname]);
+    await Promise.all([page.goto("/me"), outsider.goto("/me")]);
+    await expect(page.locator(".cbc-profile-total")).toContainText("총 1전");
+    await expect(
+      outsider.getByRole("row", { name: new RegExp(nickname) }),
+    ).toHaveCount(1);
+    await recordsSwitch.click();
+    await expect(recordsSwitch).not.toBeChecked();
+    await expect(
+      page.getByText("전적을 비공개로 설정했습니다.", { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(recordsSwitch).not.toBeChecked();
+    await expect(page.locator(".cbc-profile-total")).toContainText("총 1전");
+
+    // A real transport failure must leave the saved setting intact.
+    await page.context().setOffline(true);
+    await recordsSwitch.click();
+    await expect(page.getByRole("alert")).toContainText("네트워크");
+    await expect(recordsSwitch).not.toBeChecked();
+    await page.context().setOffline(false);
+    await page.reload();
+    await expect(recordsSwitch).not.toBeChecked();
+
+    const statsDenied = outsider.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === `/api/users/${user.id}/stats` &&
+        url.searchParams.get("gameType") === "gomoku"
+      );
+    });
+    const matchesDenied = outsider.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/users/${user.id}/matches`,
+    );
+    await outsider
+      .getByRole("row", { name: new RegExp(nickname) })
+      .getByRole("button")
+      .click();
+    for (const response of await Promise.all([statsDenied, matchesDenied])) {
+      expect(response.status()).toBe(403);
+      expect((await response.json()).error.code).toBe("RECORDS_PRIVATE");
+    }
+    await expect(outsider.getByTestId("records-private-notice")).toBeVisible();
+    await expect(
+      outsider.getByRole("heading", {
+        name: `${nickname} 님의 프로필`,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      outsider.locator(".cbc-profile-identity").getByRole("img"),
+    ).toHaveAttribute("src", avatarURL!);
+    await expect(outsider.locator(".cbc-profile-total")).toHaveCount(0);
+    await expect(outsider.getByRole("table")).toHaveCount(0);
+
+    await outsider.goto("/me");
+    await expect(
+      outsider.getByRole("row", { name: new RegExp(nickname) }),
+    ).toHaveCount(1);
+    await outsider
+      .getByRole("button", { name: "리더보드 보기", exact: true })
+      .click();
+    await expect(
+      outsider.getByRole("row", { name: new RegExp(nickname) }),
+    ).toHaveCount(1);
+
+    await recordsSwitch.click();
+    await expect(recordsSwitch).toBeChecked();
+    await page.reload();
+    await expect(recordsSwitch).toBeChecked();
+    await outsider.goto(`/users/${user.id}`);
+    await expect(outsider.getByTestId("records-private-notice")).toHaveCount(0);
+    await expect(outsider.locator(".cbc-profile-total")).toContainText(
+      "총 1전",
+    );
+    await expect(
+      outsider.getByRole("row", { name: new RegExp(viewer.nickname) }),
+    ).toHaveCount(1);
+
+    // Verify avatar deletion does not reset a private setting in the parent UI.
+    await recordsSwitch.click();
+    await expect(recordsSwitch).not.toBeChecked();
   } finally {
     await outsiderContext.close();
   }
@@ -86,6 +179,7 @@ test("nickname and avatar persist, public profiles hide email, and avatar deleti
   await expect(
     identity.getByRole("img", { name: `${nickname} 기본 프로필 이미지` }),
   ).toBeVisible();
+  await expect(recordsSwitch).not.toBeChecked();
   await page.reload();
   await expect(page.getByLabel("닉네임", { exact: true })).toHaveValue(
     nickname,

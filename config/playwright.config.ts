@@ -7,6 +7,8 @@ export default defineConfig({
   testDir: "../tests",
   outputDir: "../test-results",
   fullyParallel: true,
+  // Real games share per-game queues; keep different tests' pairs together.
+  workers: 1,
   use: {
     baseURL,
     trace: "retain-on-failure",

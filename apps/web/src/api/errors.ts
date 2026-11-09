@@ -71,6 +71,9 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   UNSUPPORTED_MEDIA_TYPE: "PNG 또는 JPEG 이미지 파일만 업로드할 수 있습니다.",
   IMAGE_TOO_BIG: "이미지는 가로·세로 1024px 이하여야 합니다.",
   NOT_FOUND: "요청한 정보를 찾을 수 없습니다.",
+  RECORDS_PRIVATE: "이 사용자의 전적은 비공개입니다.",
+  INVALID_RESPONSE:
+    "저장 결과를 확인할 수 없습니다. 새로고침 후 다시 확인해 주세요.",
   RATE_LIMITED: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   SERVICE_UNAVAILABLE:
     "서버 또는 데이터베이스에 일시적으로 연결할 수 없습니다.",

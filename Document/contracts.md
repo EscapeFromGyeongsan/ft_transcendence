@@ -432,7 +432,7 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 ## 11. REST API 상태 코드
 
-서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 아래 표는 2026-10-28 Swagger 출력에서 옮겼다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
+서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 2026-10-28 Swagger 출력을 기준으로, 2026-11-09 [#78](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/78)의 전적 공개 설정과 조회 권한을 반영했다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
 
 ### 11.1 오류 응답 형식
 
@@ -450,6 +450,7 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 |---|---|---|
 | 400 | `BAD_REQUEST` | 본문을 해석할 수 없음 (깨진 JSON, multipart) |
 | 401 | `UNAUTHENTICATED` | token 없음·만료·위조, 폐기·만료된 세션 |
+| 403 | `RECORDS_PRIVATE` | 본인 외 사용자가 비공개 전적·통계 조회 |
 | 413 | `PAYLOAD_TOO_LARGE` | 본문 크기 제한 초과 (JSON 1 MiB, 아바타 2 MiB) |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type |
 | 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패 |
@@ -482,12 +483,31 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 | `GET /api/users/me` | 200 | 401, 500, 503 |
 | `PATCH /api/users/me` | 200 | 400, 401, 409 (`NICKNAME_TAKEN`), 413, 415, 422, 500, 503 |
 | `GET /api/users/{userId}` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
-| `GET /api/users/{userId}/stats` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
-| `GET /api/users/{userId}/matches` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users/{userId}/stats` | 200 | 401, 403 (`RECORDS_PRIVATE`), 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users/{userId}/matches` | 200 | 401, 403 (`RECORDS_PRIVATE`), 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |
 | `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
 | `DELETE /api/users/me/avatar` (PR #15) | 204 | 401, 500, 503 |
 | `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
 
-- 403은 아직 쓰지 않는다. 다른 사용자의 자원을 바꾸는 API가 없고, `me` 경로는 인증된 사용자 자신만 다루기 때문이다.
+- `me` 경로는 인증된 사용자 자신만 다룬다. 전적 공개 권한은 대상 사용자와 인증된 조회자를 비교한다(11.4절).
 - 경기 조회·명령 API는 REST에 없다. 경기는 WebSocket(IF-03, D)으로 다루고, 그 오류는 8절 `GameError`를 쓴다.
+
+### 11.4 전적 공개 설정과 조회 권한 (FR-PRO-04, DEC-05)
+
+`users.records_public`은 `boolean NOT NULL DEFAULT true`다. 새 migration `0004_records_public.sql`이 기존 사용자도 공개 상태로 유지한다. 본인 계정 DTO(`id`, `email`, `nickname`, `avatarUrl`, `createdAt`)에 필수 boolean `recordsPublic`을 추가한다. 가입 응답의 `user`, `GET /api/users/me`, 프로필 변경 및 아바타 업로드 응답이 같은 DTO를 사용한다. 로그인·refresh 응답은 기존 토큰 형식을 유지한다.
+
+`PATCH /api/users/me`는 `nickname`과 `recordsPublic` 중 하나 이상을 받으며 두 필드를 함께 보낼 수 있다.
+
+```json
+{ "recordsPublic": false }
+```
+
+- `nickname`은 기존 2~32자 검증을 유지한다. `recordsPublic`은 JSON boolean만 허용하며 문자열·숫자·null은 422 `VALIDATION_ERROR`다. 빈 객체와 알 수 없는 필드도 422다. 인증은 본문 검증보다 먼저 수행한다.
+- 요청에 없는 필드는 유지한다. 두 필드는 하나의 UPDATE로 저장하므로 닉네임 충돌(409 `NICKNAME_TAKEN`) 시 공개 설정도 바뀌지 않는다. 성공 응답은 저장된 본인 계정 DTO다.
+- `/stats`와 `/matches`는 인증된 조회자의 ID를 서비스에 전달한다. 대상이 없으면 404, 본인이면 공개 설정과 관계없이 조회할 수 있다. 다른 사용자가 비공개 대상을 조회하면 통계·경기 데이터 없이 403 `RECORDS_PRIVATE`를 반환한다. 게임 필터·페이지 조건과 관계없이 같은 권한 검사를 적용한다.
+- 권한 확인과 전적 읽기는 한 트랜잭션에서 대상 사용자 행의 공유 잠금을 유지한다. 공개 설정 변경과 경합하면 DB에서 순서를 정하며, 변경이 먼저 완료된 조회는 변경된 설정으로 판단한다. 두 조회 API의 응답에는 `Cache-Control: no-store`를 붙인다.
+- 기본 프로필(`id`, `nickname`, `avatarUrl`), 리더보드, 상대방이 본인 `/matches`에서 보는 상대 이름은 공개 설정의 영향을 받지 않는다. 다른 사용자에게 이메일이나 `recordsPublic`을 추가 공개하지 않는다.
+- 내 프로필 토글은 저장 응답을 확인한 뒤 반영한다. 실패 시 기존 값을 유지하며 오류를 표시한다. 타인 프로필에서 `RECORDS_PRIVATE`를 받으면 통계·업적·최근 대국 대신 비공개 안내를 표시하고 이전 조회 데이터를 비운다.
+
+SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 별도다. 실제 PostgreSQL·두 세션 브라우저 검증은 [검증 기록](profile-records-privacy-validation.md)을 따른다.

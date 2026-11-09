@@ -1,4 +1,5 @@
 import { authApi, type AuthUser, type RequestOptions } from "./auth-client.ts";
+import { ApiError } from "./errors.ts";
 
 export type GameType = "gomoku" | "othello";
 export type MatchResult = "win" | "loss" | "draw" | "void";
@@ -76,6 +77,22 @@ export function createProfileApi(request: RequestFn) {
         method: "PATCH",
         body: { nickname },
       }),
+
+    /** Saves the setting and accepts only a response confirming the requested value. */
+    updateRecordsPublic: async (recordsPublic: boolean) => {
+      const user = await request<AuthUser>("/api/users/me", {
+        method: "PATCH",
+        body: { recordsPublic },
+      });
+      if (user.recordsPublic !== recordsPublic) {
+        throw new ApiError(
+          502,
+          "INVALID_RESPONSE",
+          "The records setting was not confirmed.",
+        );
+      }
+      return user;
+    },
 
     /** 아바타 업로드·교체 (`PUT /api/users/me/avatar`, multipart `file`). */
     uploadAvatar: (file: File | Blob) => {

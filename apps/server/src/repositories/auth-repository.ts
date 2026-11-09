@@ -2,11 +2,12 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { refreshTokens, sessions, users } from "../db/schema/users.ts";
 
-const publicUserColumns = {
+export const publicUserColumns = {
   id: users.id,
   email: users.email,
   nickname: users.nickname,
   avatarUrl: users.avatarUrl,
+  recordsPublic: users.recordsPublic,
   createdAt: users.createdAt,
 };
 
@@ -16,6 +17,7 @@ export type PublicUser = {
   email: string;
   nickname: string;
   avatarUrl: string | null;
+  recordsPublic: boolean;
   createdAt: Date;
 };
 

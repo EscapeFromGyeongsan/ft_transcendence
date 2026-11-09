@@ -5,6 +5,7 @@ import {
   type TokenStorage,
 } from "./auth-client.ts";
 import { createProfileApi } from "./profile-api.ts";
+import { ApiError, getErrorMessage } from "./errors.ts";
 import {
   avatarInitial,
   formatMatchDate,
@@ -43,6 +44,45 @@ function setup() {
 }
 
 describe("profile API client", () => {
+  it("recordsPublic false를 JSON으로 보내고 서버가 확인한 값을 돌려준다", async () => {
+    const { fetchMock, api } = setup();
+    fetchMock.mockResolvedValueOnce(
+      json(200, { id: 1, nickname: "owner", recordsPublic: false }),
+    );
+    expect((await api.updateRecordsPublic(false)).recordsPublic).toBe(false);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/users/me");
+    expect(init?.method).toBe("PATCH");
+    expect(init?.body).toBe(JSON.stringify({ recordsPublic: false }));
+    expect((init?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer access",
+    );
+  });
+
+  it("설정이 누락되거나 무시된 성공 응답을 저장 완료로 처리하지 않는다", async () => {
+    const { fetchMock, api } = setup();
+    for (const recordsPublic of [undefined, true, "false"]) {
+      fetchMock.mockResolvedValueOnce(json(200, { id: 1, recordsPublic }));
+      await expect(api.updateRecordsPublic(false)).rejects.toMatchObject({
+        code: "INVALID_RESPONSE",
+      });
+    }
+  });
+
+  it("비공개 전적 오류 코드를 보존하고 한국어 안내로 변환한다", async () => {
+    const { fetchMock, api } = setup();
+    fetchMock.mockResolvedValueOnce(
+      json(403, { error: { code: "RECORDS_PRIVATE", message: "Private" } }),
+    );
+    await expect(api.getStats(2, "gomoku")).rejects.toMatchObject({
+      status: 403,
+      code: "RECORDS_PRIVATE",
+    });
+    expect(
+      getErrorMessage(new ApiError(403, "RECORDS_PRIVATE", "Private")),
+    ).toBe("이 사용자의 전적은 비공개입니다.");
+  });
+
   it("PATCH /api/users/me로 닉네임을 JSON 본문으로 변경한다", async () => {
     const { fetchMock, api } = setup();
     fetchMock.mockResolvedValueOnce(
