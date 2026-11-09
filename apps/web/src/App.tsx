@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { GameType } from "@cafe/game-contracts";
-import { authApi, isTokenPair, type AuthUser } from "./api/auth-client.ts";
+import {
+  authApi,
+  isOAuthLinkedResult,
+  isTokenPair,
+  type AuthUser,
+} from "./api/auth-client.ts";
 import {
   getAuthFieldErrors,
   getErrorMessage,
@@ -8,6 +13,7 @@ import {
 } from "./api/errors.ts";
 import { GomokuMatchView } from "./game/GomokuMatchView.tsx";
 import { MatchmakingView } from "./game/MatchmakingView.tsx";
+import { OthelloMatchView } from "./game/OthelloMatchView.tsx";
 import {
   applyConnectionPhase,
   applyGameAck,
@@ -22,6 +28,20 @@ import {
   markCommandPending,
   type GomokuClientState,
 } from "./game/gomoku-state.ts";
+import {
+  applyOthelloConnectionPhase,
+  applyOthelloGameAck,
+  applyOthelloGameError,
+  applyOthelloIncomingSnapshot,
+  applyOthelloPlayerDisconnected,
+  applyOthelloPlayerReconnected,
+  applyOthelloSessionReplaced,
+  buildOthelloPlaceCommand,
+  buildOthelloResignCommand,
+  createInitialOthelloClientState,
+  markOthelloCommandPending,
+  type OthelloClientState,
+} from "./game/othello-state.ts";
 import {
   GAME_CATALOG_LIST,
   applyMatchmakingError,
@@ -42,18 +62,47 @@ import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
 import { Avatar } from "./profile/Avatar.tsx";
 import { LeaderboardView } from "./profile/LeaderboardView.tsx";
 import { ProfileView } from "./profile/ProfileView.tsx";
+import {
+  LegalDocumentView,
+  NotFoundView,
+} from "./legal/LegalDocumentView.tsx";
+import {
+  parseAppRoute,
+  resolvePathForScreen,
+  type LegalDocKind,
+  type ParsedAppRoute,
+} from "./legal/legal-routing.ts";
 
 type ScreenView =
   | "login"
   | "register"
   | "twoFactor"
+  | "oauthCallback"
   | "lobby"
   | "matchmaking"
   | "gomoku"
+  | "othello"
   | "profile"
-  | "leaderboard";
+  | "leaderboard"
+  | "terms"
+  | "privacy"
+  | "notFound";
 
 const ACTIVE_MATCH_STORAGE_KEY = "cyber_board_cafe.active_match_id";
+
+/**
+ * 현재 브라우저 주소창의 경로·쿼리·해시를 파싱합니다.
+ */
+function parseInitialAppRoute(): ParsedAppRoute {
+  if (typeof globalThis.window === "undefined" || !globalThis.window.location) {
+    return { kind: "lobby" };
+  }
+  return parseAppRoute(
+    globalThis.window.location.pathname,
+    globalThis.window.location.search,
+    globalThis.window.location.hash,
+  );
+}
 
 /**
  * 현재 URL 경로(/match/:matchId) 또는 쿼리(?matchId=...)에서 matchId를 추출합니다.
@@ -183,10 +232,27 @@ function EyeIcon({ visible }: { visible: boolean }) {
  * 사이버 보드게임 카페의 인증(회원가입·로그인·2FA·토큰 갱신·로그아웃) 및 로비 진입 화면을 관리하는 최상위 컴포넌트입니다.
  */
 export function App() {
-  const [view, setView] = useState<ScreenView>("login");
+  const [notFoundPath, setNotFoundPath] = useState<string>(() => {
+    const initial = parseInitialAppRoute();
+    return initial.kind === "notFound" ? initial.pathname : "/";
+  });
+  const [view, setView] = useState<ScreenView>(() => {
+    const initial = parseInitialAppRoute();
+    if (initial.kind === "terms") return "terms";
+    if (initial.kind === "privacy") return "privacy";
+    if (initial.kind === "register") return "register";
+    if (initial.kind === "oauthCallback") return "oauthCallback";
+    if (initial.kind === "notFound") return "notFound";
+    return "login";
+  });
+  const [previousViewBeforeLegal, setPreviousViewBeforeLegal] =
+    useState<ScreenView | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const avatarTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+  const lastLogoutTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -231,6 +297,9 @@ export function App() {
   const [gomokuState, setGomokuState] = useState<GomokuClientState>(() =>
     createInitialGomokuClientState(null, parseInitialMatchId()),
   );
+  const [othelloState, setOthelloState] = useState<OthelloClientState>(() =>
+    createInitialOthelloClientState(null, parseInitialMatchId()),
+  );
 
   function resetMessages() {
     setErrorMessage(null);
@@ -246,6 +315,7 @@ export function App() {
     if (
       next !== "matchmaking" &&
       next !== "gomoku" &&
+      next !== "othello" &&
       isMatchmakingBusy(matchmakingState)
     ) {
       wsClientRef.current?.leaveQueue();
@@ -254,7 +324,66 @@ export function App() {
     setView(next);
   }
 
-  // 화면 전환 시 브라우저 주소창 경로(/, /matching, /match/:matchId)를 동기화합니다.
+  function openLegalDoc(doc: LegalDocKind) {
+    resetMessages();
+    setAccountMenuOpen(false);
+    setLogoutModalOpen(false);
+    setView((current) => {
+      if (
+        current !== "terms" &&
+        current !== "privacy" &&
+        current !== "notFound"
+      ) {
+        setPreviousViewBeforeLegal(current);
+      }
+      return doc;
+    });
+  }
+
+  function handleBackFromLegal() {
+    resetMessages();
+    if (
+      previousViewBeforeLegal &&
+      previousViewBeforeLegal !== "terms" &&
+      previousViewBeforeLegal !== "privacy" &&
+      previousViewBeforeLegal !== "notFound"
+    ) {
+      const target = previousViewBeforeLegal;
+      setPreviousViewBeforeLegal(null);
+      setView(target);
+      return;
+    }
+    setView(currentUser ? "lobby" : "login");
+  }
+
+  // 모달·드롭다운 메뉴가 열려 있을 때 Escape 키 입력 시 닫고 포커스를 트리거 버튼으로 복원합니다 (NFR-UX-02).
+  useEffect(() => {
+    if (!logoutModalOpen && !accountMenuOpen) {
+      return;
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (logoutModalOpen) {
+          if (!submitting) {
+            setLogoutModalOpen(false);
+            lastLogoutTriggerRef.current?.focus();
+          }
+          return;
+        }
+        if (accountMenuOpen) {
+          setAccountMenuOpen(false);
+          avatarTriggerBtnRef.current?.focus();
+        }
+      }
+    }
+    globalThis.window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      globalThis.window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [logoutModalOpen, accountMenuOpen, submitting]);
+
+  // 화면 전환 시 브라우저 주소창 경로(/, /terms, /privacy, /me, /leaderboard, /matching, /match/:matchId)를 동기화합니다.
   useEffect(() => {
     if (
       typeof globalThis.window === "undefined" ||
@@ -263,14 +392,15 @@ export function App() {
     ) {
       return;
     }
-    let targetPath: string | null = null;
-    if (view === "gomoku" && gomokuState.matchId !== null) {
-      targetPath = `/match/${gomokuState.matchId}`;
-    } else if (view === "matchmaking") {
-      targetPath = "/matching";
-    } else if (view === "lobby") {
-      targetPath = "/";
+    if (initializing && view !== "terms" && view !== "privacy") {
+      return;
     }
+    const targetPath = resolvePathForScreen({
+      view,
+      matchId: view === "othello" ? othelloState.matchId : gomokuState.matchId,
+      profileUserId,
+      currentUserId: currentUser?.id ?? null,
+    });
     if (
       targetPath !== null &&
       globalThis.window.location?.pathname !== targetPath
@@ -281,11 +411,109 @@ export function App() {
         // 테스트·제한 환경에서 history.replaceState 예외 무시
       }
     }
-  }, [view, gomokuState.matchId]);
+  }, [
+    initializing,
+    view,
+    gomokuState.matchId,
+    othelloState.matchId,
+    profileUserId,
+    currentUser?.id,
+  ]);
 
-  // 로그인된 사용자의 viewerUserId를 gomokuState와 동기화합니다.
+  // 브라우저 뒤로가기/앞으로가기(popstate) 시 라우트 상태를 동기화합니다.
+  useEffect(() => {
+    if (
+      typeof globalThis.window === "undefined" ||
+      typeof globalThis.window.addEventListener !== "function"
+    ) {
+      return;
+    }
+    function handlePopState() {
+      const route = parseInitialAppRoute();
+      switch (route.kind) {
+        case "terms":
+          setView("terms");
+          break;
+        case "privacy":
+          setView("privacy");
+          break;
+        case "register":
+          setView(currentUser ? "lobby" : "register");
+          break;
+        case "login":
+          setView(currentUser ? "lobby" : "login");
+          break;
+        case "twoFactor":
+          setView(
+            challengeToken ? "twoFactor" : currentUser ? "lobby" : "login",
+          );
+          break;
+        case "oauthCallback":
+          setView("oauthCallback");
+          break;
+        case "lobby":
+          setView(currentUser ? "lobby" : "login");
+          break;
+        case "matchmaking":
+          setView(currentUser ? "matchmaking" : "login");
+          break;
+        case "match":
+          if (currentUser) {
+            if (othelloState.snapshot?.matchId === route.matchId) {
+              setOthelloState((prev) => ({
+                ...prev,
+                matchId: route.matchId,
+              }));
+              setView("othello");
+            } else {
+              setGomokuState((prev) => ({
+                ...prev,
+                matchId: route.matchId,
+              }));
+              setView("gomoku");
+            }
+          } else {
+            setView("login");
+          }
+          break;
+        case "myProfile":
+          if (currentUser) {
+            setProfileUserId(currentUser.id);
+            setView("profile");
+          } else {
+            setView("login");
+          }
+          break;
+        case "userProfile":
+          if (currentUser) {
+            setProfileUserId(route.userId);
+            setView("profile");
+          } else {
+            setView("login");
+          }
+          break;
+        case "leaderboard":
+          setView(currentUser ? "leaderboard" : "login");
+          break;
+        case "notFound":
+          setNotFoundPath(route.pathname);
+          setView("notFound");
+          break;
+      }
+    }
+    globalThis.window.addEventListener("popstate", handlePopState);
+    return () => {
+      globalThis.window.removeEventListener("popstate", handlePopState);
+    };
+  }, [currentUser, challengeToken]);
+
+  // 로그인된 사용자의 viewerUserId를 gomokuState 및 othelloState와 동기화합니다.
   useEffect(() => {
     setGomokuState((prev) => ({
+      ...prev,
+      viewerUserId: currentUser?.id ?? null,
+    }));
+    setOthelloState((prev) => ({
       ...prev,
       viewerUserId: currentUser?.id ?? null,
     }));
@@ -293,9 +521,16 @@ export function App() {
 
   // 대국 참가자(흑·백) userId에 대해 GET /api/users/:userId로 공개 닉네임을 조회합니다.
   useEffect(() => {
-    const blackId = gomokuState.snapshot?.players.black ?? null;
-    const whiteId = gomokuState.snapshot?.players.white ?? null;
-    const candidateIds = [blackId, whiteId].filter(
+    const gomokuBlackId = gomokuState.snapshot?.players.black ?? null;
+    const gomokuWhiteId = gomokuState.snapshot?.players.white ?? null;
+    const othelloBlackId = othelloState.snapshot?.players.black ?? null;
+    const othelloWhiteId = othelloState.snapshot?.players.white ?? null;
+    const candidateIds = [
+      gomokuBlackId,
+      gomokuWhiteId,
+      othelloBlackId,
+      othelloWhiteId,
+    ].filter(
       (id): id is number => id !== null && Number.isInteger(id) && id > 0,
     );
 
@@ -336,6 +571,8 @@ export function App() {
     currentUser,
     gomokuState.snapshot?.players.black,
     gomokuState.snapshot?.players.white,
+    othelloState.snapshot?.players.black,
+    othelloState.snapshot?.players.white,
     playerNicknames,
   ]);
 
@@ -366,6 +603,9 @@ export function App() {
           setGomokuState((prev) =>
             applyConnectionPhase(prev, phase, reconnectAttempt),
           );
+          setOthelloState((prev) =>
+            applyOthelloConnectionPhase(prev, phase, reconnectAttempt),
+          );
           setMatchmakingState((prev) =>
             applyMatchmakingWsPhaseChange(prev, phase),
           );
@@ -388,18 +628,35 @@ export function App() {
             viewerUserId: userId,
             matchId: targetMatchId ?? prev.matchId,
           }));
+          setOthelloState((prev) => ({
+            ...prev,
+            viewerUserId: userId,
+            matchId: targetMatchId ?? prev.matchId,
+          }));
           if (targetMatchId !== null) {
             saveActiveMatchIdToStorage(targetMatchId);
             client.setSubscribedMatchId(targetMatchId);
             setMatchmakingState((prev) => applyQueueLeft(prev));
-            setView("gomoku");
+            setView((current) =>
+              current === "terms" ||
+              current === "privacy" ||
+              current === "oauthCallback" ||
+              current === "notFound" ||
+              current === "othello"
+                ? current
+                : "gomoku",
+            );
           } else {
             saveActiveMatchIdToStorage(null);
           }
         },
         onQueueJoined({ gameType }) {
           setMatchmakingState((prev) => applyQueueJoined(prev, { gameType }));
-          setView((current) => (current === "gomoku" ? current : "matchmaking"));
+          setView((current) =>
+            current === "gomoku" || current === "othello"
+              ? current
+              : "matchmaking",
+          );
         },
         onQueueLeft() {
           setMatchmakingState((prev) => applyQueueLeft(prev));
@@ -411,40 +668,67 @@ export function App() {
           setMatchmakingState((prev) =>
             applyQueueMatched(prev, { matchId, gameType }),
           );
-          setGomokuState((prev) => ({
-            ...createInitialGomokuClientState(
-              prev.viewerUserId ?? currentUserId,
-              matchId,
-            ),
-            connectionPhase: "connected",
-          }));
-          setView("gomoku");
+          if (gameType === "othello") {
+            setOthelloState((prev) => ({
+              ...createInitialOthelloClientState(
+                prev.viewerUserId ?? currentUserId,
+                matchId,
+              ),
+              connectionPhase: "connected",
+            }));
+            setView("othello");
+          } else {
+            setGomokuState((prev) => ({
+              ...createInitialGomokuClientState(
+                prev.viewerUserId ?? currentUserId,
+                matchId,
+              ),
+              connectionPhase: "connected",
+            }));
+            setView("gomoku");
+          }
         },
         onMatchSnapshot(snapshot) {
           saveActiveMatchIdToStorage(
             snapshot.status === "finished" ? null : snapshot.matchId,
           );
-          setGomokuState((prev) =>
-            applyIncomingSnapshot(prev, snapshot, "match.snapshot"),
-          );
-          setView("gomoku");
+          if (snapshot.gameType === "othello") {
+            setOthelloState((prev) =>
+              applyOthelloIncomingSnapshot(prev, snapshot, "match.snapshot"),
+            );
+            setView("othello");
+          } else {
+            setGomokuState((prev) =>
+              applyIncomingSnapshot(prev, snapshot, "match.snapshot"),
+            );
+            setView("gomoku");
+          }
         },
         onGameUpdated(snapshot) {
           saveActiveMatchIdToStorage(
             snapshot.status === "finished" ? null : snapshot.matchId,
           );
-          setGomokuState((prev) =>
-            applyIncomingSnapshot(prev, snapshot, "game.updated"),
-          );
+          if (snapshot.gameType === "othello") {
+            setOthelloState((prev) =>
+              applyOthelloIncomingSnapshot(prev, snapshot, "game.updated"),
+            );
+          } else {
+            setGomokuState((prev) =>
+              applyIncomingSnapshot(prev, snapshot, "game.updated"),
+            );
+          }
         },
         onGameAck(payload) {
           setGomokuState((prev) => applyGameAck(prev, payload));
+          setOthelloState((prev) => applyOthelloGameAck(prev, payload));
         },
         onGameError(payload) {
           setGomokuState((prev) => applyGameError(prev, payload));
+          setOthelloState((prev) => applyOthelloGameError(prev, payload));
         },
         onError(payload) {
           setGomokuState((prev) => applyGameError(prev, payload));
+          setOthelloState((prev) => applyOthelloGameError(prev, payload));
           setMatchmakingState((prev) => applyMatchmakingError(prev, payload));
           if (payload.code !== "ALREADY_MATCHED") {
             setView((current) =>
@@ -454,12 +738,19 @@ export function App() {
         },
         onPlayerDisconnected(payload) {
           setGomokuState((prev) => applyPlayerDisconnected(prev, payload));
+          setOthelloState((prev) =>
+            applyOthelloPlayerDisconnected(prev, payload),
+          );
         },
         onPlayerReconnected(payload) {
           setGomokuState((prev) => applyPlayerReconnected(prev, payload));
+          setOthelloState((prev) =>
+            applyOthelloPlayerReconnected(prev, payload),
+          );
         },
         onSessionReplaced({ matchId }) {
           setGomokuState((prev) => applySessionReplaced(prev, matchId));
+          setOthelloState((prev) => applyOthelloSessionReplaced(prev, matchId));
         },
       },
     });
@@ -615,10 +906,134 @@ export function App() {
     handleStartMatchmaking("gomoku");
   }
 
+  function handlePlaceOthelloDisc(row: number, col: number) {
+    const snapshot = othelloState.snapshot;
+    if (!snapshot) return;
+    const command = buildOthelloPlaceCommand(
+      snapshot.matchId,
+      snapshot.stateVersion,
+      row,
+      col,
+    );
+    setOthelloState((prev) => markOthelloCommandPending(prev, command));
+    wsClientRef.current?.sendGameCommand(command);
+  }
+
+  function handleResignOthello() {
+    const snapshot = othelloState.snapshot;
+    if (!snapshot) return;
+    const command = buildOthelloResignCommand(
+      snapshot.matchId,
+      snapshot.stateVersion,
+    );
+    setOthelloState((prev) => markOthelloCommandPending(prev, command));
+    wsClientRef.current?.sendGameCommand(command);
+  }
+
+  function handleDismissOthelloError() {
+    setOthelloState((prev) => ({
+      ...prev,
+      gameError: null,
+    }));
+  }
+
+  function handleBackToLobbyFromOthello() {
+    const activeMatchId = othelloState.matchId;
+    if (
+      activeMatchId !== null &&
+      othelloState.snapshot?.status === "finished"
+    ) {
+      saveActiveMatchIdToStorage(null);
+      wsClientRef.current?.unsubscribeMatch(activeMatchId);
+      wsClientRef.current?.setSubscribedMatchId(null);
+    }
+    switchView("lobby");
+  }
+
+  function handlePlayAgainOthello() {
+    const activeMatchId = othelloState.matchId;
+    if (activeMatchId !== null) {
+      saveActiveMatchIdToStorage(null);
+      wsClientRef.current?.unsubscribeMatch(activeMatchId);
+      wsClientRef.current?.setSubscribedMatchId(null);
+    }
+    handleStartMatchmaking("othello");
+  }
+
   useEffect(() => {
     let active = true;
+    const initialRoute = parseInitialAppRoute();
+
+    if (initialRoute.kind === "oauthCallback") {
+      setView("oauthCallback");
+      setInitializing(false);
+      if (initialRoute.error || !initialRoute.code || !initialRoute.state) {
+        setErrorMessage(
+          initialRoute.error
+            ? `42 인증이 취소되었거나 실패했습니다 (${initialRoute.error}).`
+            : "42 인증 응답 파라미터(code, state)가 누락되었습니다.",
+        );
+        return;
+      }
+
+      setSubmitting(true);
+      authApi
+        .completeOAuth42Callback(
+          { code: initialRoute.code, state: initialRoute.state },
+          true,
+        )
+        .then(async (result) => {
+          if (!active) return;
+          if (isOAuthLinkedResult(result)) {
+            const me = await authApi.getMe();
+            if (!active) return;
+            setCurrentUser(me);
+            setProfileUserId(me.id);
+            setView("profile");
+            setNoticeMessage(
+              "42 Intra 계정이 현재 계정에 성공적으로 연결되었습니다.",
+            );
+            return;
+          }
+          if (!isTokenPair(result)) {
+            setChallengeToken(result.challengeToken);
+            setTwoFactorCode("");
+            setView("twoFactor");
+            setNoticeMessage(
+              "42 Intra 인증이 확인되었습니다. 2단계 인증 코드를 입력해 주세요.",
+            );
+            return;
+          }
+          const me = await authApi.getMe();
+          if (!active) return;
+          setCurrentUser(me);
+          setView("lobby");
+          setNoticeMessage("42 Intra 계정으로 로그인되었습니다.");
+        })
+        .catch((error) => {
+          if (!active) return;
+          setErrorMessage(getErrorMessage(error));
+        })
+        .finally(() => {
+          if (active) setSubmitting(false);
+        });
+      return () => {
+        active = false;
+      };
+    }
+
     const savedTokens = authApi.storage.getTokens();
     if (!savedTokens) {
+      if (initialRoute.kind === "terms") {
+        setView("terms");
+      } else if (initialRoute.kind === "privacy") {
+        setView("privacy");
+      } else if (initialRoute.kind === "register") {
+        setView("register");
+      } else if (initialRoute.kind === "notFound") {
+        setNotFoundPath(initialRoute.pathname);
+        setView("notFound");
+      }
       setInitializing(false);
       return;
     }
@@ -630,14 +1045,49 @@ export function App() {
       .then((user) => {
         if (!active) return;
         setCurrentUser(user);
-        setView(resumedMatchId !== null ? "gomoku" : "lobby");
+        setView((current) => {
+          if (
+            current === "terms" ||
+            current === "privacy" ||
+            current === "notFound"
+          ) {
+            return current;
+          }
+          if (initialRoute.kind === "terms") return "terms";
+          if (initialRoute.kind === "privacy") return "privacy";
+          if (initialRoute.kind === "notFound") {
+            setNotFoundPath(initialRoute.pathname);
+            return "notFound";
+          }
+          if (initialRoute.kind === "myProfile") {
+            setProfileUserId(user.id);
+            return "profile";
+          }
+          if (initialRoute.kind === "userProfile") {
+            setProfileUserId(initialRoute.userId);
+            return "profile";
+          }
+          if (initialRoute.kind === "leaderboard") {
+            return "leaderboard";
+          }
+          if (initialRoute.kind === "matchmaking") {
+            return "matchmaking";
+          }
+          return resumedMatchId !== null ? "gomoku" : "lobby";
+        });
       })
       .catch(() => {
         if (!active) return;
         authApi.storage.clearTokens();
         saveActiveMatchIdToStorage(null);
         setCurrentUser(null);
-        setView("login");
+        setView((current) =>
+          current === "terms" ||
+          current === "privacy" ||
+          current === "notFound"
+            ? current
+            : "login",
+        );
       })
       .finally(() => {
         if (active) setInitializing(false);
@@ -647,6 +1097,24 @@ export function App() {
       active = false;
     };
   }, []);
+
+  async function handleOAuth42Login() {
+    resetMessages();
+    setSubmitting(true);
+    try {
+      const { authorizeUrl } = await authApi.startOAuth42Login();
+      if (
+        typeof globalThis.window !== "undefined" &&
+        globalThis.window.location
+      ) {
+        globalThis.window.location.assign(authorizeUrl);
+      }
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -826,8 +1294,12 @@ export function App() {
           (view === "lobby" ||
             view === "matchmaking" ||
             view === "gomoku" ||
+            view === "othello" ||
             view === "profile" ||
-            view === "leaderboard") ? (
+            view === "leaderboard" ||
+            view === "terms" ||
+            view === "privacy" ||
+            view === "notFound") ? (
             <div className="cbc-account-area">
               <span className="cbc-security-pill">
                 <span className="cbc-pulse-dot" />
@@ -840,6 +1312,7 @@ export function App() {
                       : "동기화 중"}
               </span>
               <button
+                ref={avatarTriggerBtnRef}
                 type="button"
                 className="cbc-avatar-trigger"
                 aria-expanded={accountMenuOpen}
@@ -962,6 +1435,7 @@ export function App() {
                     className="cbc-dropdown-btn is-danger"
                     role="menuitem"
                     onClick={() => {
+                      lastLogoutTriggerRef.current = avatarTriggerBtnRef.current;
                       setAccountMenuOpen(false);
                       setLogoutModalOpen(true);
                     }}
@@ -989,7 +1463,72 @@ export function App() {
 
       {/* Main Content */}
       <main className="cbc-main">
-        {initializing ? (
+        {view === "terms" || view === "privacy" ? (
+          <LegalDocumentView
+            activeDoc={view}
+            onSelectDoc={(doc) => openLegalDoc(doc)}
+            onBack={handleBackFromLegal}
+            backLabel={
+              previousViewBeforeLegal === "register"
+                ? "회원가입 화면으로 돌아가기"
+                : previousViewBeforeLegal === "login"
+                  ? "로그인 화면으로 돌아가기"
+                  : currentUser
+                    ? "이전 화면으로 돌아가기"
+                    : "로그인 화면으로 돌아가기"
+            }
+          />
+        ) : view === "notFound" ? (
+          <NotFoundView
+            pathname={notFoundPath}
+            isAuthenticated={Boolean(currentUser)}
+            onNavigateHome={() => switchView(currentUser ? "lobby" : "login")}
+          />
+        ) : view === "oauthCallback" ? (
+          <div className="cbc-stage" data-testid="oauth-callback-view">
+            <div className="cbc-login-card" style={{ textAlign: "center" }}>
+              <span className="cbc-eyebrow">42 INTRA OAUTH 2.0</span>
+              <h1
+                className="cbc-heading-login"
+                style={{ marginTop: "0.375rem" }}
+              >
+                {errorMessage
+                  ? "42 계정 인증을 완료하지 못했습니다"
+                  : "42 Intra 인증 처리 중..."}
+              </h1>
+              {errorMessage ? (
+                <>
+                  <div
+                    className="cbc-error-banner"
+                    role="alert"
+                    style={{ marginTop: "1rem", textAlign: "left" }}
+                  >
+                    <span>{errorMessage}</span>
+                  </div>
+                  <div style={{ marginTop: "1.25rem" }}>
+                    <button
+                      type="button"
+                      className="cbc-btn-primary"
+                      data-testid="oauth-callback-return-btn"
+                      onClick={() =>
+                        switchView(currentUser ? "profile" : "login")
+                      }
+                    >
+                      {currentUser
+                        ? "내 프로필로 돌아가기"
+                        : "로그인 화면으로 돌아가기"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="cbc-subheading" style={{ marginTop: "0.5rem" }}>
+                  보안 상태 토큰(state·flowToken)을 검증하고 세션을 연결하는
+                  중입니다...
+                </p>
+              )}
+            </div>
+          </div>
+        ) : initializing ? (
           <div className="cbc-login-card" style={{ textAlign: "center" }}>
             <h1 className="cbc-heading-login">사이버 보드게임 카페</h1>
             <p className="cbc-subheading">인증 세션을 확인하는 중입니다...</p>
@@ -1168,6 +1707,23 @@ export function App() {
                   </svg>
                 </button>
               </form>
+
+              <div className="cbc-oauth-divider">
+                <span>또는 외부 인증으로 로그인</span>
+              </div>
+
+              <button
+                type="button"
+                className="cbc-btn-secondary cbc-btn-oauth42"
+                disabled={submitting}
+                data-testid="oauth-42-login-btn"
+                onClick={handleOAuth42Login}
+              >
+                <span className="cbc-oauth42-badge" aria-hidden="true">
+                  42
+                </span>
+                <span>42 Intra 계정으로 계속하기</span>
+              </button>
 
               <div className="cbc-card-footer-switch">
                 <span>아직 계정이 없으신가요?</span>{" "}
@@ -1484,17 +2040,38 @@ export function App() {
                         if (errorMessage) resetMessages();
                       }}
                     />
-                    <label
-                      htmlFor="agree-terms"
-                      style={{
-                        fontSize: "14px",
-                        lineHeight: "20px",
-                        cursor: "pointer",
-                        userSelect: "none",
-                      }}
-                    >
-                      <span>이용약관 및 개인정보처리방침에 동의합니다</span>
-                    </label>
+                    <div className="cbc-terms-copy-wrap">
+                      <label
+                        htmlFor="agree-terms"
+                        style={{
+                          fontSize: "14px",
+                          lineHeight: "20px",
+                          cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                      >
+                        <span>이용약관 및 개인정보처리방침에 동의합니다</span>
+                      </label>
+                      <div className="cbc-terms-inline-links">
+                        <button
+                          type="button"
+                          className="cbc-link cbc-terms-inline-btn"
+                          data-testid="signup-open-terms"
+                          onClick={() => openLegalDoc("terms")}
+                        >
+                          이용약관 전문 보기
+                        </button>
+                        <span aria-hidden="true">·</span>
+                        <button
+                          type="button"
+                          className="cbc-link cbc-terms-inline-btn"
+                          data-testid="signup-open-privacy"
+                          onClick={() => openLegalDoc("privacy")}
+                        >
+                          개인정보처리방침 전문 보기
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {errorMessage && (
@@ -1631,6 +2208,18 @@ export function App() {
             onPlayAgain={handlePlayAgainGomoku}
             onBackToLobby={handleBackToLobbyFromGomoku}
           />
+        ) : view === "othello" ? (
+          <OthelloMatchView
+            state={othelloState}
+            viewerNickname={currentUser?.nickname}
+            playerNicknames={playerNicknames}
+            onPlaceDisc={handlePlaceOthelloDisc}
+            onResign={handleResignOthello}
+            onReconnect={handleReconnectGomoku}
+            onDismissError={handleDismissOthelloError}
+            onPlayAgain={handlePlayAgainOthello}
+            onBackToLobby={handleBackToLobbyFromOthello}
+          />
         ) : (
           /* Authenticated Lobby View (04_home_lobby + 20_logout_modal) */
           <div className="cbc-lobby-container" data-testid="lobby-view">
@@ -1740,7 +2329,10 @@ export function App() {
                   type="button"
                   className="cbc-btn-secondary"
                   style={{ width: "auto" }}
-                  onClick={() => setLogoutModalOpen(true)}
+                  onClick={(e) => {
+                    lastLogoutTriggerRef.current = e.currentTarget;
+                    setLogoutModalOpen(true);
+                  }}
                 >
                   로그아웃
                 </button>
@@ -1835,6 +2427,20 @@ export function App() {
                         )}
                       </div>
 
+                      {entry.gameType === "othello" &&
+                        othelloState.matchId !== null &&
+                        othelloState.snapshot?.gameType === "othello" &&
+                        othelloState.snapshot.status !== "finished" && (
+                          <button
+                            type="button"
+                            className="cbc-btn-primary"
+                            data-testid="return-active-othello-match-btn"
+                            onClick={() => switchView("othello")}
+                          >
+                            진행 중인 오델로 대국(#{othelloState.matchId}) 복귀
+                          </button>
+                        )}
+
                       {entry.gameType === "gomoku" && (
                         <>
                           {gomokuState.matchId !== null &&
@@ -1888,7 +2494,10 @@ export function App() {
         <div
           id="modalOverlay"
           className="cbc-modal-backdrop"
-          onClick={() => setLogoutModalOpen(false)}
+          onClick={() => {
+            setLogoutModalOpen(false);
+            lastLogoutTriggerRef.current?.focus();
+          }}
         >
           <div
             role="dialog"
@@ -1932,7 +2541,10 @@ export function App() {
                 id="cancelLogoutBtn"
                 className="cbc-btn-secondary"
                 disabled={submitting}
-                onClick={() => setLogoutModalOpen(false)}
+                onClick={() => {
+                  setLogoutModalOpen(false);
+                  lastLogoutTriggerRef.current?.focus();
+                }}
               >
                 취소
               </button>
@@ -1954,10 +2566,26 @@ export function App() {
       <footer className="cbc-footer">
         <div className="cbc-footer-inner">
           <nav className="cbc-footer-nav" aria-label="정책 안내">
-            <a className="cbc-footer-link" href="#terms">
+            <a
+              className="cbc-footer-link"
+              href="/terms"
+              data-testid="footer-link-terms"
+              onClick={(e) => {
+                e.preventDefault();
+                openLegalDoc("terms");
+              }}
+            >
               이용약관
             </a>
-            <a className="cbc-footer-link" href="#privacy">
+            <a
+              className="cbc-footer-link"
+              href="/privacy"
+              data-testid="footer-link-privacy"
+              onClick={(e) => {
+                e.preventDefault();
+                openLegalDoc("privacy");
+              }}
+            >
               개인정보처리방침
             </a>
           </nav>

@@ -6,8 +6,17 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from "react";
-import type { AuthUser } from "../api/auth-client.ts";
-import { getAuthFieldErrors, getErrorMessage } from "../api/errors.ts";
+import {
+  authApi,
+  type AuthApiClient,
+  type AuthUser,
+  type TwoFactorSetupResponse,
+} from "../api/auth-client.ts";
+import {
+  ApiError,
+  getAuthFieldErrors,
+  getErrorMessage,
+} from "../api/errors.ts";
 import {
   profileApi,
   type GameStats,
@@ -39,6 +48,7 @@ interface ProfileViewProps {
   onOpenLeaderboard: () => void;
   onBack: () => void;
   api?: ProfileApi;
+  authClient?: AuthApiClient;
 }
 
 type StatsMap = Partial<Record<GameType, GameStats>>;
@@ -109,6 +119,7 @@ export function ProfileView({
   onOpenLeaderboard,
   onBack,
   api = profileApi,
+  authClient = authApi,
 }: ProfileViewProps) {
   const isMine = userId === currentUser.id;
 
@@ -127,10 +138,71 @@ export function ProfileView({
 
   const [nicknameInput, setNicknameInput] = useState(currentUser.nickname);
   const [nicknameError, setNicknameError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"nickname" | "avatar" | null>(null);
+  const [busy, setBusy] = useState<
+    | "nickname"
+    | "avatar"
+    | "twoFactorSetup"
+    | "twoFactorEnable"
+    | "twoFactorDisable"
+    | "oauthLink"
+    | null
+  >(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // TOTP 2FA & 42 OAuth 상태 (FR-AUTH-05, FR-AUTH-06)
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorSetupData, setTwoFactorSetupData] =
+    useState<TwoFactorSetupResponse | null>(null);
+  const [twoFactorVerifyCode, setTwoFactorVerifyCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [disableModalOpen, setDisableModalOpen] = useState(false);
+  const [disableCodeInput, setDisableCodeInput] = useState("");
+  const [disableModalError, setDisableModalError] = useState<string | null>(
+    null,
+  );
+  const [oauthAlreadyLinked, setOauthAlreadyLinked] = useState(false);
+  const disableTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // 내 프로필 진입 시 2FA 활성화 상태를 조회합니다.
+  useEffect(() => {
+    if (!isMine) return;
+    let active = true;
+    authClient
+      .getTwoFactorStatus()
+      .then((res) => {
+        if (active && typeof res?.enabled === "boolean") {
+          setTwoFactorEnabled(res.enabled);
+        }
+      })
+      .catch(() => {
+        // 2FA 상태 조회 실패 시 기본값 유지
+      });
+    return () => {
+      active = false;
+    };
+  }, [authClient, isMine]);
+
+  // 2FA 해제 모달이 열려 있을 때 Escape 키 입력 시 닫고 트리거 버튼으로 포커스를 복원합니다 (NFR-UX-02).
+  useEffect(() => {
+    if (!disableModalOpen) return;
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (busy !== "twoFactorDisable") {
+          setDisableModalOpen(false);
+          setDisableModalError(null);
+          setDisableCodeInput("");
+          disableTriggerBtnRef.current?.focus();
+        }
+      }
+    }
+    globalThis.window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      globalThis.window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [disableModalOpen, busy]);
 
   // 프로필(공개 정보)과 게임별 통계를 불러옵니다.
   useEffect(() => {
@@ -294,6 +366,105 @@ export function ProfileView({
     }
   }
 
+  async function handleStartTwoFactorSetup() {
+    setNotice(null);
+    setActionError(null);
+    setRecoveryCodes(null);
+    setTwoFactorVerifyCode("");
+    setBusy("twoFactorSetup");
+    try {
+      const setupData = await authClient.setupTwoFactor();
+      setTwoFactorSetupData(setupData);
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === "TWO_FACTOR_ALREADY_ENABLED"
+      ) {
+        setTwoFactorEnabled(true);
+      }
+      setActionError(getErrorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleEnableTwoFactorSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setNotice(null);
+    setActionError(null);
+    const trimmed = twoFactorVerifyCode.trim();
+    if (!/^\d{6}$/.test(trimmed)) {
+      setActionError("인증 앱에 표시된 6자리 숫자를 입력해 주세요.");
+      return;
+    }
+    setBusy("twoFactorEnable");
+    try {
+      const res = await authClient.enableTwoFactor(trimmed);
+      setTwoFactorEnabled(true);
+      setTwoFactorSetupData(null);
+      setTwoFactorVerifyCode("");
+      setRecoveryCodes(res.recoveryCodes);
+      setNotice(
+        "2단계 인증(TOTP)이 활성화되었습니다. 아래 1회용 복구 코드 10개를 안전한 곳에 보관해 주세요.",
+      );
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleDisableTwoFactorSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setDisableModalError(null);
+    const trimmed = disableCodeInput.trim();
+    if (trimmed.length < 6) {
+      setDisableModalError(
+        "현재 6자리 인증 코드 또는 복구 코드(ABCD-EFGH)를 입력해 주세요.",
+      );
+      return;
+    }
+    setBusy("twoFactorDisable");
+    try {
+      await authClient.disableTwoFactor(trimmed);
+      setTwoFactorEnabled(false);
+      setTwoFactorSetupData(null);
+      setRecoveryCodes(null);
+      setDisableModalOpen(false);
+      setDisableCodeInput("");
+      setNotice("2단계 인증(2FA)이 비활성화되었습니다.");
+      disableTriggerBtnRef.current?.focus();
+    } catch (error) {
+      setDisableModalError(getErrorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleStartOAuth42Link() {
+    setNotice(null);
+    setActionError(null);
+    setBusy("oauthLink");
+    try {
+      const { authorizeUrl } = await authClient.startOAuth42Link();
+      if (
+        typeof globalThis.window !== "undefined" &&
+        globalThis.window.location
+      ) {
+        globalThis.window.location.assign(authorizeUrl);
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "OAUTH_ALREADY_LINKED") {
+        setOauthAlreadyLinked(true);
+      }
+      setActionError(getErrorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="cbc-profile-page">
       <div className="cbc-profile-topbar">
@@ -443,6 +614,229 @@ export function ProfileView({
                 </form>
               </section>
             )}
+
+            {isMine && (
+              <section
+                className="cbc-profile-card"
+                data-testid="profile-security-section"
+              >
+                <div className="cbc-profile-section-head">
+                  <h2 className="cbc-profile-section-title">
+                    보안 및 계정 연동
+                  </h2>
+                  <span
+                    className={`cbc-security-pill ${
+                      twoFactorEnabled ? "" : "is-muted"
+                    }`}
+                    data-testid="two-factor-status-pill"
+                  >
+                    {twoFactorEnabled && <span className="cbc-pulse-dot" />}
+                    {twoFactorEnabled ? "2FA 사용 중" : "2FA 미설정"}
+                  </span>
+                </div>
+
+                <div className="cbc-security-block">
+                  <p className="cbc-profile-hint" style={{ marginBottom: "0.75rem" }}>
+                    인증 앱(Google Authenticator, Authy 등) 기반 TOTP 2단계 인증으로
+                    계정을 보호하거나 42 Intra 계정을 연결할 수 있습니다.
+                  </p>
+
+                  {!twoFactorEnabled && !twoFactorSetupData && (
+                    <button
+                      type="button"
+                      className="cbc-btn-primary cbc-btn-compact"
+                      style={{ width: "100%" }}
+                      disabled={busy !== null}
+                      data-testid="start-2fa-setup-btn"
+                      onClick={handleStartTwoFactorSetup}
+                    >
+                      {busy === "twoFactorSetup"
+                        ? "비밀키 발급 중..."
+                        : "2단계 인증(2FA) 설정 시작"}
+                    </button>
+                  )}
+
+                  {!twoFactorEnabled && twoFactorSetupData && (
+                    <div
+                      className="cbc-2fa-setup-box"
+                      data-testid="two-factor-setup-panel"
+                    >
+                      <h3 className="cbc-2fa-box-title">
+                        1단계: 인증 앱에 시크릿 등록
+                      </h3>
+                      <p className="cbc-profile-hint">
+                        인증 앱에서 수동 키 입력을 선택하고 아래 Base32 비밀키를
+                        등록하거나 <code>otpauth://</code> URI를 여세요.
+                      </p>
+                      <div className="cbc-2fa-secret-box">
+                        <span className="cbc-2fa-secret-label">
+                          수동 입력용 Base32 시크릿
+                        </span>
+                        <code
+                          className="cbc-2fa-secret-code"
+                          data-testid="two-factor-secret-code"
+                        >
+                          {twoFactorSetupData.secret}
+                        </code>
+                      </div>
+                      <div className="cbc-2fa-uri-row">
+                        <a
+                          href={twoFactorSetupData.otpauthUrl}
+                          className="cbc-link"
+                          style={{ fontSize: "12px", wordBreak: "break-all" }}
+                          data-testid="two-factor-otpauth-link"
+                        >
+                          인증 앱 열기 (otpauth URI)
+                        </a>
+                      </div>
+
+                      <form
+                        className="cbc-form"
+                        style={{ marginTop: "0.75rem" }}
+                        onSubmit={handleEnableTwoFactorSubmit}
+                      >
+                        <div className="cbc-field">
+                          <label
+                            className="cbc-label"
+                            htmlFor="two-factor-enable-code"
+                          >
+                            2단계: 인증 앱의 6자리 코드 입력
+                          </label>
+                          <input
+                            id="two-factor-enable-code"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="\d{6}"
+                            maxLength={6}
+                            placeholder="6자리 숫자 (예: 123456)"
+                            className="cbc-input"
+                            data-testid="two-factor-enable-code-input"
+                            value={twoFactorVerifyCode}
+                            onChange={(e) =>
+                              setTwoFactorVerifyCode(e.target.value)
+                            }
+                            required
+                          />
+                        </div>
+                        <div className="cbc-profile-avatar-actions">
+                          <button
+                            type="button"
+                            className="cbc-btn-secondary cbc-btn-compact"
+                            disabled={busy !== null}
+                            onClick={() => {
+                              setTwoFactorSetupData(null);
+                              setTwoFactorVerifyCode("");
+                            }}
+                          >
+                            취소
+                          </button>
+                          <button
+                            type="submit"
+                            className="cbc-btn-primary cbc-btn-compact"
+                            disabled={busy !== null}
+                            data-testid="confirm-2fa-enable-btn"
+                          >
+                            {busy === "twoFactorEnable"
+                              ? "확인 중..."
+                              : "코드 확인 및 활성화"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+
+                  {twoFactorEnabled && (
+                    <button
+                      ref={disableTriggerBtnRef}
+                      type="button"
+                      className="cbc-btn-secondary cbc-btn-compact"
+                      style={{ width: "100%" }}
+                      disabled={busy !== null}
+                      data-testid="open-2fa-disable-modal-btn"
+                      onClick={() => {
+                        setDisableModalError(null);
+                        setDisableCodeInput("");
+                        setDisableModalOpen(true);
+                      }}
+                    >
+                      2단계 인증 해제
+                    </button>
+                  )}
+
+                  {recoveryCodes && recoveryCodes.length > 0 && (
+                    <div
+                      className="cbc-2fa-recovery-box"
+                      data-testid="two-factor-recovery-codes"
+                    >
+                      <h3 className="cbc-2fa-box-title">
+                        1회용 복구 코드 10개 (최초 1회만 표시)
+                      </h3>
+                      <p className="cbc-profile-hint">
+                        인증 기기를 분실했을 때 로그인 코드 대신 1회씩 사용할 수
+                        있습니다. 지금 안전한 곳에 복사·보관해 주세요.
+                      </p>
+                      <ul className="cbc-2fa-recovery-grid">
+                        {recoveryCodes.map((code) => (
+                          <li key={code}>
+                            <code>{code}</code>
+                          </li>
+                        ))}
+                      </ul>
+                      <button
+                        type="button"
+                        className="cbc-btn-secondary cbc-btn-compact"
+                        style={{ width: "100%", marginTop: "0.5rem" }}
+                        data-testid="ack-recovery-codes-btn"
+                        onClick={() => setRecoveryCodes(null)}
+                      >
+                        복구 코드를 안전하게 보관했습니다
+                      </button>
+                    </div>
+                  )}
+
+                  <hr className="cbc-security-divider" />
+
+                  <div className="cbc-oauth-link-block">
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
+                      <strong style={{ fontSize: "14px" }}>
+                        42 Intra 계정 연동
+                      </strong>
+                      {oauthAlreadyLinked && (
+                        <span className="cbc-chip">연결됨</span>
+                      )}
+                    </div>
+                    <p
+                      className="cbc-profile-hint"
+                      style={{ marginBottom: "0.625rem" }}
+                    >
+                      현재 계정에 42 Intra 계정을 연결하면 다음부터 42 OAuth로도
+                      동일 계정에 로그인할 수 있습니다.
+                    </p>
+                    <button
+                      type="button"
+                      className="cbc-btn-secondary cbc-btn-compact"
+                      style={{ width: "100%" }}
+                      disabled={busy !== null || oauthAlreadyLinked}
+                      data-testid="start-oauth42-link-btn"
+                      onClick={handleStartOAuth42Link}
+                    >
+                      {busy === "oauthLink"
+                        ? "42 인증 페이지 이동 중..."
+                        : oauthAlreadyLinked
+                          ? "42 Intra 계정 연결 완료"
+                          : "42 Intra 계정 연결하기"}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
           </aside>
 
           <div className="cbc-profile-main">
@@ -579,6 +973,120 @@ export function ProfileView({
                 </button>
               )}
             </section>
+          </div>
+        </div>
+      )}
+
+      {/* 2FA Disable Confirmation Modal (19_2fa_disable_modal) */}
+      {disableModalOpen && (
+        <div
+          className="cbc-modal-backdrop"
+          data-testid="two-factor-disable-backdrop"
+          onClick={() => {
+            if (busy !== "twoFactorDisable") {
+              setDisableModalOpen(false);
+              setDisableModalError(null);
+              setDisableCodeInput("");
+              disableTriggerBtnRef.current?.focus();
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="two-factor-disable-title"
+            aria-describedby="two-factor-disable-desc"
+            className="cbc-modal-dialog"
+            data-testid="two-factor-disable-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="cbc-modal-alert-icon" aria-hidden="true">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm1 14h-2v-2h2v2zm0-4h-2V7h2v4z" />
+              </svg>
+            </div>
+            <h3
+              id="two-factor-disable-title"
+              style={{
+                fontFamily: "var(--font-headline)",
+                fontSize: "22px",
+                margin: "0 0 0.5rem",
+              }}
+            >
+              2단계 인증(2FA)을 비활성화할까요?
+            </h3>
+            <p
+              id="two-factor-disable-desc"
+              className="cbc-subheading"
+              style={{ maxWidth: "340px" }}
+            >
+              보안 확인을 위해 현재 인증 앱의 6자리 숫자 또는 남은 복구 코드
+              (ABCD-EFGH)를 입력해 주세요.
+            </p>
+
+            <form
+              className="cbc-form"
+              style={{ width: "100%", marginTop: "0.75rem", textAlign: "left" }}
+              onSubmit={handleDisableTwoFactorSubmit}
+            >
+              <div className="cbc-field">
+                <label className="cbc-label" htmlFor="two-factor-disable-code">
+                  인증 코드 또는 복구 코드
+                </label>
+                <input
+                  id="two-factor-disable-code"
+                  type="text"
+                  placeholder="6자리 숫자 또는 ABCD-EFGH"
+                  className={`cbc-input ${disableModalError ? "is-error" : ""}`}
+                  data-testid="two-factor-disable-code-input"
+                  value={disableCodeInput}
+                  onChange={(e) => {
+                    setDisableCodeInput(e.target.value);
+                    if (disableModalError) setDisableModalError(null);
+                  }}
+                  required
+                />
+              </div>
+
+              {disableModalError && (
+                <div className="cbc-error-banner" role="alert">
+                  <span>{disableModalError}</span>
+                </div>
+              )}
+
+              <div className="cbc-modal-actions">
+                <button
+                  type="button"
+                  className="cbc-btn-secondary"
+                  disabled={busy === "twoFactorDisable"}
+                  onClick={() => {
+                    setDisableModalOpen(false);
+                    setDisableModalError(null);
+                    setDisableCodeInput("");
+                    disableTriggerBtnRef.current?.focus();
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="cbc-btn-danger"
+                  disabled={busy === "twoFactorDisable"}
+                  data-testid="confirm-2fa-disable-btn"
+                >
+                  <span>
+                    {busy === "twoFactorDisable"
+                      ? "해제 중..."
+                      : "2단계 인증 비활성화"}
+                  </span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,7 +1,11 @@
 import type {
+  GameCommand,
+  GameSnapshot,
   GameType,
   GomokuCommand,
   GomokuSnapshot,
+  OthelloCommand,
+  OthelloSnapshot,
   PlayerId,
 } from "@cafe/game-contracts";
 import type {
@@ -95,8 +99,8 @@ export interface GameWsClientHandlers {
   onQueueJoined?: (payload: { gameType: GameType }) => void;
   onQueueLeft?: () => void;
   onQueueMatched?: (payload: WsQueueMatchedPayload) => void;
-  onMatchSnapshot?: (snapshot: GomokuSnapshot) => void;
-  onGameUpdated?: (snapshot: GomokuSnapshot) => void;
+  onMatchSnapshot?: (snapshot: GameSnapshot) => void;
+  onGameUpdated?: (snapshot: GameSnapshot) => void;
   onGameAck?: (payload: WsGameAckPayload) => void;
   onGameError?: (payload: WsGameErrorPayload) => void;
   onError?: (payload: WsGeneralErrorPayload) => void;
@@ -130,7 +134,7 @@ export interface GameWsClient {
   leaveQueue(): boolean;
   subscribeMatch(matchId: MatchId): boolean;
   unsubscribeMatch(matchId: MatchId): boolean;
-  sendGameCommand(command: GomokuCommand): boolean;
+  sendGameCommand(command: GameCommand | GomokuCommand | OthelloCommand): boolean;
   sendPing(): boolean;
 }
 
@@ -175,6 +179,36 @@ export function isGomokuSnapshotPayload(
     typeof candidate.players === "object" &&
     candidate.players !== null
   );
+}
+
+/**
+ * 수신된 객체가 서버가 확정한 오델로 스냅샷(OthelloSnapshot) 구조인지 검증합니다.
+ */
+export function isOthelloSnapshotPayload(
+  value: unknown,
+): value is OthelloSnapshot {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.matchId === "number" &&
+    candidate.gameType === "othello" &&
+    typeof candidate.stateVersion === "number" &&
+    typeof candidate.status === "string" &&
+    Array.isArray(candidate.board) &&
+    typeof candidate.players === "object" &&
+    candidate.players !== null
+  );
+}
+
+/**
+ * 수신된 객체가 서버가 확정한 대국 스냅샷(GomokuSnapshot 또는 OthelloSnapshot)인지 검증합니다.
+ */
+export function isGameSnapshotPayload(
+  value: unknown,
+): value is GameSnapshot {
+  return isGomokuSnapshotPayload(value) || isOthelloSnapshotPayload(value);
 }
 
 /**
@@ -399,7 +433,7 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
       }
 
       case "match.snapshot": {
-        if (isGomokuSnapshotPayload(payload)) {
+        if (isGameSnapshotPayload(payload)) {
           subscribedMatchId = payload.matchId;
           options.handlers?.onMatchSnapshot?.(payload);
         }
@@ -407,7 +441,7 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
       }
 
       case "game.updated": {
-        if (isGomokuSnapshotPayload(payload)) {
+        if (isGameSnapshotPayload(payload)) {
           options.handlers?.onGameUpdated?.(payload);
         }
         break;
@@ -675,7 +709,7 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
       return sendEnvelope("match.unsubscribe", { matchId });
     },
 
-    sendGameCommand(command: GomokuCommand) {
+    sendGameCommand(command: GameCommand | GomokuCommand | OthelloCommand) {
       if (phase !== "connected") return false;
       return sendEnvelope(
         "game.command",

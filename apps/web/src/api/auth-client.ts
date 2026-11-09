@@ -23,6 +23,30 @@ export interface TwoFactorChallenge {
 
 export type LoginResult = TokenPair | TwoFactorChallenge;
 
+export interface OAuthAuthorizeResponse {
+  authorizeUrl: string;
+  flowToken: string;
+}
+
+export interface OAuthLinkedResult {
+  linked: true;
+}
+
+export type OAuthCallbackResult = LoginResult | OAuthLinkedResult;
+
+export interface TwoFactorStatusResponse {
+  enabled: boolean;
+}
+
+export interface TwoFactorSetupResponse {
+  secret: string;
+  otpauthUrl: string;
+}
+
+export interface TwoFactorEnableResponse {
+  recoveryCodes: string[];
+}
+
 export interface RegisterInput {
   email: string;
   password: string;
@@ -51,6 +75,43 @@ export interface TokenStorage {
 }
 
 const STORAGE_KEY = "cyber_board_cafe.auth.tokens";
+export const OAUTH_FLOW_TOKEN_KEY = "cyber_board_cafe.oauth42.flow_token";
+
+/**
+ * 42 OAuth 인가 시작 시 발급받은 `flowToken`을 현재 브라우저 탭의 `sessionStorage`에 저장합니다 (RFC 9700 4.7.1 로그인 CSRF 방지).
+ */
+export function saveOAuthFlowToken(flowToken: string): void {
+  if (typeof globalThis.window === "undefined") return;
+  try {
+    globalThis.window.sessionStorage?.setItem(OAUTH_FLOW_TOKEN_KEY, flowToken);
+  } catch {
+    // sessionStorage 접근 제한 무시
+  }
+}
+
+/**
+ * `sessionStorage`에 보관된 42 OAuth `flowToken`을 조회합니다.
+ */
+export function getOAuthFlowToken(): string | null {
+  if (typeof globalThis.window === "undefined") return null;
+  try {
+    return globalThis.window.sessionStorage?.getItem(OAUTH_FLOW_TOKEN_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `sessionStorage`에 보관된 42 OAuth `flowToken`을 제거합니다.
+ */
+export function clearOAuthFlowToken(): void {
+  if (typeof globalThis.window === "undefined") return;
+  try {
+    globalThis.window.sessionStorage?.removeItem(OAUTH_FLOW_TOKEN_KEY);
+  } catch {
+    // sessionStorage 접근 제한 무시
+  }
+}
 
 /**
  * 브라우저 `localStorage`/`sessionStorage` 및 메모리 폴백을 지원하는 기본 토큰 저장소입니다.
@@ -161,10 +222,21 @@ export interface AuthApiClientOptions {
 }
 
 /**
- * 로그인 응답이 즉시 발급된 토큰 쌍(`TokenPair`)인지 판별합니다.
+ * 로그인·OAuth 콜백 응답이 즉시 발급된 토큰 쌍(`TokenPair`)인지 판별합니다.
  */
-export function isTokenPair(result: LoginResult): result is TokenPair {
+export function isTokenPair(
+  result: LoginResult | OAuthCallbackResult,
+): result is TokenPair {
   return "accessToken" in result && typeof result.accessToken === "string";
+}
+
+/**
+ * OAuth 콜백 응답이 기존 계정에 42 계정을 연결 완료한 결과(`{ linked: true }`)인지 판별합니다.
+ */
+export function isOAuthLinkedResult(
+  result: OAuthCallbackResult,
+): result is OAuthLinkedResult {
+  return "linked" in result && result.linked === true;
 }
 
 /**
@@ -433,6 +505,127 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     });
   }
 
+  /**
+   * 42 Intra OAuth 로그인을 시작합니다 (`POST /api/auth/oauth/42/login`).
+   * 반환된 `flowToken`은 브라우저 `sessionStorage`에 자동 보관됩니다.
+   */
+  async function startOAuth42Login(): Promise<OAuthAuthorizeResponse> {
+    const res = await request<OAuthAuthorizeResponse>(
+      "/api/auth/oauth/42/login",
+      {
+        method: "POST",
+        requiresAuth: false,
+      },
+    );
+    saveOAuthFlowToken(res.flowToken);
+    return res;
+  }
+
+  /**
+   * 현재 로그인된 계정에 42 Intra 계정 연결을 시작합니다 (`POST /api/auth/oauth/42/link`).
+   * 반환된 `flowToken`은 브라우저 `sessionStorage`에 자동 보관됩니다.
+   */
+  async function startOAuth42Link(): Promise<OAuthAuthorizeResponse> {
+    const res = await request<OAuthAuthorizeResponse>(
+      "/api/auth/oauth/42/link",
+      {
+        method: "POST",
+        requiresAuth: true,
+      },
+    );
+    saveOAuthFlowToken(res.flowToken);
+    return res;
+  }
+
+  /**
+   * 42 OAuth 리다이렉트 콜백(`code`, `state`, `flowToken`)을 서버로 전달하여 로그인·2FA 챌린지·계정 연결을 완료합니다 (`POST /api/auth/oauth/42/callback`).
+   */
+  async function completeOAuth42Callback(
+    input: { code: string; state: string; flowToken?: string | null },
+    remember = true,
+  ): Promise<OAuthCallbackResult> {
+    const resolvedFlowToken = input.flowToken ?? getOAuthFlowToken();
+    if (!resolvedFlowToken) {
+      throw new ApiError(
+        401,
+        "OAUTH_STATE_INVALID",
+        "OAuth flowToken is missing from this browser session.",
+      );
+    }
+
+    try {
+      const result = await request<OAuthCallbackResult>(
+        "/api/auth/oauth/42/callback",
+        {
+          method: "POST",
+          body: {
+            code: input.code,
+            state: input.state,
+            flowToken: resolvedFlowToken,
+          },
+          requiresAuth: false,
+        },
+      );
+
+      if (isTokenPair(result)) {
+        storage.setTokens(
+          {
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+          },
+          remember,
+        );
+      }
+      return result;
+    } finally {
+      clearOAuthFlowToken();
+    }
+  }
+
+  /**
+   * 현재 로그인된 계정의 TOTP 2단계 인증(2FA) 활성화 여부를 조회합니다 (`GET /api/auth/2fa`).
+   */
+  async function getTwoFactorStatus(): Promise<TwoFactorStatusResponse> {
+    return request<TwoFactorStatusResponse>("/api/auth/2fa", {
+      method: "GET",
+      requiresAuth: true,
+    });
+  }
+
+  /**
+   * TOTP 2단계 인증 설정을 시작하고 시크릿(Base32) 및 `otpauth://` URL을 발급받습니다 (`POST /api/auth/2fa/setup`).
+   */
+  async function setupTwoFactor(): Promise<TwoFactorSetupResponse> {
+    return request<TwoFactorSetupResponse>("/api/auth/2fa/setup", {
+      method: "POST",
+      requiresAuth: true,
+    });
+  }
+
+  /**
+   * 인증 앱의 6자리 TOTP 코드를 검증하여 2FA를 활성화하고 1회용 복구 코드 10개를 발급받습니다 (`POST /api/auth/2fa/enable`).
+   */
+  async function enableTwoFactor(
+    code: string,
+  ): Promise<TwoFactorEnableResponse> {
+    return request<TwoFactorEnableResponse>("/api/auth/2fa/enable", {
+      method: "POST",
+      body: { code: code.trim() },
+      requiresAuth: true,
+    });
+  }
+
+  /**
+   * 현재 6자리 TOTP 코드 또는 복구 코드로 본인 확인 후 2FA를 비활성화합니다 (`POST /api/auth/2fa/disable`).
+   */
+  async function disableTwoFactor(code: string): Promise<void> {
+    return request<void>("/api/auth/2fa/disable", {
+      method: "POST",
+      body: { code: code.trim() },
+      requiresAuth: true,
+    });
+  }
+
   return {
     storage,
     request,
@@ -442,7 +635,16 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     refresh,
     logout,
     getMe,
+    startOAuth42Login,
+    startOAuth42Link,
+    completeOAuth42Callback,
+    getTwoFactorStatus,
+    setupTwoFactor,
+    enableTwoFactor,
+    disableTwoFactor,
   };
 }
+
+export type AuthApiClient = ReturnType<typeof createAuthApiClient>;
 
 export const authApi = createAuthApiClient();
