@@ -1,4 +1,4 @@
-# SDS v0.1 (초안)
+# SDS v0.4 (초안)
 
 사이버 보드게임 카페의 Software Design Specification. SRS가 정한 요구사항을 **어떻게 구현하는가**를 기술한다. 구성은 IEEE 1016-2009와 문서화 명세 10장을 따른다.
 
@@ -7,6 +7,7 @@
 | 항목 | 내용 |
 |---|---|
 | 작성일 | 2026-10-13 |
+| 최종 동기화 | 2026-11-09 (KST). A 검토 `efac1ba` + B 최신 SDS `2291aeb` + E #38 검토 `a14ba86`. 문서만 3-way 통합했으며 서버 코드·migration·배포 구성을 함께 병합한 것은 아니다. |
 | 상태 | 초안. B 담당 영역은 구현 기준으로 작성했다. 다른 담당 영역(A·C·D·E)은 B가 SRS·계약·이슈 기준으로 초안을 채웠고 `B 초안`으로 표시했다. A 담당 영역(2.2 화면 목록·전이·표시 규칙·토큰 보관·키보드·접근성·반응형, 4장 요구사항 ID별 추적 레코드·성능 측정 연결)은 A가 확인·보완했다. 팀 승인 전이다. |
 | 범위 | 오목·오델로 2인 1:1 웹 플랫폼 (SRS v0.3.1의 16점 후보) |
 | 작성 | B (yunhpark), A (jaeyoo: 2.2·4장 검토·보완) |
@@ -19,10 +20,12 @@
 
 | 표시 | 의미 |
 |---|---|
-| `구현됨` | 코드와 테스트가 있고 실제 PostgreSQL에서 통과 (문서화 명세 34장의 "구현됨"과 달리 비작성자 재현·통합 전) |
+| `구현됨` | 명시한 커밋·브랜치에 코드와 해당 범위 테스트가 있다. DB 기능은 실제 PostgreSQL 검증, UI·엔진은 해당 단위/빌드 검증 근거를 구분한다. `master` 병합·전체 E2E 통과·비작성자 재현을 뜻하지 않는다. |
 | `계획` | 설계만 있고 코드 없음 |
 | `미정` | 팀 결정 필요 |
 | `B 초안` | 다른 담당 영역을 B가 먼저 설계한 것. 담당자 확인 전 |
+
+2026-11-09 기준 이슈 #23의 PR은 #63, 이슈 #64·#65·#66의 PR은 각각 #71·#72·#73이며 모두 열려 있다. 오델로 엔진 PR #58은 `master`의 `5db96b1`에 병합됐으며 문서 브랜치도 이 기준을 반영한다. 아래 웹 기능의 `구현됨`은 `feat/web-othello` `3d06126`까지의 브랜치 구현을 포함한다. `docs/sds-a-review`의 `master` 대비 변경은 문서 3개이며, 웹 기능 코드·D의 실시간 서버 등록·#27의 배포/E2E 통합은 포함하지 않는다. 친구·초대·전적 공개 수정·탈퇴는 계속 `계획`이다.
 
 ### 용어
 
@@ -41,6 +44,7 @@
 | 0.1 | 2026-10-13 | 초안. B 구현(인증·2FA·OAuth·프로필·경기 저장·통계) 반영, 전체 다이어그램 작성. 기능별 모든 분기 흐름(2.10) 추가. Codex 코드 리뷰 15건 수정분과 SDS 누락 분석 반영: B 계획 기능(아바타·전적 공개·탈퇴·시스템 종료) 설계, 테스트 대응표, 담당자별 작성 필요 항목 |
 | 0.2 | 2026-10-29 | 다른 담당 영역 B 초안: 화면 구성·전이(A), WebSocket 이벤트(D, #16~#20 이름 기준), 참가 위치 FSM(D), 재접속 감지·기기 전환(D), 친구 API(E), 오델로 엔진 연결(C), 배포의 아바타 volume·WSS(E, #28). 경기 기록 영구 보존 제안, 5.2 해결 항목 정리 |
 | 0.3 | 2026-11-06 | A 담당 영역 확인·보완: Stitch 22개 화면 및 PR #11·#15·#41~#43 계약 기준 2.2 화면 목록·화면 전이·표시 규칙 확정, 토큰 보관 방식(access token 메모리, refresh token `localStorage`) 및 `auth.ok.activeMatchId` 대국 복귀 전이 확정(D 합의), 키보드 상세 동작·접근성·반응형·공통 CSS 위치 작성, 4장 요구사항 ID별 추적 레코드(SRS 10.2)·AT/T·성능 측정 지점 작성 |
+| 0.4 | 2026-11-09 | B/E 최신 SDS의 배포·친구 API 검토안을 A 설계와 통합. 이슈 #23·#64~#66 및 PR #58·#63·#71~#73 구현 근거 갱신. TEST_PLAN 좌표·DEC-03·DEC-08·AT/T 대응과 영문 README 초안 동기화. 브랜치 구현·통합·평가 증거를 구분 |
 
 ---
 
@@ -192,12 +196,12 @@ flowchart LR
 
 | Use case | 담당 | 상태 |
 |---|---|---|
-| Register, Login(email), Logout, 2FA, 42 OAuth, Link 42 | B (API), A (UI) | API `구현됨` (#11), UI `구현됨` (#21, PR 병합 전) |
+| Register, Login(email), Logout, 2FA, 42 OAuth, Link 42 | B (API), A (UI) | API `구현됨` (#11), 기본 인증 UI #21·OAuth/2FA 설정 UI #65 `구현됨` (PR #72 병합 전, 실 42 검증 별도) |
 | View/Edit profile | B (API), A (UI) | API `구현됨` (#11), UI `구현됨` (#24, PR 병합 전) |
 | Upload avatar | B (API), A (UI) | API `구현됨` (#15), UI `구현됨` (#24, PR 병합 전) |
 | Friend, online status | E (+ D 연결 상태) | `계획` |
 | Auto match, Invite, Ready, Reconnect | D (실행), A (UI) | WS·매칭·재접속 `구현됨` (#16~#20, #41~#43), 초대 `계획` |
-| Play gomoku / othello, Resign | C (규칙), D (실행), B (저장), A (UI) | 저장 `구현됨` (#11), 오목 규칙 `구현됨` (#9, #12, #45), 오목 UI `구현됨` (#22), 오델로 `계획` |
+| Play gomoku / othello, Resign | C (규칙), D (실행), B (저장), A (UI) | 저장 `구현됨` (#11), 오목 규칙·UI `구현됨` (#9, #12, #45, #22), 오델로 엔진 #58·UI #66 `구현됨` (PR #73 병합 전, 실행 서버 등록 별도) |
 | History, statistics, achievement, leaderboard | B (API), A (UI) | API `구현됨` (#11), UI `구현됨` (#24, PR 병합 전) |
 
 ---
@@ -206,7 +210,16 @@ flowchart LR
 
 #### 2. Frontend architecture (A)
 
-`구현됨` (이슈 #21 인증·오류 처리, #22 오목 대국·실시간 WebSocket, #24 프로필·아바타·리더보드 브랜치 구현 완료, `master` 병합 예정 / 친구·초대·오델로·법적 고지 상세는 `계획`). Stitch 시안 22개 화면(`cyber_board_cafe_stitch_2026-10-28/`, `DESIGN.md` "Warm Meeple & Roast")과 PR #11·#15 REST API 및 D의 WebSocket 계약(#16~#20, #41~#43)을 기준으로 구성한다.
+`구현됨` (이슈 #21 인증·오류 처리, #22 오목·WS 클라이언트, #24 프로필·리더보드, #23 매칭, #64 약관·라우팅·Escape, #65 OAuth/2FA 설정, #66 오델로 화면. `master` 병합 예정 / 친구·초대·전적 공개 수정·탈퇴는 `계획`). Stitch 시안 22개 화면(`cyber_board_cafe_stitch_2026-10-28/`, `DESIGN.md` "Warm Meeple & Roast")과 PR #11·#15 REST API 및 D의 WebSocket 계약(#16~#20, #41~#43)을 기준으로 구성한다.
+
+| 이슈 / 실제 PR | 브랜치·구현 커밋 | 구현 범위 | 남은 검증 |
+|---|---|---|---|
+| #23 / PR #63 | `feat/web-matchmaking` `5b10db3` | 게임 카탈로그·규칙 요약, 신청·대기·취소·성립 상태 전이, `MatchmakingView` | #27의 오목 통합과 전체 취소/성립 경합 인수 |
+| #64 / PR #71 | `feat/web-legal-routing` `c404491` | `/terms`, `/privacy`, 404·history 라우팅, 로그아웃·기권 모달 Escape·포커스 복귀 | 비로그인·로그인 브라우저 E2E 및 최종 정책 확인 |
+| #65 / PR #72 | `feat/web-oauth-2fa` `e28c223` | OAuth 로그인·계정 연결 콜백, 내 프로필 TOTP 설정·활성화·복구 코드·해제 모달 | 실 42 앱 및 브라우저 보안 설정 E2E |
+| #66 / PR #73 | `feat/web-othello` `3d06126` | 8×8 보드·합법 수·돌 수·자동 패스·기권·결과, 로비 오델로 매칭 활성화 | 서버 오델로 등록 및 실제 2세션 E2E |
+
+PR #58 엔진은 `master` `5db96b1` 기준 구현됐으며 위 웹 브랜치와 별도다. 로비 `playable: true`는 프론트엔드 카탈로그 설정으로, 접속한 서버의 해당 엔진 등록을 보장하지 않는다. `recordsPublic`과 탈퇴 API는 2.10.26~27 설계 상태를 유지한다.
 
 ```mermaid
 flowchart TD
@@ -247,7 +260,7 @@ flowchart TD
 - **인증·HTTP 클라이언트 (`apps/web/src/api/auth-client.ts`, `errors.ts`, `profile-api.ts`)**:
   - `Authorization: Bearer <accessToken>` 헤더를 자동 첨부한다.
   - 보호 API가 `401`을 반환하면 진행 중인 갱신 Promise(`inFlightRefresh`)를 공유해 `POST /api/auth/refresh`를 **단 1회** 호출한 뒤 원래 요청을 1회 재시도한다. 갱신마저 실패하면 토큰을 비우고 `/login`으로 이동한다.
-  - OAuth 시작 응답(`POST /api/auth/oauth/42/login` 또는 `link`)의 `flowToken`과 시작 모드(`login` | `link`)를 `sessionStorage`(`cbc.oauth.flowToken`, `cbc.oauth.mode`)에 저장하고 `authorizationUrl`로 이동한다. 42가 redirect한 `/oauth/42/callback?code=...&state=...` 화면에서 보관된 `flowToken`을 꺼내 `POST /api/auth/oauth/42/callback`을 호출한다. 다른 탭·브라우저에서 열려 `flowToken`이 없거나 불일치하면 `401 OAUTH_STATE_INVALID`로 거절된다.
+  - OAuth 시작 응답(`POST /api/auth/oauth/42/login` 또는 `link`)의 `flowToken`을 `sessionStorage`(`cyber_board_cafe.oauth42.flow_token`)에 저장하고 `authorizeUrl`로 이동한다. 42가 redirect한 `/oauth/42/callback?code=...&state=...`에서 보관된 `flowToken`을 JSON body에 넣어 `POST /api/auth/oauth/42/callback`을 호출한다. 성공 응답의 토큰 쌍·2FA challenge·`{ linked: true }`로 분기한다. 다른 탭·브라우저에서 열려 `flowToken`이 없거나 불일치하면 거절된다. 현재 서버는 `GET /start`나 callback 헤더 방식이 아니다.
 - **실시간 WebSocket 클라이언트 (`apps/web/src/game/ws-client.ts`, `gomoku-state.ts`)**:
   - 연결 직후 첫 메시지로 `auth` (`{ accessToken }`)를 보내고 `auth.ok` (`{ userId, activeMatchId }`)를 받은 뒤에만 대기열·구독·게임 명령을 전송한다.
   - 비정상 종료 시 지수 백오프(`500ms × 2^attempt`, 최대 `8,000ms`)로 자동 재연결하며, close code `4401`(토큰 만료·무효)일 때는 `refreshAccessToken()`으로 새 `accessToken`을 발급받아 재연결한다.
@@ -255,6 +268,7 @@ flowchart TD
   - 별도 CSS-in-JS 런타임 없이 표준 CSS Custom Properties와 `.cbc-*` 네임스페이스 클래스를 `apps/web/src/styles.css` 한 곳에서 관리하고 `main.tsx`에서 로드한다.
   - Stitch `DESIGN.md`("Warm Meeple & Roast") 토큰을 그대로 사용한다: 배경 `#15120e`(Surface) / `#221e19`(Card) / `#2c2720`(Container High), 본문 `#eae1d8`, 보조 `#d4c3b5`, 주 강조 `#ff7a00`(Warm Amber) ~ `#e05200`(Terracotta), 보조 청록 `#54c7ec`, 위험 `#ffb4ab` / `#93000a`, 제목·수치 폰트 `Space Grotesk` / 본문 `Plus Jakarta Sans`(`Pretendard`·`Noto Sans KR` 폴백) / 좌표·코드 `JetBrains Mono`.
 - **게임 목록·플레이 가능 상태 및 사전 규칙 안내 (`FR-CAT-01`, `FR-CAT-02`)**:
+  - `game/matchmaking-state.ts`의 `GAME_CATALOG`를 로비·매칭 화면이 공유한다. #66 브랜치에서는 두 종목 모두 `playable: true`이며 실행 서버 등록 여부는 통합 검증에서 따로 확인한다.
   - 홈·로비(`/`)의 게임 카탈로그에 **오목(Gomoku)**과 **오델로(Othello)** 두 게임을 표시하고, 각 카드에 현재 플레이 가능 상태 배지(예: `플레이 가능`, 엔진 미연결 시 `준비 중` 및 매칭 버튼 비활성)를 명시한다.
   - 대국 시작 전 로비 카드와 규칙 안내 패널에서 [GAME_RULES.md](GAME_RULES.md) 기준의 **판 크기·선공·승리 조건·특수 규칙 요약**(오목: 15×15, 흑 선공, 가로·세로·대각선 5목 이상 승리, 금수 없음 `gomoku-freestyle-v1` / 오델로: 8×8, 중앙 4칸 교차 배치·흑 선공, 8방향 끼우기 뒤집기, 합법 수 없을 때 자동 패스, 종료 시 돌 수 비교 `othello-standard-v1`)을 제공한다.
 
@@ -278,7 +292,7 @@ Stitch 시안(데스크톱, 2026-10-28 export, `cyber_board_cafe_stitch_2026-10-
 | `14_my_profile` | 내 프로필·통계·전적·아바타 | `/me` | 필요 | `GET /api/users/me`, `PATCH /api/users/me`, `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar`, `GET /api/media/avatars/{name}`, `GET /api/users/{userId}/stats`, `GET /api/users/{userId}/matches`, `GET /api/auth/2fa`, `POST /api/auth/oauth/42/link` |
 | `15_other_user_profile` | 다른 사용자 프로필 | `/users/:userId` | 필요 | `GET /api/users/{userId}`, `GET /api/users/{userId}/stats`, `GET /api/users/{userId}/matches` (`403 RECORDS_PRIVATE` 시 비공개 안내) |
 | `16_friends_chat` | 친구 목록·요청 관리 (채팅 제외) | `/friends` | 필요 | `GET /api/friends`, `GET /api/users?nickname=`, `POST /api/friends/requests`, `POST /api/friends/requests/{id}/accept`, `.../decline`, `DELETE /api/friends/{userId}`, WS `presence` |
-| `17_settings_2fa` | 2FA 설정·복구 코드·해제 | `/settings/2fa` (또는 `/me` 보안 섹션) | 필요 | `GET /api/auth/2fa`, `POST /api/auth/2fa/setup`, `POST /api/auth/2fa/enable`, `POST /api/auth/2fa/disable` |
+| `17_settings_2fa` | 2FA 설정·복구 코드·해제 | 현재 `/me` 보안 섹션 (`/settings/2fa`는 시안 경로) | 필요 | `GET /api/auth/2fa`, `POST /api/auth/2fa/setup`, `POST /api/auth/2fa/enable`, `POST /api/auth/2fa/disable` |
 | `18_account_menu_logout_modal` | 계정 메뉴·로그아웃 확인 모달 | 전역 헤더 위 모달 | 필요 | `POST /api/auth/logout` (`{ refreshToken }`), WS 연결 종료 |
 | `19_notifications_toast_center` | 전역 알림·토스트·초대 수신 | 전역 오버레이 | 필요 | WS `invite.send`, `invite.received`, `invite.accept`, `invite.decline`, `invite.cancel`, `invite.updated`, `invite.error` |
 | `20_terms_privacy` | 이용약관·개인정보처리방침 | `/terms`, `/privacy` | 없음 (비로그인 접근 가능) | 정적 문서 (`NFR-PRIV-01`, 로그인·회원가입·하단 푸터에서 상시 접근) |
@@ -349,7 +363,7 @@ flowchart TD
 3. **로그인·2FA·42 OAuth 전이**:
    - `POST /api/auth/login` 또는 `POST /api/auth/oauth/42/callback`(`mode: "login"`) 응답이 `{ twoFactorRequired: true, challengeToken, expiresAt }`이면 `challengeToken`을 메모리에 보관하고 `/login/2fa`로 이동한다.
    - `/login/2fa`에서 6자리 TOTP 코드 또는 10자리 복구 코드(`XXXX-XXXX` 또는 8자리 영숫자)로 `POST /api/auth/2fa/verify`에 성공하면 토큰을 저장하고 WebSocket 인증 단계로 진입한다. `401 CHALLENGE_EXPIRED`(만료 또는 5회 실패 폐기)가 오면 `challengeToken`을 비우고 `/login`으로 되돌린다.
-   - 내 프로필(`/me`)에서 `42 계정 연결`(`POST /api/auth/oauth/42/link`)을 시작한 경우 `sessionStorage`에 `cbc.oauth.mode = "link"`와 `flowToken`을 저장한다. callback 응답이 `{ mode: "link", linked: true }`이면 토큰을 교체하지 않고 `/me`로 복귀해 연결 완료 안내를 띄운다.
+   - 내 프로필(`/me`)에서 `42 계정 연결`(`POST /api/auth/oauth/42/link`)을 시작한 경우 `sessionStorage`에 `flowToken`을 저장한다. callback 응답이 `{ linked: true }`이면 토큰을 교체하지 않고 `/me`로 복귀해 연결 완료 안내를 띄운다. 위 다이어그램의 `/settings/2fa`는 시안 경로이며, #65의 설정 UI는 현재 `/me` 보안 섹션에 구현돼 있다.
 4. **진행 중 경기 자동 복귀 (`auth.ok`의 `activeMatchId`, A·D 합의 확정)**:
    - 로그인 성공 직후 또는 새로고침으로 세션 복원 직후 WebSocket `/api/ws`를 연결해 첫 메시지 `auth`를 보낸다.
    - 서버가 보낸 `auth.ok` payload(`{ userId, activeMatchId }`)에 **`activeMatchId`가 `null`이 아니면**, 사용자가 `/`이나 `/login`에 있었더라도 로비에 머물지 않고 즉시 `/match/:matchId`로 경로를 전환한 뒤 `match.subscribe` (`{ matchId: activeMatchId }`)를 전송해 진행 중 대국(`match.snapshot`)을 복원한다(2.5의 9번, 2.6의 13번).
@@ -447,7 +461,7 @@ flowchart TD
 ###### 2. 포커스 표시·비색상 시각 단서·ARIA 규칙 (`NFR-UX-02`)
 
 - **키보드 포커스 링**: 모든 대화형 요소(`button`, `input`, `a`, 보드 교차점 버튼 `.cbc-board-cell`)에 `:focus-visible` 스타일(`outline: 2px solid #ff7a00; outline-offset: 2px`)을 적용해 현재 포커스 위치를 명확히 드러낸다.
-- **보드 칸 접근성 레이블**: 각 보드 칸 `<button>`은 `aria-label="{row + 1}행 {col + 1}열, {상태}"`(예: `"8행 8열, 빈 칸"`, `"8행 8열, 흑돌"`, `"4행 3열, 착수 가능"`)를 제공하고, 착수 불가능 상태(이미 놓인 칸, 상대 차례, 경기 일시정지·종료, `pendingCommand`, `sessionReplaced`)에서는 `disabled` 속성을 부여한다.
+- **보드 칸 접근성 레이블**: 현재 구현의 보드 칸 `<button>`은 `aria-label="{row}, {col} {상태}"` 형태로 0-based 좌표와 상태를 제공한다(예: `"7, 7 빈 칸"`, `"7, 7 흑돌"`). TEST_PLAN과 전송 좌표도 같은 기준을 쓴다. 착수 불가능 상태(이미 놓인 칸, 상대 차례, 경기 일시정지·종료, `pendingCommand`, `sessionReplaced`)에서는 `disabled` 속성을 부여한다.
 - **색상에만 의존하지 않는 상태 구분**:
   - 흑/백 돌 구분: 색상 대비(흑돌 `#141210` 하이라이트 vs 백돌 `#f5eee6` 테두리)와 함께 플레이어 카드에 **`흑 (선공)` / `백 (후공)` 텍스트 배지**와 아이콘을 병기한다.
   - 차례 및 상태 구분: 색상 점 외에도 **`내 차례` / `상대 차례` / `일시정지(연결 끊김)` / `대국 종료` 텍스트 배지**와 상단 요약 문구를 함께 표시한다.
@@ -569,9 +583,9 @@ flowchart LR
 - 잠금·버전·중복·저장(B)과 전송(D)은 게임 종류와 무관하다. 금수 같은 규칙을 추가해도 인증·방·전송·저장 코드는 바뀌지 않는다.
 - 게임 추가 시 `gameType` 값, `GameRules` 구현, 계약 타입(PR #6 절차)만 추가한다. DB의 `games_game_type_check`에 값을 더하는 migration이 함께 필요하다.
 
-##### 게임 엔진 연결 (`B 초안`, C 확인)
+##### 게임 엔진 연결 (설계 및 PR #45·#58 엔진 구현 기준, 실행 서버 등록 별도)
 
-| 항목 | 오목 (`gomoku-freestyle-v1`) | 오델로 (`othello-standard-v1`, 제안 이름) |
+| 항목 | 오목 (`gomoku-freestyle-v1`) | 오델로 (`othello-standard-v1`, PR #58 구현) |
 |---|---|---|
 | 판 | 15×15, `row/col` 0..14 | 8×8, `row/col` 0..7 |
 | 시작 | 빈 판, 흑 먼저 | 가운데 4칸: (3,3)·(4,4) 백, (3,4)·(4,3) 흑. 흑 먼저 |
@@ -919,9 +933,9 @@ erDiagram
         bigint id PK "계획 (E)"
         bigint user_low_id FK "CHECK user_low_id < user_high_id"
         bigint user_high_id FK "UNIQUE(user_low_id, user_high_id)"
-        bigint requested_by_id FK
+        bigint requested_by_id FK "CHECK requested_by_id IN (user_low_id, user_high_id)"
         text status "pending | accepted | declined"
-        timestamptz created_at
+        timestamptz created_at "재요청 시 현재 요청 시각으로 갱신 제안"
         timestamptz accepted_at "NULL"
         timestamptz declined_at "NULL"
     }
@@ -1508,19 +1522,19 @@ flowchart TD
 | 컨테이너 | 역할 | 내부 포트 | 공개 포트 | 네트워크 | Volume | 주요 환경 변수 | Health check | 시작 조건 |
 |---|---|---|---|---|---|---|---|---|
 | web | 정적 파일, reverse proxy, HTTPS 종료 | 80, 443 | `127.0.0.1:8080`, `127.0.0.1:8443` | edge | 인증서 (읽기 전용) | `PUBLIC_HTTPS_PORT` | `https://127.0.0.1/api/health/db` | api healthy |
-| api | REST, (계획) WebSocket | 3001 | 없음 | edge, data | - | `POSTGRES_*`, `API_HOST`, `PORT`, **`JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY=uniquelocal` (추가 필요)** | `/api/health/db` | migrate 성공 |
+| api | REST, WebSocket (통합 PR) | 3001 | 없음 | edge, data | avatars | `POSTGRES_*`, `API_HOST`, `PORT`, `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`, `TRUST_PROXY`, `AVATAR_DIR` | `/api/health/db` | migrate 성공 |
 | migrate | migration 적용 후 종료 | - | 없음 | data | - | `POSTGRES_*` | - | db healthy |
 | db | PostgreSQL | 5432 | 없음 | data (internal) | postgres_data | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD_FILE` | `pg_isready` | - |
 
 - DB 포트는 외부에 공개하지 않는다. 호스트에서 포트를 여는 컨테이너는 web 하나다.
 - DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면 오류가 나고 공통 처리기가 503(연결 계열) 또는 500으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
-- **PR #10 병합 시 합칠 것**: 현재 `index.ts`는 `127.0.0.1`에 고정 listen한다. PR #10은 `API_HOST`로 listen 주소를 받는다. 병합할 때 `API_HOST`와 위 인증·프록시 환경 변수를 함께 반영한다.
-- 비밀번호는 Compose secret 파일로 전달한다. B 구현으로 추가된 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`도 secret 또는 env 파일로 전달해야 한다(PR #10 병합 후 반영 필요).
+- 배포 브랜치에서 `index.ts`는 `API_HOST`와 `PORT`를 읽는다. 로컬 기본값은 `127.0.0.1:3001`이고 Compose는 컨테이너 간 접근을 위해 `0.0.0.0:3001`을 지정한다. 실시간 서버를 통합할 때 시작 코드에서 이 설정과 게임 엔진 등록을 함께 유지한다(#27).
+- PostgreSQL 비밀번호는 Compose secret 파일로 전달한다. API의 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`는 Compose의 `environment`로 전달한다.
 - 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
 
-##### PR #10·인증·아바타 통합 시 반영할 항목 (`B 초안`, E 확인, #28·#40)
+##### 배포 브랜치의 인증·아바타·WSS 설정 (E 확인, #28·#40)
 
-아래 항목은 PR #40에서 구현·검증 자료를 보완하고 있으며 아직 병합 전이다. PR #10의 기본 실행 환경과 구분하고, 전체 통합 상태는 #28에서 추적한다.
+PR #40은 PR #10의 배포 브랜치에 병합됐다. 아래는 그 브랜치에서 확인한 구성이다. 실시간 서버와의 통합 상태는 #27·#28에서 추적한다.
 
 | 대상 | 추가 내용 | 이유 |
 |---|---|---|
@@ -2078,9 +2092,9 @@ flowchart TD
 
 ---
 
-#### 2.10.29 친구 (E, `B 초안`, FR-SOC-01~03)
+#### 2.10.29 친구 (E 검토안, FR-SOC-01~03)
 
-스키마는 2.4 계획 스키마의 `friendships`를 쓴다. 두 사용자 쌍은 `(user_low_id, user_high_id)` 한 행이라 A→B, B→A 요청이 동시에 와도 UNIQUE가 하나만 남긴다.
+스키마는 2.4의 계획 스키마를 사용한다. 정렬한 사용자 쌍을 UNIQUE로 유지하고 요청자는 반드시 쌍에 속해야 한다. 아래 응답과 경합 처리 방식은 [#38의 B·E 검토](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38)를 반영했다. 5장의 남은 결정은 담당자 확인 후 확정한다.
 
 | Endpoint | 성공 | 오류 |
 |---|---|---|
@@ -2089,7 +2103,7 @@ flowchart TD
 | `POST /api/friends/requests` `{ userId }` | 201 (pending 생성), 200 (상대가 보낸 pending 요청에 맞요청하여 수락) | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
 | `POST /api/friends/requests/{id}/accept` | 200 | 401, 403 (받는 사람 아님), 404, 409 (pending 아님) |
 | `POST /api/friends/requests/{id}/decline` | 204 | 401, 403, 404, 409 |
-| `DELETE /api/friends/{userId}` | 204 | 401, 404 |
+| `DELETE /api/friends/{userId}` | 204 (호출자와 대상의 accepted 관계 삭제) | 401, 404 (accepted 관계 없음) |
 
 ```mermaid
 flowchart TD
@@ -2104,10 +2118,18 @@ flowchart TD
     Row -->|"pending, 상대가 보냄"| Acc["accepted로 변경 (맞요청은 수락으로 처리)"] --> R200[200]
     Row -->|"declined, 내가 보냈다가 거절당함"| R409c[409 REQUEST_DECLINED]
     Row -->|"declined, 내가 거절했었음"| Re["pending, requested_by = 나로 갱신"] --> R201
-    Ins -.->|"UNIQUE 위반 (동시 요청)"| Row
+    Ins -.->|"ON CONFLICT: 삽입 결과 0행"| Retry{"재조회 결과?"}
+    Retry -->|"행이 있으면 잠근 뒤 상태 판정"| Row
+    Retry -->|"수락·삭제가 겹쳐 0행"| Recheck["상한 내 조회·삽입 재시도"]
+    Recheck --> Row
 ```
 
-- 온라인 상태는 DB에 저장하지 않는다. D의 연결 관리가 사용자별 연결 수를 세고, 0 ↔ 1 이상 변할 때 그 사용자의 친구들에게 `presence`를 보낸다. `GET /api/friends`의 `online`도 같은 메모리 값을 읽는다.
+- `GET /api/friends`의 공통 사용자 정보는 `{ userId, nickname, avatarUrl }`이다. `friends`에는 `online`을, `incoming`과 `outgoing`에는 `requestId`와 `createdAt`을 붙인다. `declined` 행은 목록에 포함하지 않는다.
+- 신규 요청 201, 맞요청 수락 200, 명시적 수락 200은 공통 사용자 정보에 `requestId`와 `status`를 붙인다. `requestId`는 `friendships.id`이며 `status`는 `pending` 또는 `accepted`다. 거절 204에는 응답 본문이 없다.
+- 요청은 정렬한 사용자 쌍을 `SELECT ... FOR UPDATE`로 조회한 뒤, 행이 없으면 `INSERT ... ON CONFLICT DO NOTHING RETURNING id`를 시도한다. 삽입이 0행이면 새 쿼리로 다시 조회한다. 그 사이 수락과 삭제가 일어나면 재조회도 0행일 수 있다. 재시도 상한과 상한 도달 시 HTTP 응답은 B와 확정한다.
+- 수락과 거절은 관계 행을 잠근 뒤 수신자 권한과 `pending` 상태를 확인한다. 수락 후 도착한 거절은 409다. 친구 삭제는 호출자와 대상의 `accepted` 행에만 적용한다. `declined` 행을 유지해야 재요청 차단이 유지된다.
+- 거절한 사용자는 검색이나 상대 프로필에서 먼저 요청할 수 있다. 화면에는 거절 전에 상대의 재요청이 차단된다는 점을 표시한다. 같은 행을 `pending`으로 재사용할 때 현재 요청 시각으로 `created_at`을 갱신하고 이전 처리 시각을 지우는 안은 B·A 확인이 필요하다.
+- 온라인 상태는 DB에 저장하지 않는다. D의 사용자별 인증 연결 수가 0 ↔ 1 이상으로 바뀔 때 수락된 친구에게 `presence`를 보낸다. `GET /api/friends`도 같은 집계를 사용한다. 수락 응답에 `online`이 없으므로 성공 후 목록을 다시 조회한다는 안을 제안한다. 목록 갱신과 `presence`가 겹칠 때의 적용 순서는 A·D와 정한다.
 - 탈퇴 시 그 사용자의 `friendships` 행을 모두 지운다(2.10.27).
 - 상태 코드는 구현 시 `schema.response`와 contracts.md 11장에 함께 기록한다(프로젝트 규칙).
 
@@ -2144,15 +2166,15 @@ flowchart TD
 
 | SRS 설계 항목 (SRS 10.1) | 이 문서 | 상태 |
 |---|---|---|
-| 시스템 구성·실행/배포 | 2.1의 1번, 2.9 | `계획` (PR #10), 아바타 volume·WSS `B 초안` (E 확인, #28·#40) |
+| 시스템 구성·실행/배포 | 2.1의 1번, 2.9 | PR #40은 PR #10 배포 브랜치에 병합, `master` 병합 전. 실제 실시간 통합은 #27·#28에서 추적 |
 | 인증·권한·프로필 | 1.1, 2.6의 11번, 2.5의 8번, 2.10.25 | `구현됨` (전적 비공개·탈퇴 제외) |
-| 친구·온라인 상태 | 2.1 use case, 2.10.29, 2.5의 9번 `presence` | `B 초안` (E, D) |
+| 친구·온라인 상태 | 2.1 use case, 2.10.29, 2.5의 9번 `presence` | #38·PR #68 E 검토안, API·UI `계획` (#69) |
 | 방·매칭 상태 전이 | 2.7의 7번, 7.1 | `B 초안` (D 확인, 대기열 #19 `구현됨`, 초대 `계획`) |
-| 공통 경기와 규칙 경계 | 2.2의 4번, 2.3 | 경계·오목 엔진 연결 `구현됨` (#6, #9, #12, #45), 오델로 연결 `B 초안` (C) |
+| 공통 경기와 규칙 경계 | 2.2의 4번, 2.3 | 오목·오델로 엔진 `구현됨` (#45, #58), 오델로 실행 서버 등록·WS 통합 별도 |
 | 실시간 계약·복구 | 2.5의 9번, 2.6의 13번 | `B 초안` (D 확인, #16~#20·#41~#43 `구현됨`), 저장 경로 `구현됨` |
 | 논리/물리 데이터 모델 | 2.4의 5번 | `구현됨` |
 | API·오류 계약 | 2.5의 8번, 2.10 | `구현됨` (B 범위: PR #11, PR #15) |
-| 화면·접근성 | 2.2의 2번 | A 확인 완료 (`#21`, `#22`, `#24` 구현, 친구·초대·오델로 UI `계획`) |
+| 화면·접근성 | 2.2의 2번 | A 확인 완료 (#21~#24·#64~#66 `구현됨`, 친구·초대·전적 공개 수정·탈퇴 UI `계획`) |
 | 테스트·성능·운영 관측 | 4.1, 4.2, 4.3, [TEST_PLAN.md](TEST_PLAN.md) | 요구사항 추적·AT/T 매핑·성능 측정 지점 작성 완료 |
 
 ### 4.1 B·C·D·A 자동 테스트 대응 (`구현됨`)
@@ -2173,9 +2195,12 @@ flowchart TD
 | `apps/server/src/services/game-command-service.test.ts` | 착수·버전·차례, 재전송 1회 적용, 거절 기록, 비참가자·없는 경기·남의 commandId, 동시 명령 1개만 적용, 동시 재전송, 종료·기권 결과, 시스템 종료(`finishBySystem`), 저장 실패 rollback | AT-05·06·09(저장 부분), FR-GAME-03~05, NFR-CONC-01 | **오델로 규칙은 stub** (오목 엔진은 `#45` 연결) |
 | `apps/server/src/app.test.ts` | health, DB 미설정·연결 실패 503과 비밀값 비노출 | NFR-OPS-01 | 없음 |
 | `packages/game-engine/src/gomoku/*.test.ts` | 오목 15×15 초기 상태, 좌표 범위·중복 착수 거절, 가로·세로·대각선 5목/장목 판정, 무승부·기권 처리 | AT-04, FR-OMK-01~05 | 없음 |
+| `packages/game-engine/src/othello/*.test.ts` (PR #58) | 8×8 초기 배치·8방향 뒤집기·자동 패스·돌 수 종료·이력 복원 | AT-07, FR-G2-01~05 | WS·DB 통합과 별도 |
+| `apps/web/src/game/matchmaking.test.ts`, `legal/legal-routing.test.ts`, `api/auth-client.test.ts`, `game/othello-state.test.ts` | 매칭 전이·약관/404 경로·OAuth/2FA 요청 계약·오델로 합법 수/상태 전이 | #23, #64~#66 | HTTP/WS 클라이언트 대체물·정적 렌더링 포함. 브라우저 E2E와 별도 |
 | `tests/app.spec.ts` | Playwright 브라우저 스모크 및 UI 렌더링 검증 | AT-01, DEL-03 | 개발 서버 기준 (전체 컨테이너 E2E는 PR #10 통합 후 확장) |
+| `tests/gomoku.spec.ts` (#27 브랜치 `b24ea10`에만 있음) | 실제 두 브라우저 세션 매칭·착수·복귀·승패·전적 UI | T03, T04 일부, AT-04·06·08 | 현재 브랜치 미포함. 별도 통합 체크아웃에서 실행 결과 기록 필요 |
 
-실행하지 않은 것: 실제 42 OAuth 앱 연동, 오델로 엔진 구현·연결(C), 친구·초대 API 및 UI 통합(E·D·A), 성능 측정 수치 수집(NFR-PERF-01, DEC-10), 비작성자 재현(문서화 명세 34장 "평가 가능" 조건).
+이번 문서 동기화에서 실행하지 않은 것: 실제 42 OAuth 앱 연동, 오델로 WS·DB 통합 E2E, 약관·프로필 브라우저 E2E, 친구·초대 API 및 UI 통합(E·D·A), 성능 수치 수집(NFR-PERF-01, DEC-10), 비작성자 재현. 코드 존재·다른 작성자의 실행 보고를 이번 실행 결과로 기록하지 않는다. 명령·전제·범위는 TEST_PLAN 3.2와 README를 따른다.
 
 ### 4.2 요구사항 ID별 추적 레코드 (SRS 10.2 대응, A·B 작성)
 
@@ -2185,92 +2210,92 @@ SRS 10.2 규칙에 따라 모든 SRS 요구사항 ID(`FR-*`, `DATA-*`, `NFR-*`, 
 
 | 요구사항 ID | 요약 | SDS 설계 절 | 구현 모듈·파일 | 이슈 / PR / 커밋 | 검증 시나리오·테스트 | 검증 상태 |
 |---|---|---|---|---|---|---|
-| `FR-AUTH-01` | 이메일·비밀번호·닉네임 회원가입 | 2.2.2, 2.6.11, 2.10.1 | `apps/server/src/api/auth-routes.ts`, `services/auth-service.ts`, `apps/web/src/App.tsx`, `api/auth-client.ts` | PR #11 (`29d5a3e`), 이슈 #21 (`9b29bf5`) | `AT-02`, `T01`, `B-IT-01`, `auth-routes.test.ts` | 서버 `구현됨`, 웹 `#21 구현됨`(병합 전) |
-| `FR-AUTH-02` | 이메일·비밀번호 로그인 | 2.2.2, 2.6.11, 2.10.2 | `apps/server/src/api/auth-routes.ts`, `services/auth-service.ts`, `apps/web/src/App.tsx`, `api/auth-client.ts` | PR #11 (`29d5a3e`), 이슈 #21 (`9b29bf5`) | `AT-02`, `T01`, `B-IT-01`, `auth-routes.test.ts` | 서버 `구현됨`, 웹 `#21 구현됨`(병합 전) |
-| `FR-AUTH-03` | 로그아웃 즉시 세션·토큰 폐기 (HTTP + WS 4401) | 1.1, 2.2.2, 2.5.9, 2.6.11, 2.10.4 | `apps/server/src/services/auth-service.ts`, `realtime/ws-plugin.ts`, `apps/web/src/api/auth-client.ts` | PR #11 (`29d5a3e`), PR #41 (`32dd98f`), 이슈 #21 (`9b29bf5`) | `AT-02`, `T01`, `B-IT-02`, `auth-routes.test.ts`, `tokens.test.ts` | 서버 `구현됨`, 웹 `#21 구현됨`(병합 전) |
-| `FR-AUTH-04` | 서버 토큰 기반 권한 통제 (클라이언트 `userId` 불신) | 1.1, 2.5.8, 2.5.9, 2.8.15, 2.10.0 | `apps/server/src/app.ts`(`requireAuth`), `services/game-command-service.ts` | PR #11 (`29d5a3e`), PR #43 (`b8892b7`) | `AT-02`, `AT-05`, `T01`, `T04`, `B-IT-08`, `user-routes.test.ts`, `game-command-service.test.ts` | `구현됨` |
-| `FR-AUTH-05` | 42 OAuth 로그인·기존 계정 연결(`flowToken`·`state` 검증) | 1.1, 2.2.2, 2.6.11, 2.10.5~7 | `apps/server/src/api/oauth-routes.ts`, `services/oauth-service.ts`, `core/oauth-42.ts`, `apps/web/src/App.tsx` | PR #11 (`29d5a3e`), 이슈 #21 (`9b29bf5`) | `AT-15`, `T01`, `B-IT-04`, `oauth-routes.test.ts` | 서버 `구현됨`(`fake42`), 웹 `#21 구현됨`, 실 42 연동 `계획` |
-| `FR-AUTH-06` | TOTP 2FA 설정·활성화·로그인 검증·복구 코드·비활성화 | 1.1, 2.2.2, 2.6.11, 2.10.8~12 | `apps/server/src/api/two-factor-routes.ts`, `services/two-factor-service.ts`, `core/totp.ts`, `apps/web/src/App.tsx` | PR #11 (`29d5a3e`), 이슈 #21 (`9b29bf5`) | `AT-16`, `T01`, `B-IT-03`, `two-factor-routes.test.ts`, `totp.test.ts` | 서버 `구현됨`, 웹 `#21 구현됨`(병합 전) |
-| `FR-AUTH-07` | 다중 기기 독립 세션 및 refresh token 회전·재사용 감지 | 1.1, 2.5.9, 2.6.11, 2.10.3~4 | `apps/server/src/services/auth-service.ts`, `repositories/auth-repository.ts`, `core/tokens.ts` | PR #11 (`29d5a3e`), 커밋 `c3c52e1` | `AT-02`, `B-IT-02`, `auth-routes.test.ts` | `구현됨` |
-| `FR-PRO-01` | 프로필 조회 및 닉네임 변경(유효성·중복 거절) | 2.2.2, 2.10.13~15 | `apps/server/src/api/user-routes.ts`, `services/user-service.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-02`, `T02`, `B-IT-05`, `user-routes.test.ts` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
-| `FR-PRO-02` | 아바타 업로드(PNG/JPEG, 2 MiB, 1024px, 서명 검사)·삭제·기본 이미지 | 2.2.2, 2.9, 2.10.25 | `apps/server/src/api/avatar-routes.ts`, `services/avatar-service.ts`, `core/image.ts`, `apps/web/src/profile/Avatar.tsx`, `ProfileView.tsx` | PR #15 (`26c253d`), 이슈 #24 (`dd77369`) | `T02`, `avatar-routes.test.ts`, `image.test.ts` | 서버 `구현됨` (#15), 웹 `#24 구현됨`(병합 전) |
-| `FR-PRO-03` | 타 사용자 공개 프로필·요약 통계·최근 전적 조회 | 2.2.2, 2.10.15~17 | `apps/server/src/api/user-routes.ts`, `stats-routes.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `T02`, `B-IT-05`, `B-IT-06`, `user-routes.test.ts`, `stats-routes.test.ts` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
+| `FR-AUTH-01` | 이메일·비밀번호·닉네임 회원가입 | 2.2.2, 2.6.11, 2.10.1 | `apps/server/src/api/auth-routes.ts`, `services/auth-service.ts`, `apps/web/src/App.tsx`, `api/auth-client.ts` | PR #11 (`29d5a3e`), 이슈 #21 (`9b29bf5`) | `AT-02`, `auth-routes.test.ts`, `T01`, `B-IT-01`, `B-IT-02`, `B-IT-04` | 서버 `구현됨`, 웹 `#21 구현됨`(병합 전) |
+| `FR-AUTH-02` | 이메일·비밀번호 로그인 | 2.2.2, 2.6.11, 2.10.2 | `apps/server/src/api/auth-routes.ts`, `services/auth-service.ts`, `apps/web/src/App.tsx`, `api/auth-client.ts` | PR #11 (`29d5a3e`), 이슈 #21 (`9b29bf5`) | `AT-02`, `auth-routes.test.ts`, `T01`, `B-IT-04` | 서버 `구현됨`, 웹 `#21 구현됨`(병합 전) |
+| `FR-AUTH-03` | 로그아웃 즉시 세션·토큰 폐기 (HTTP + WS 4401) | 1.1, 2.2.2, 2.5.9, 2.6.11, 2.10.4 | `apps/server/src/services/auth-service.ts`, `realtime/ws-plugin.ts`, `apps/web/src/api/auth-client.ts` | PR #11 (`29d5a3e`), PR #41 (`32dd98f`), 이슈 #21 (`9b29bf5`) | `AT-02`, `auth-routes.test.ts`, `tokens.test.ts`, `T01`, `B-IT-05` | 서버 `구현됨`, 웹 `#21 구현됨`(병합 전) |
+| `FR-AUTH-04` | 서버 토큰 기반 권한 통제 (클라이언트 `userId` 불신) | 1.1, 2.5.8, 2.5.9, 2.8.15, 2.10.0 | `apps/server/src/app.ts`(`requireAuth`), `services/game-command-service.ts` | PR #11 (`29d5a3e`), PR #43 (`b8892b7`) | `AT-02`, `AT-05`, `user-routes.test.ts`, `game-command-service.test.ts`, `T01`, `B-IT-05` | `구현됨` |
+| `FR-AUTH-05` | 42 OAuth 로그인·기존 계정 연결(`flowToken`·`state` 검증) | 1.1, 2.2.2, 2.6.11, 2.10.14~15 | `apps/server/src/api/oauth-routes.ts`, `services/oauth-service.ts`, `core/oauth-42.ts`, `apps/web/src/api/auth-client.ts`, `App.tsx` | PR #11 (`29d5a3e`), 이슈 #65 / PR #72 (`e28c223`) | `AT-15`, `oauth-routes.test.ts`, `T01` | 서버·웹 `구현됨`, PR #72 병합 전, 실 42 검증 별도 |
+| `FR-AUTH-06` | TOTP 2FA 설정·활성화·로그인 검증·복구 코드·비활성화 | 1.1, 2.2.2, 2.6.11, 2.10.3, 2.10.10~13 | `apps/server/src/api/two-factor-routes.ts`, `services/two-factor-service.ts`, `core/totp.ts`, `apps/web/src/profile/ProfileView.tsx`, `api/auth-client.ts` | PR #11 (`29d5a3e`), 이슈 #65 / PR #72 (`e28c223`) | `AT-16`, `two-factor-routes.test.ts`, `totp.test.ts`, `T01` | 서버·웹 `구현됨`, PR #72 병합 전, 브라우저 E2E 별도 |
+| `FR-AUTH-07` | 다중 기기 독립 세션 및 refresh token 회전·재사용 감지 | 1.1, 2.5.9, 2.6.11, 2.10.3~4 | `apps/server/src/services/auth-service.ts`, `repositories/auth-repository.ts`, `core/tokens.ts` | PR #11 (`29d5a3e`), 커밋 `c3c52e1` | `AT-02`, `auth-routes.test.ts`, `T01`, `B-IT-05` | `구현됨` |
+| `FR-PRO-01` | 프로필 조회 및 닉네임 변경(유효성·중복 거절) | 2.2.2, 2.10.13~15 | `apps/server/src/api/user-routes.ts`, `services/user-service.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-02`, `user-routes.test.ts`, `T02` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
+| `FR-PRO-02` | 아바타 업로드(PNG/JPEG, 2 MiB, 1024px, 서명 검사)·삭제·기본 이미지 | 2.2.2, 2.9, 2.10.25 | `apps/server/src/api/avatar-routes.ts`, `services/avatar-service.ts`, `core/image.ts`, `apps/web/src/profile/Avatar.tsx`, `ProfileView.tsx` | PR #15 (`26c253d`), 이슈 #24 (`dd77369`) | `avatar-routes.test.ts`, `image.test.ts`, `T02` | 서버 `구현됨` (#15), 웹 `#24 구현됨`(병합 전) |
+| `FR-PRO-03` | 타 사용자 공개 프로필·요약 통계·최근 전적 조회 | 2.2.2, 2.10.15~17 | `apps/server/src/api/user-routes.ts`, `stats-routes.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `user-routes.test.ts`, `stats-routes.test.ts`, `T02` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
 | `FR-PRO-04` | 전적·기록 공개 범위 설정 (`recordsPublic`, 비공개 시 타인 403 `RECORDS_PRIVATE`) | 2.2.2, 2.4.5, 2.10.26 | `apps/server/src/services/user-service.ts`, `stats-service.ts`, `apps/web/src/profile/ProfileView.tsx` | `계획` (B API + A UI, `ProfileView.tsx`에 403 표시 분기 선반영 `#24`) | `T02` | `계획` |
-| `FR-SOC-01` | 친구 요청·수락·거절·목록 조회 | 2.1, 2.4.5, 2.10.29 | `apps/server/src/api/friend-routes.ts`(계획), `services/friend-service.ts`(계획), `apps/web` 친구 화면(계획) | PR #34 (`2603dff`), PR #39 (`3528d95`) 설계, 구현 `계획` (E, A) | `AT-03`, `T02` | `계획` (`B 초안` E 확인) |
-| `FR-SOC-02` | 친구 삭제 및 관계 상태 정리 | 2.4.5, 2.10.29 | `apps/server/src/services/friend-service.ts`(계획), `apps/web` 친구 화면(계획) | PR #34 (`2603dff`), 구현 `계획` (E, A) | `AT-03`, `T02` | `계획` (`B 초안` E 확인) |
-| `FR-SOC-03` | 친구 온라인 상태 표시 (`presence` 이벤트 및 연결 수 집계) | 2.5.9, 2.10.29 | `apps/server/src/realtime/`(D), `services/friend-service.ts`(E), `apps/web` 친구 화면(A) | PR #34 (`2603dff`), 구현 `계획` (D, E, A) | `AT-03`, `T02` | `계획` (`B 초안` D·E 확인) |
-| `FR-CAT-01` | 지원 게임 목록(오목·오델로) 및 플레이 가능 상태 표시 | 2.2.2 | `apps/web/src/App.tsx` (홈·로비 게임 카탈로그 카드) | 이슈 #22 (`98218d9`) | `AT-04`, `AT-07`, `T04`, `T05` | 오목 `구현됨` (#22), 오델로 카탈로그 `계획` |
-| `FR-CAT-02` | 대국 시작 전 핵심 규칙·판 크기·승리 조건·특수 규칙 안내 | 2.2.2, 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `Document/GAME_RULES.md`, `apps/web/src/App.tsx`, `game/GomokuMatchView.tsx` | PR #9 (`6538712`), 이슈 #22 (`98218d9`) | `AT-04`, `AT-07`, `T04`, `T05` | 오목 `구현됨` (#22), 오델로 안내 `계획` |
-| `FR-ROOM-01` | 선택한 게임으로 친구 초대 대기방 생성·유효기간(60초) 관리 | 2.5.9, 2.7.7, 2.7.7.1 | `apps/server/src/realtime/session-manager.ts`(계획), `apps/web` 초대 모달(계획) | PR #34 (`2603dff`) 설계, 구현 `계획` (D, A) | `AT-03`, `T03` | `계획` (`B 초안` D·A 확인) |
-| `FR-ROOM-02` | 초대 수락·입장·취소·퇴장 처리 | 2.5.9, 2.7.7, 2.7.7.1 | `apps/server/src/realtime/session-manager.ts`(계획), `apps/web` 초대 모달·토스트(계획) | PR #34 (`2603dff`) 설계, 구현 `계획` (D, A) | `AT-03`, `T03` | `계획` (`B 초안` D·A 확인) |
-| `FR-ROOM-03` | 매칭 성립·초대 수락 즉시 대국 시작 및 좌석(흑/백) 배정 | 2.7.7, 2.7.7.1, 2.10.19 | `apps/server/src/services/game-command-service.ts`(`createMatch`), `realtime/matchmaking-queue.ts` | PR #11 (`29d5a3e`), 이슈 #19 (`b3c86bb`) | `AT-03`, `T03`, `game-command-service.test.ts` | 자동 매칭 `구현됨` (#19), 초대 시작 `계획` |
-| `FR-ROOM-04` | 잘못된 방/초대 상태 전이(정원 초과·중복 참가·만료 수락) 거절 | 2.5.9, 2.7.7, 2.7.7.1 | `apps/server/src/realtime/matchmaking-queue.ts`, `session-manager.ts` | 이슈 #19 (`b3c86bb`), 초대 부분 `계획` (D) | `AT-03`, `T03` | 대기열 중복 차단 `구현됨` (#19), 초대 `계획` |
-| `FR-MATCH-01` | 게임별 자동 매칭 대기열 등록(`queue.join`)·취소(`queue.leave`)·성립(`queue.matched`) | 2.2.2, 2.5.9, 2.7.7.1 | `apps/server/src/realtime/matchmaking-queue.ts`, `ws-plugin.ts`, `apps/web/src/game/ws-client.ts`, `App.tsx` | 이슈 #19 (`b3c86bb`), 이슈 #22 (`98218d9`) | `AT-03`, `T03` | `구현됨` (#19, #22, 병합 전) |
-| `FR-MATCH-02` | 사용자당 활성 참가 위치 1개 불변조건 및 다중 탭 제어권 전환(`session.replaced`) | 2.2.2, 2.5.9, 2.7.7.1 | `apps/server/src/realtime/ws-plugin.ts`, `matchmaking-queue.ts`, `apps/web/src/game/GomokuMatchView.tsx` | 이슈 #17~#20 (`087702d`, `b3c86bb`), 이슈 #22 (`98218d9`) | `AT-03`, `AT-10`, `T03`, `T06` | 대기열·구독 `구현됨`, 통합 `session.replaced` 마무리 중 |
-| `FR-GAME-01` | 경기 상태(`waiting`, `playing`, `paused`, `finished`) 및 현재 차례·참가자 공개 상태 관리 | 2.2.2, 2.4.5, 2.7.7, 2.10.21 | `packages/game-contracts/src/types.ts`, `apps/server/src/services/game-command-service.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #6 (`7064845`), PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-04`, `AT-07`, `T04`, `T05`, `game-command-service.test.ts` | `구현됨` |
-| `FR-GAME-02` | 서버 단독 규칙·차례 검증(server-authoritative) | 2.1.1, 2.2.4, 2.6.12, 2.8.15 | `apps/server/src/services/game-command-service.ts`, `packages/game-engine/src/gomoku/apply-move.ts` | PR #9 (`6538712`), PR #11 (`29d5a3e`), PR #45 (`d56ffbe`) | `AT-04`, `AT-05`, `T04`, `B-IT-07`, `B-IT-08`, `game-command-service.test.ts` | 오목 `구현됨`, 오델로 `계획` |
-| `FR-GAME-03` | 무효 명령(비참가자·차례 아님·점유 칸·범위 밖·버전 불일치·중복 `commandId`) 거절 및 상태 보존 | 2.6.12, 2.8.15, 2.10.20 | `apps/server/src/services/game-command-service.ts`, `repositories/game-repository.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #11 (`29d5a3e`), PR #43 (`b8892b7`), 이슈 #22 (`98218d9`) | `AT-05`, `AT-09`, `T04`, `T09`, `B-IT-08`, `B-IT-09`, `game-command-service.test.ts` | `구현됨` |
-| `FR-GAME-04` | 진행 중 경기 기권(`resign`) 확인 모달 및 즉시 상대 승리 확정 | 2.2.2, 2.7.7, 2.8.16, 2.10.20 | `packages/game-contracts/src/actions/resign.ts`, `apps/server/src/services/game-command-service.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #6 (`7064845`), PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-04`, `T04`, `B-IT-07`, `game-command-service.test.ts` | `구현됨` |
-| `FR-GAME-05` | 경기 종료 사유(`five_in_row`, `disc_count`, `draw`, `resign`, `disconnect_timeout`, `server_restart`) 및 결과 1회 확정 | 2.4.5, 2.8.16, 2.10.20, 2.10.28 | `packages/game-contracts/src/shared/two-player-result.ts`, `apps/server/src/services/game-command-service.ts`, `db/schema/games.ts` | PR #6 (`7064845`), PR #11 (`29d5a3e`), 커밋 `fced580` | `AT-04`, `AT-06`, `AT-08`, `AT-17`, `T04`, `T06`, `T07`, `B-IT-07`, `B-IT-10`, `game-command-service.test.ts` | `구현됨` |
-| `FR-RT-01` | 실시간 경기 상태·차례·남은 복귀 유예 시간·결과 동기화 (클라이언트 임의 승패 판정 금지) | 2.2.2, 2.5.9, 2.6.12, 2.6.13 | `apps/server/src/realtime/ws-plugin.ts`, `apps/web/src/game/ws-client.ts`, `GomokuMatchView.tsx` | PR #41~#43 (`32dd98f`, `087702d`, `b8892b7`), 이슈 #20 (`3dd6be2`), 이슈 #22 (`98218d9`) | `AT-04`, `AT-06`, `T04`, `T06` | `구현됨` (PR 병합 전) |
-| `FR-RT-02` | 연결 끊김 감지(즉시 close 또는 최대 20초 ping 무응답) 및 상대방 알림(`player.disconnected`)·일시정지(`paused`) | 2.5.9, 2.6.13, 2.7.7 | `apps/server/src/realtime/ws-plugin.ts`, `absence-timer.ts`, `services/game-command-service.ts`(`setStatus`) | 이슈 #20 (`3dd6be2`), 커밋 `c3c52e1` | `AT-06`, `T06` | `구현됨` (#20, 병합 전) |
-| `FR-RT-03` | 누적 60초 유예 시간 내 재접속 시 최신 `match.snapshot` 복구 및 경기 재개(`player.reconnected`) | 2.2.2, 2.5.9, 2.6.13 | `apps/server/src/realtime/ws-plugin.ts`, `services/game-command-service.ts`(`getSnapshot`), `apps/web/src/game/ws-client.ts` | PR #42 (`087702d`), 이슈 #20 (`3dd6be2`), 이슈 #22 (`98218d9`) | `AT-06`, `T06` | `구현됨` (#20, #22, 병합 전) |
-| `FR-RT-04` | 누적 60초 유예 시간 초과 시 1인 부재 패배 / 양쪽 부재 무효(`void`) 1회 확정 | 2.6.13, 2.7.7, 2.10.28 | `apps/server/src/services/game-command-service.ts`(`finishBySystem`), `realtime/absence-timer.ts` | 커밋 `fced580`, 이슈 #20 (`3dd6be2`) | `AT-06`, `T06`, `game-command-service.test.ts` | `구현됨` (#20, 병합 전) |
-| `FR-RT-05` | 서버 재시작 시 미완료(`playing`, `paused`) 경기 `void`(`server_restart`) 일괄 정리 | 2.7.7, 2.10.28 | `apps/server/src/index.ts`, `repositories/game-repository.ts`(`voidUnfinishedGames`) | PR #11 (`29d5a3e`), 커밋 `fced580` | `AT-17`, `T06`, `game-command-service.test.ts` | `구현됨` |
-| `FR-REC-01` | 완료된 경기 기록(게임 종류·참가자·승패·사유·착수 수순·시각) 영속 저장 | 2.4.5, 2.8.16, 2.10.20 | `apps/server/src/db/schema/games.ts`, `repositories/game-repository.ts`, `services/game-command-service.ts` | PR #11 (`29d5a3e`) | `AT-08`, `T07`, `B-IT-07`, `stats-routes.test.ts` | `구현됨` |
-| `FR-REC-02` | 사용자별·게임별 누적 통계(승·패·무·완료 경기 수·승률, `void`/진행 중 제외) 제공 | 2.2.2, 2.4.14, 2.10.16 | `apps/server/src/api/stats-routes.ts`, `services/stats-service.ts`, `repositories/stats-repository.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `T07`, `B-IT-06`, `stats-routes.test.ts` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
-| `FR-REC-03` | 업적(첫 승리 `firstWin`) 및 진행도(`min(played, 10) / 10`) 계산·표시 | 2.2.2, 2.4.14, 2.10.16 | `apps/server/src/services/stats-service.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `T07`, `B-IT-06`, `stats-routes.test.ts` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
-| `FR-REC-04` | 게임별 리더보드(`wins desc → winRate desc → userId asc`, 전적 비공개 사용자 포함) 제공 | 2.2.2, 2.4.14, 2.10.18 | `apps/server/src/api/stats-routes.ts`, `repositories/stats-repository.ts`, `apps/web/src/profile/LeaderboardView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `T07`, `B-IT-06`, `stats-routes.test.ts` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
-| `FR-OMK-01` | 오목 15×15 격자판(`0..14`) 및 흑 선공 시작 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/gomoku/initial-state.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #9 (`6538712`), PR #45 (`d56ffbe`), 이슈 #22 (`98218d9`) | `AT-04`, `T04`, `initial-state.test.ts` | `구현됨` |
-| `FR-OMK-02` | 오목 교대 착수 및 차례 전환 | 2.2.4, 2.8.15 | `packages/game-engine/src/gomoku/apply-move.ts`, `rules.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`), PR #45 (`d56ffbe`) | `AT-04`, `T04`, `apply-move.test.ts` | `구현됨` |
-| `FR-OMK-03` | 오목 점유 교차점·범위 밖·차례 외 착수 거절(`INVALID_ACTION`, `NOT_YOUR_TURN`) | 2.2.4, 2.8.15 | `packages/game-engine/src/gomoku/rules.ts`, `apps/server/src/services/game-command-service.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`), PR #11 (`29d5a3e`) | `AT-05`, `T04`, `rules.test.ts`, `game-command-service.test.ts` | `구현됨` |
-| `FR-OMK-04` | 오목 가로·세로·대각선 5개 이상 연속(`gomoku-freestyle-v1`) 승리 판정 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/gomoku/rules.ts`, `apply-move.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`), PR #45 (`d56ffbe`) | `AT-04`, `T04`, `rules.test.ts`, `finish.test.ts` | `구현됨` |
-| `FR-OMK-05` | 오목 모든 교차점(225칸) 소진 시 무승부(`draw`) 종료 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/gomoku/rules.ts`, `apply-move.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`) | `AT-04`, `T04`, `finish.test.ts` | `구현됨` |
-| `FR-G2-01` | 오델로 8×8 보드(`0..7`), 중앙 4칸 교차 초기 배치 및 흑 선공 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-contracts/src/othello/types.ts`, `packages/game-engine` 오델로 모듈(계획), `apps/web` 오델로 화면(계획) | PR #6 (`7064845`, 계약), 엔진·UI `계획` (C, A) | `AT-07`, `T05` | 계약 `구현됨`, 엔진·UI `계획` |
-| `FR-G2-02` | 오델로 8방향 끼우기 합법 착수 판별 및 무효 수(`INVALID_ACTION`) 거절 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine` 오델로 모듈(계획) | `계획` (C) | `AT-05`, `AT-07`, `T05` | `계획` |
-| `FR-G2-03` | 오델로 착수 시 끼인 상대 돌 일괄 뒤집기 및 보드 재생(`board(moves)`) | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine` 오델로 모듈(계획) | `계획` (C) | `AT-07`, `T05` | `계획` |
-| `FR-G2-04` | 오델로 합법 수 부재 시 자동 패스(`nextTurn` 동일 유지) | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine` 오델로 모듈(계획), `apps/web` 오델로 화면(계획) | `계획` (C, A) | `AT-07`, `T05` | `계획` |
-| `FR-G2-05` | 오델로 양쪽 합법 수 부재 또는 64칸 소진 시 돌 수 비교(`disc_count` 승 / `draw`) 종료 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-contracts/src/othello/types.ts`, `packages/game-engine` 오델로 모듈(계획) | PR #6 (`7064845`, 계약), 엔진 `계획` (C) | `AT-07`, `T05` | 계약 `구현됨`, 엔진 `계획` |
+| `FR-SOC-01` | 친구 요청·수락·거절·목록 조회 | 2.1, 2.4.5, 2.10.29 | `apps/server/src/api/friend-routes.ts`(계획), `services/friend-service.ts`(계획), `apps/web` 친구 화면(계획) | PR #34 (`2603dff`), PR #39 (`3528d95`) 설계, 구현 `계획` (E, A) | `AT-03`, `T06` | `계획` (`B 초안` E 확인) |
+| `FR-SOC-02` | 친구 삭제 및 관계 상태 정리 | 2.4.5, 2.10.29 | `apps/server/src/services/friend-service.ts`(계획), `apps/web` 친구 화면(계획) | PR #34 (`2603dff`), 구현 `계획` (E, A) | `AT-03`, `T06` | `계획` (`B 초안` E 확인) |
+| `FR-SOC-03` | 친구 온라인 상태 표시 (`presence` 이벤트 및 연결 수 집계) | 2.5.9, 2.10.29 | `apps/server/src/realtime/`(D), `services/friend-service.ts`(E), `apps/web` 친구 화면(A) | PR #34 (`2603dff`), 구현 `계획` (D, E, A) | `AT-03`, `T06` | `계획` (`B 초안` D·E 확인) |
+| `FR-CAT-01` | 지원 게임 목록(오목·오델로) 및 플레이 가능 상태 표시 | 2.2.2 | `apps/web/src/game/matchmaking-state.ts`, `App.tsx` | 이슈 #23 / PR #63 (`5b10db3`), #66 / PR #73 (`3d06126`) | `AT-04`, `AT-07`, `T03`, `T09` | 두 게임 카탈로그·매칭 활성화 `구현됨` (서버 등록 별도) |
+| `FR-CAT-02` | 대국 시작 전 핵심 규칙·판 크기·승리 조건·특수 규칙 안내 | 2.2.2, 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `apps/web/src/game/matchmaking-state.ts`, `game/MatchmakingView.tsx`, `App.tsx` | 이슈 #23 / PR #63 (`5b10db3`), #66 / PR #73 (`3d06126`) | `AT-04`, `AT-07`, `T03`, `T09` | 오목·오델로 규칙 요약 `구현됨` (브랜치) |
+| `FR-ROOM-01` | 선택한 게임으로 친구 초대 대기방 생성·유효기간(60초) 관리 | 2.5.9, 2.7.7, 2.7.7.1 | `apps/server/src/realtime/session-manager.ts`(계획), `apps/web` 초대 모달(계획) | PR #34 (`2603dff`) 설계, 구현 `계획` (D, A) | `AT-03`, `T03`, `T05`, `T06` | `계획` (`B 초안` D·A 확인) |
+| `FR-ROOM-02` | 초대 수락·입장·취소·퇴장 처리 | 2.5.9, 2.7.7, 2.7.7.1 | `apps/server/src/realtime/session-manager.ts`(계획), `apps/web` 초대 모달·토스트(계획) | PR #34 (`2603dff`) 설계, 구현 `계획` (D, A) | `AT-03`, `T03`, `T05`, `T06` | `계획` (`B 초안` D·A 확인) |
+| `FR-ROOM-03` | 매칭 성립·초대 수락 즉시 대국 시작 및 좌석(흑/백) 배정 | 2.7.7, 2.7.7.1, 2.10.19 | `apps/server/src/services/game-command-service.ts`(`createMatch`), `realtime/matchmaking-queue.ts` | PR #11 (`29d5a3e`), 이슈 #19 (`b3c86bb`) | `AT-03`, `game-command-service.test.ts`, `T03`, `T05`, `T06` | 자동 매칭 `구현됨` (#19), 초대 시작 `계획` |
+| `FR-ROOM-04` | 잘못된 방/초대 상태 전이(정원 초과·중복 참가·만료 수락) 거절 | 2.5.9, 2.7.7, 2.7.7.1 | `apps/server/src/realtime/matchmaking-queue.ts`, `session-manager.ts` | 이슈 #19 (`b3c86bb`), 초대 부분 `계획` (D) | `AT-03`, `T03`, `T05`, `T06` | 대기열 중복 차단 `구현됨` (#19), 초대 `계획` |
+| `FR-MATCH-01` | 게임별 자동 매칭 대기열 등록(`queue.join`)·취소(`queue.leave`)·성립(`queue.matched`) | 2.2.2, 2.5.9, 2.7.7.1 | `apps/server/src/realtime/matchmaking-queue.ts` (D 브랜치), `apps/web/src/game/matchmaking-state.ts`, `game/MatchmakingView.tsx`, `game/ws-client.ts`, `App.tsx` | 이슈 #19 (`b3c86bb`), #23 / PR #63 (`5b10db3`), 통합 #27 (`b24ea10`) | `AT-03`, `T03`, `T04`, `T05` | 서버·웹 브랜치 `구현됨`, #27 오목 E2E와 전체 경합 인수 별도 |
+| `FR-MATCH-02` | 사용자당 활성 참가 위치 1개 불변조건 및 다중 탭 제어권 전환(`session.replaced`) | 2.2.2, 2.5.9, 2.7.7.1 | `apps/server/src/realtime/ws-plugin.ts`, `matchmaking-queue.ts`, `apps/web/src/game/GomokuMatchView.tsx` | 이슈 #17~#20 (`087702d`, `b3c86bb`), 이슈 #22 (`98218d9`) | `AT-03`, `AT-10`, `T03`, `T04`, `T05` | 대기열·구독 `구현됨`, 통합 `session.replaced` 마무리 중 |
+| `FR-GAME-01` | 경기 상태(`waiting`, `playing`, `paused`, `finished`) 및 현재 차례·참가자 공개 상태 관리 | 2.2.2, 2.4.5, 2.7.7, 2.10.21 | `packages/game-contracts/src/types.ts`, `apps/server/src/services/game-command-service.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #6 (`7064845`), PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-04`, `AT-07`, `game-command-service.test.ts`, `T03`, `T05`, `T07` | `구현됨` |
+| `FR-GAME-02` | 서버 단독 규칙·차례 검증(server-authoritative) | 2.1.1, 2.2.4, 2.6.12, 2.8.15 | `apps/server/src/services/game-command-service.ts`, `packages/game-engine/src/gomoku/apply-move.ts`, `packages/game-engine/src/othello/apply-move.ts` | PR #9 (`6538712`), PR #11 (`29d5a3e`), PR #45 (`d56ffbe`), PR #58 (`c202cb8`) | `AT-04`, `AT-05`, `game-command-service.test.ts`, `T03`, `T05`, `T07` | 두 게임 엔진 `구현됨`, 실행 서버의 오델로 등록·실제 통합 검증 별도 |
+| `FR-GAME-03` | 무효 명령(비참가자·차례 아님·점유 칸·범위 밖·버전 불일치·중복 `commandId`) 거절 및 상태 보존 | 2.6.12, 2.8.15, 2.10.20 | `apps/server/src/services/game-command-service.ts`, `repositories/game-repository.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #11 (`29d5a3e`), PR #43 (`b8892b7`), 이슈 #22 (`98218d9`) | `AT-05`, `AT-09`, `game-command-service.test.ts`, `T03`, `T05`, `T07`, `B-IT-06`, `B-IT-07` | `구현됨` |
+| `FR-GAME-04` | 진행 중 경기 기권(`resign`) 확인 모달 및 즉시 상대 승리 확정 | 2.2.2, 2.7.7, 2.8.16, 2.10.20 | `packages/game-contracts/src/actions/resign.ts`, `apps/server/src/services/game-command-service.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #6 (`7064845`), PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-04`, `game-command-service.test.ts`, `T03`, `T05`, `T07` | `구현됨` |
+| `FR-GAME-05` | 경기 종료 사유(`five_in_row`, `disc_count`, `draw`, `resign`, `disconnect_timeout`, `server_restart`) 및 결과 1회 확정 | 2.4.5, 2.8.16, 2.10.20, 2.10.28 | `packages/game-contracts/src/shared/two-player-result.ts`, `apps/server/src/services/game-command-service.ts`, `db/schema/games.ts` | PR #6 (`7064845`), PR #11 (`29d5a3e`), 커밋 `fced580` | `AT-04`, `AT-06`, `AT-08`, `AT-17`, `game-command-service.test.ts`, `T03`, `T05`, `T07`, `B-IT-08` | `구현됨` |
+| `FR-RT-01` | 실시간 경기 상태·차례·남은 복귀 유예 시간·결과 동기화 (클라이언트 임의 승패 판정 금지) | 2.2.2, 2.5.9, 2.6.12, 2.6.13 | `apps/server/src/realtime/ws-plugin.ts`, `apps/web/src/game/ws-client.ts`, `GomokuMatchView.tsx` | PR #41~#43 (`32dd98f`, `087702d`, `b8892b7`), 이슈 #20 (`3dd6be2`), 이슈 #22 (`98218d9`) | `AT-04`, `AT-06`, `T04`, `T07` | `구현됨` (PR 병합 전) |
+| `FR-RT-02` | 연결 끊김 감지(즉시 close 또는 최대 20초 ping 무응답) 및 상대방 알림(`player.disconnected`)·일시정지(`paused`) | 2.5.9, 2.6.13, 2.7.7 | `apps/server/src/realtime/ws-plugin.ts`, `absence-timer.ts`, `services/game-command-service.ts`(`setStatus`) | 이슈 #20 (`3dd6be2`), 커밋 `c3c52e1` | `AT-06`, `T04`, `T07` | `구현됨` (#20, 병합 전) |
+| `FR-RT-03` | 누적 60초 유예 시간 내 재접속 시 최신 `match.snapshot` 복구 및 경기 재개(`player.reconnected`) | 2.2.2, 2.5.9, 2.6.13 | `apps/server/src/realtime/ws-plugin.ts`, `services/game-command-service.ts`(`getSnapshot`), `apps/web/src/game/ws-client.ts` | PR #42 (`087702d`), 이슈 #20 (`3dd6be2`), 이슈 #22 (`98218d9`) | `AT-06`, `T04`, `T07` | `구현됨` (#20, #22, 병합 전) |
+| `FR-RT-04` | 누적 60초 유예 시간 초과 시 1인 부재 패배 / 양쪽 부재 무효(`void`) 1회 확정 | 2.6.13, 2.7.7, 2.10.28 | `apps/server/src/services/game-command-service.ts`(`finishBySystem`), `realtime/absence-timer.ts` | 커밋 `fced580`, 이슈 #20 (`3dd6be2`) | `AT-06`, `game-command-service.test.ts`, `T04`, `T07` | `구현됨` (#20, 병합 전) |
+| `FR-RT-05` | 서버 재시작 시 미완료(`playing`, `paused`) 경기 `void`(`server_restart`) 일괄 정리 | 2.7.7, 2.10.28 | `apps/server/src/index.ts`, `repositories/game-repository.ts`(`voidUnfinishedGames`) | PR #11 (`29d5a3e`), 커밋 `fced580` | `AT-17`, `game-command-service.test.ts`, `T04`, `T07` | `구현됨` |
+| `FR-REC-01` | 완료된 경기 기록(게임 종류·참가자·승패·사유·착수 수순·시각) 영속 저장 | 2.4.5, 2.8.16, 2.10.20 | `apps/server/src/db/schema/games.ts`, `repositories/game-repository.ts`, `services/game-command-service.ts` | PR #11 (`29d5a3e`) | `AT-08`, `stats-routes.test.ts`, `T08`, `B-IT-08` | `구현됨` |
+| `FR-REC-02` | 사용자별·게임별 누적 통계(승·패·무·완료 경기 수·승률, `void`/진행 중 제외) 제공 | 2.2.2, 2.4.14, 2.10.16 | `apps/server/src/api/stats-routes.ts`, `services/stats-service.ts`, `repositories/stats-repository.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `stats-routes.test.ts`, `T08` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
+| `FR-REC-03` | 업적(첫 승리 `firstWin`) 및 진행도(`min(played, 10) / 10`) 계산·표시 | 2.2.2, 2.4.14, 2.10.16 | `apps/server/src/services/stats-service.ts`, `apps/web/src/profile/ProfileView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `stats-routes.test.ts`, `T08` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
+| `FR-REC-04` | 게임별 리더보드(`wins desc → winRate desc → userId asc`, 전적 비공개 사용자 포함) 제공 | 2.2.2, 2.4.14, 2.10.18 | `apps/server/src/api/stats-routes.ts`, `repositories/stats-repository.ts`, `apps/web/src/profile/LeaderboardView.tsx` | PR #11 (`29d5a3e`), 이슈 #24 (`dd77369`) | `AT-08`, `stats-routes.test.ts`, `T08` | 서버 `구현됨`, 웹 `#24 구현됨`(병합 전) |
+| `FR-OMK-01` | 오목 15×15 격자판(`0..14`) 및 흑 선공 시작 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/gomoku/initial-state.ts`, `apps/web/src/game/GomokuMatchView.tsx` | PR #9 (`6538712`), PR #45 (`d56ffbe`), 이슈 #22 (`98218d9`) | `AT-04`, `initial-state.test.ts`, `T03`, `T07` | `구현됨` |
+| `FR-OMK-02` | 오목 교대 착수 및 차례 전환 | 2.2.4, 2.8.15 | `packages/game-engine/src/gomoku/apply-move.ts`, `rules.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`), PR #45 (`d56ffbe`) | `AT-04`, `apply-move.test.ts`, `T03`, `T07` | `구현됨` |
+| `FR-OMK-03` | 오목 점유 교차점·범위 밖·차례 외 착수 거절(`INVALID_ACTION`, `NOT_YOUR_TURN`) | 2.2.4, 2.8.15 | `packages/game-engine/src/gomoku/rules.ts`, `apps/server/src/services/game-command-service.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`), PR #11 (`29d5a3e`) | `AT-05`, `rules.test.ts`, `game-command-service.test.ts`, `T03`, `T07` | `구현됨` |
+| `FR-OMK-04` | 오목 가로·세로·대각선 5개 이상 연속(`gomoku-freestyle-v1`) 승리 판정 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/gomoku/rules.ts`, `apply-move.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`), PR #45 (`d56ffbe`) | `AT-04`, `rules.test.ts`, `finish.test.ts`, `T03`, `T07` | `구현됨` |
+| `FR-OMK-05` | 오목 모든 교차점(225칸) 소진 시 무승부(`draw`) 종료 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/gomoku/rules.ts`, `apply-move.ts` | PR #9 (`6538712`), PR #12 (`5e064f3`) | `AT-04`, `finish.test.ts`, `T03`, `T07` | `구현됨` |
+| `FR-G2-01` | 오델로 8×8 보드(`0..7`), 중앙 4칸 교차 초기 배치 및 흑 선공 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/othello/`, `apps/web/src/game/othello-state.ts`, `game/OthelloMatchView.tsx` | 엔진 PR #58 (`c202cb8`, master `5db96b1`), 이슈 #66 / PR #73 (`3d06126`) | `AT-07`, `T03`, `T07` | 엔진·UI `구현됨`, UI PR #73 병합 전, 서버 등록·실제 2세션 E2E 별도 |
+| `FR-G2-02` | 오델로 8방향 끼우기 합법 착수 판별 및 무효 수(`INVALID_ACTION`) 거절 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/othello/`, `apps/web/src/game/othello-state.ts`, `game/OthelloMatchView.tsx` | 엔진 PR #58 (`c202cb8`, master `5db96b1`), 이슈 #66 / PR #73 (`3d06126`) | `AT-05`, `AT-07`, `T03`, `T07` | 엔진·UI `구현됨`, UI PR #73 병합 전, 서버 등록·실제 2세션 E2E 별도 |
+| `FR-G2-03` | 오델로 착수 시 끼인 상대 돌 일괄 뒤집기 및 보드 재생(`board(moves)`) | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/othello/`, `apps/web/src/game/othello-state.ts`, `game/OthelloMatchView.tsx` | 엔진 PR #58 (`c202cb8`, master `5db96b1`), 이슈 #66 / PR #73 (`3d06126`) | `AT-07`, `T03`, `T07` | 엔진·UI `구현됨`, UI PR #73 병합 전, 서버 등록·실제 2세션 E2E 별도 |
+| `FR-G2-04` | 오델로 합법 수 부재 시 자동 패스(`nextTurn` 동일 유지) | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/othello/`, `apps/web/src/game/othello-state.ts`, `game/OthelloMatchView.tsx` | 엔진 PR #58 (`c202cb8`, master `5db96b1`), 이슈 #66 / PR #73 (`3d06126`) | `AT-07`, `T03`, `T07` | 엔진·UI `구현됨`, UI PR #73 병합 전, 서버 등록·실제 2세션 E2E 별도 |
+| `FR-G2-05` | 오델로 양쪽 합법 수 부재 또는 64칸 소진 시 돌 수 비교(`disc_count` 승 / `draw`) 종료 | 2.2.4, [GAME_RULES.md](GAME_RULES.md) | `packages/game-engine/src/othello/`, `apps/web/src/game/othello-state.ts`, `game/OthelloMatchView.tsx` | 엔진 PR #58 (`c202cb8`, master `5db96b1`), 이슈 #66 / PR #73 (`3d06126`) | `AT-07`, `T03`, `T07` | 엔진·UI `구현됨`, UI PR #73 병합 전, 서버 등록·실제 2세션 E2E 별도 |
 
 #### 2. 데이터 요구사항 (`DATA-*`) 추적
 
 | 요구사항 ID | 요약 | SDS 설계 절 | 구현 모듈·파일 | 이슈 / PR / 커밋 | 검증 시나리오·테스트 | 검증 상태 |
 |---|---|---|---|---|---|---|
-| `DATA-01` | 핵심 영속 엔티티(`users`, `sessions`, `oauth_accounts`, `games`, `game_players`, `moves`, `game_commands`, 계획 `friendships`) 정의 | 2.4.5 | `apps/server/src/db/schema/*.ts`, `drizzle/0000~0003_*.sql` | PR #11 (`29d5a3e`), PR #15 (`26c253d`) | `AT-08`, `T07`, `B-IT-01~10` | `구현됨` (`friendships`는 `계획`) |
-| `DATA-02` | 불변 내부 식별자(`users.id` BIGINT identity) 참조 및 닉네임 변경 시 기록 유지 | 2.4.5, 2.10.14 | `apps/server/src/db/schema/users.ts`, `games.ts`, `repositories/stats-repository.ts` | PR #11 (`29d5a3e`) | `AT-02`, `AT-08`, `B-IT-05`, `B-IT-06`, `user-routes.test.ts` | `구현됨` |
-| `DATA-03` | 경기 결과 1회 확정(`games_finished_check`, `game_players_result_finished_check`, 행 잠금) | 2.4.5, 2.8.16, 2.10.20 | `apps/server/src/db/schema/games.ts`, `services/game-command-service.ts`, `drizzle/0003_*.sql` | PR #11 (`29d5a3e`) | `AT-08`, `AT-09`, `T07`, `T09`, `B-IT-07`, `B-IT-10`, `stats-routes.test.ts`, `game-command-service.test.ts` | `구현됨` |
-| `DATA-04` | 참조 무결성(FK) 및 회원 탈퇴 시 개인정보 삭제·경기 기록 보존(`nickname_snapshot`) | 2.4.5, 2.10.27 | `apps/server/src/db/schema/users.ts`, `games.ts` | FK 제약 PR #11 (`29d5a3e`) `구현됨`, 탈퇴 익명화·스냅샷 `계획` (`DEC-09`) | `B-IT-07`, `T07` | FK `구현됨`, 탈퇴 익명화 `계획` |
-| `DATA-05` | 민감 정보 보호(비밀번호 Argon2id 해시, refresh/state/복구 코드 SHA-256 해시, TOTP AES-256-GCM 암호화, 공개 API/로그 비노출) | 1.1, 2.4.5, 2.10.0 | `apps/server/src/core/password.ts`, `tokens.ts`, `secret-box.ts`, `api/user-routes.ts`, `app.ts` | PR #11 (`29d5a3e`) | `AT-02`, `AT-11`, `T01`, `T08`, `B-IT-01~05`, `totp.test.ts`, `user-routes.test.ts`, `app.test.ts` | `구현됨` |
+| `DATA-01` | 핵심 영속 엔티티(`users`, `sessions`, `oauth_accounts`, `games`, `game_players`, `moves`, `game_commands`, 계획 `friendships`) 정의 | 2.4.5 | `apps/server/src/db/schema/*.ts`, `drizzle/0000~0003_*.sql` | PR #11 (`29d5a3e`), PR #15 (`26c253d`) | `AT-08`, `T01`, `T03`, `T05`, `B-IT-01` | `구현됨` (`friendships`는 `계획`) |
+| `DATA-02` | 불변 내부 식별자(`users.id` BIGINT identity) 참조 및 닉네임 변경 시 기록 유지 | 2.4.5, 2.10.14 | `apps/server/src/db/schema/users.ts`, `games.ts`, `repositories/stats-repository.ts` | PR #11 (`29d5a3e`) | `AT-02`, `AT-08`, `user-routes.test.ts`, `T02`, `T08` | `구현됨` |
+| `DATA-03` | 경기 결과 1회 확정(`games_finished_check`, `game_players_result_finished_check`, 행 잠금) | 2.4.5, 2.8.16, 2.10.20 | `apps/server/src/db/schema/games.ts`, `services/game-command-service.ts`, `drizzle/0003_*.sql` | PR #11 (`29d5a3e`) | `AT-08`, `AT-09`, `stats-routes.test.ts`, `game-command-service.test.ts`, `T05`, `T07`, `T08`, `B-IT-08` | `구현됨` |
+| `DATA-04` | 참조 무결성(FK) 및 회원 탈퇴 시 개인정보 삭제·경기 기록 보존(`nickname_snapshot`) | 2.4.5, 2.10.27 | `apps/server/src/db/schema/users.ts`, `games.ts` | FK 제약 PR #11 (`29d5a3e`) `구현됨`, 탈퇴 익명화·스냅샷 `계획` (`DEC-09`) | `T02`, `T07` | FK `구현됨`, 탈퇴 익명화 `계획` |
+| `DATA-05` | 민감 정보 보호(비밀번호 Argon2id 해시, refresh/state/복구 코드 SHA-256 해시, TOTP AES-256-GCM 암호화, 공개 API/로그 비노출) | 1.1, 2.4.5, 2.10.0 | `apps/server/src/core/password.ts`, `tokens.ts`, `secret-box.ts`, `api/user-routes.ts`, `app.ts` | PR #11 (`29d5a3e`) | `AT-02`, `AT-11`, `totp.test.ts`, `user-routes.test.ts`, `app.test.ts`, `T01`, `T02`, `T09`, `B-IT-04` | `구현됨` |
 
 #### 3. 비기능 요구사항 (`NFR-*`)·제약사항 (`CON-*`)·산출물 (`DEL-*`) 추적
 
 | 요구사항 ID | 요약 | SDS 설계 절 | 구현 모듈·파일 | 이슈 / PR / 커밋 | 검증 시나리오·테스트 | 검증 상태 |
 |---|---|---|---|---|---|---|
-| `NFR-SEC-01` | 외부 진입점 HTTPS(`https://`) 및 실시간 WSS(`wss://`) 전용 구성 | 1.1, 2.1.1, 2.9.18 | `infra/compose.full.yaml`, `infra/nginx/` | PR #10 (`bfd3f2e`), 이슈 #28·PR #40 | `AT-01`, `AT-11`, `T00`, `T08` | `계획` (PR #10·#40 병합 후 검증) |
-| `NFR-SEC-02` | 비밀번호 평문 저장 금지 및 Argon2id 해시 저장 | 1.1, 2.6.11, 3.17 | `apps/server/src/core/password.ts`, `services/auth-service.ts` | PR #11 (`29d5a3e`) | `AT-02`, `AT-11`, `T01`, `T08`, `B-IT-01`, `auth-routes.test.ts` | `구현됨` |
-| `NFR-SEC-03` | 프론트엔드 유효성 검사 및 서버 모든 HTTP/WS/파일 입력 재검증 | 1.1, 2.2.2, 2.5.8, 2.5.9, 2.10.0, 2.10.25 | `apps/server/src/app.ts`, `api/*.ts`, `core/image.ts`, `realtime/ws-plugin.ts`, `apps/web/src/App.tsx`, `profile/ProfileView.tsx` | PR #11 (`29d5a3e`), PR #15 (`26c253d`), PR #41~#43, 이슈 #21·#24 | `AT-05`, `AT-11`, `T04`, `T08`, `B-IT-01`, `auth-routes.test.ts`, `avatar-routes.test.ts` | `구현됨` |
-| `NFR-SEC-04` | 비밀값·환경 변수 Git 추적 금지(`.env.example`만 추적) 및 DB 내부 네트워크 격리 | 1.1, 2.9.18 | `.gitignore`, `.env.example`, `infra/compose.full.yaml` | PR #2 (`d4a939f`), PR #10 (`bfd3f2e`), PR #11 (`29d5a3e`) | `AT-01`, `AT-11`, `T00`, `T08` | `.env` 분리 `구현됨`, 네트워크 격리 PR #10 |
-| `NFR-SEC-05` | 웹 보안 위협 방어(SQLi 파라미터 바인딩, React XSS 이스케이프, 헤더/body 토큰으로 쿠키 CSRF 배제, 인증 분당 10회 429, 응답 스택 비노출) | 1.1, 2.2.2, 2.10.0 | `apps/server/src/app.ts`, `repositories/*.ts`, `apps/web/src/api/auth-client.ts` | PR #11 (`29d5a3e`), PR #15 (`26c253d`), 이슈 #21 (`9b29bf5`) | `AT-11`, `T08`, `B-IT-01~04`, `auth-routes.test.ts`, `app.test.ts` | `구현됨` |
-| `NFR-PRIV-01` | 한국어 개인정보처리방침(`/privacy`)과 이용약관(`/terms`) 상시 접근 가능 | 2.2.2 | `apps/web/src/App.tsx` (푸터·인증 화면 링크 및 `/terms`, `/privacy` 라우트) | Stitch `20_terms_privacy`, 상세 문안 `계획` (A) | `AT-12`, `T08` | 설계 완료, 정적 본문 연결 `계획` |
-| `NFR-UX-01` | UI 기본 표시 언어 한국어 일관 유지 | 2.2.2 | `apps/web/src/App.tsx`, `api/errors.ts`, `game/GomokuMatchView.tsx`, `profile/*.tsx` | 이슈 #21 (`9b29bf5`), #22 (`98218d9`), #24 (`dd77369`) | `AT-13`, `T10` | `구현됨` (#21, #22, #24) |
-| `NFR-UX-02` | 키보드 조작(전역 `Tab`/`Enter`/`Space`, 보드 화살표/Home/End, 모달 `Escape`), `:focus-visible`, 비색상 상태 표시 | 2.2.2 (`키보드 상세 동작 및 접근성·반응형 설계`) | `apps/web/src/game/GomokuMatchView.tsx`, `App.tsx`, `styles.css` | 이슈 #21 (`9b29bf5`), #22 (`98218d9`), #24 (`dd77369`) | `AT-13`, `T10` | 기본 포커스·`aria-label` `구현됨`, 보드 화살표·모달 `Escape` 보강 |
-| `NFR-UX-03` | `1440×900`, `768×1024`, `360×800` 세 기준 해상도 반응형 레이아웃 | 2.2.2 (`반응형 게임판 및 뷰포트 레이아웃`) | `apps/web/src/styles.css`, `game/GomokuMatchView.tsx`, `profile/ProfileView.tsx` | 이슈 #21 (`9b29bf5`), #22 (`98218d9`), #24 (`dd77369`) | `AT-13`, `T10` | `구현됨` (#21, #22, #24) |
-| `NFR-UX-04` | 공통 디자인 토큰("Warm Meeple & Roast")·타이포그래피·컴포넌트 일관성 | 2.2.2, `cyber_board_cafe_stitch_2026-10-28/DESIGN.md` | `apps/web/src/styles.css` | 이슈 #21 (`9b29bf5`), #22 (`98218d9`), #24 (`dd77369`) | `AT-13`, `T10` | `구현됨` (#21, #22, #24) |
-| `NFR-CONC-01` | 동시 요청·중복 클릭·동시 착수·재전송 시 상태 일관성 보장 (`FOR UPDATE` 잠금, `stateVersion`, `commandId` 멱등) | 2.6.12, 2.8.15, 2.8.16, 2.10.20 | `apps/server/src/services/game-command-service.ts`, `repositories/game-repository.ts`, `apps/web/src/game/GomokuMatchView.tsx`(`pendingCommand`) | PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-09`, `T09`, `B-IT-09`, `B-IT-10`, `game-command-service.test.ts` | `구현됨` |
-| `NFR-PERF-01` | 5개 동시 활성 대국(10 연결) 환경에서 p95(인증/프로필 ≤ 500ms, 매칭 ≤ 1,000ms, 착수 반영 ≤ 300ms) 충족 | 4.3 (`성능 측정 지점 및 검증 절차`) | `apps/server`, `packages/game-engine`, 부하 측정 스크립트(계획) | `계획` (`DEC-10`, 통합 후 측정) | `AT-14`, `T09` | `계획` (4.3 측정 절차 정의 완료) |
-| `NFR-REC-01` | 새로고침·일시 네트워크 단절 후 세션·대국 상태 복구 및 중복 명령 방지 | 2.2.2, 2.5.9, 2.6.13, 2.8.15 | `apps/server/src/realtime/ws-plugin.ts`, `services/game-command-service.ts`, `apps/web/src/App.tsx`, `game/ws-client.ts` | PR #11 (`29d5a3e`), PR #41~#43, 이슈 #20~#22 | `AT-06`, `AT-09`, `T06`, `T09` | `구현됨` (병합 전) |
-| `NFR-OPS-01` | 단일 명령 컨테이너 기동·종료·재생성 후 DB/아바타 영속 유지 및 `/api/health`, `/api/health/db` 제공 | 2.9.18, 2.10.22 | `apps/server/src/app.ts`, `index.ts`, `infra/compose.full.yaml`, `scripts/check-db.mjs` | PR #10 (`bfd3f2e`), PR #11 (`29d5a3e`), PR #15 (`26c253d`), 이슈 #28·PR #40 | `AT-01`, `AT-08`, `T00`, `T07`, `app.test.ts` | Health API `구현됨`, 전체 컨테이너 PR #10·#40 |
-| `NFR-OPS-02` | 시작 시 필수 환경 변수(`DATABASE_URL`, `JWT_SECRET` 32자 이상, `TWO_FACTOR_KEY`, `FT_OAUTH_*`) 검증 및 누락 시 명확한 오류 출력 | 2.2.3, 2.9.18, 2.10.23 | `apps/server/src/index.ts`, `scripts/container-start.mjs` | PR #11 (`29d5a3e`), PR #40 | `AT-01`, `T00`, `app.test.ts` | `구현됨` |
-| `CON-01` | 최신 Chrome 데스크톱 기준 호환성 및 런타임 콘솔 무오류 | 2.2.2 | `apps/web/src/*`, `config/playwright.config.ts` | PR #2 (`d4a939f`), 이슈 #21·#22·#24 | `AT-01~17`, `T00~T10`, `tests/app.spec.ts` | `구현됨` (통합 E2E 확장 예정) |
-| `CON-02` | 다중 사용자 동시 접속(서로 다른 브라우저 세션 2인 이상 실시간 대국) 지원 | 2.1.1, 2.5.9, 2.6.12 | `apps/server/src/realtime/ws-plugin.ts`, `matchmaking-queue.ts`, `apps/web/src/game/ws-client.ts` | PR #41~#43, 이슈 #19~#20, 이슈 #22 | `AT-03`, `AT-04`, `AT-07`, `T03~T05` | `구현됨` (병합 전) |
+| `NFR-SEC-01` | 외부 진입점 HTTPS(`https://`) 및 실시간 WSS(`wss://`) 전용 구성 | 1.1, 2.1.1, 2.9.18 | `infra/compose.full.yaml`, `infra/nginx/` | PR #10 (`bfd3f2e`), 이슈 #28·PR #40 | `AT-01`, `AT-11`, `T00`, `T09` | `계획` (PR #10·#40 병합 후 검증) |
+| `NFR-SEC-02` | 비밀번호 평문 저장 금지 및 Argon2id 해시 저장 | 1.1, 2.6.11, 3.17 | `apps/server/src/core/password.ts`, `services/auth-service.ts` | PR #11 (`29d5a3e`) | `AT-02`, `AT-11`, `auth-routes.test.ts`, `T01` | `구현됨` |
+| `NFR-SEC-03` | 프론트엔드 유효성 검사 및 서버 모든 HTTP/WS/파일 입력 재검증 | 1.1, 2.2.2, 2.5.8, 2.5.9, 2.10.0, 2.10.25 | `apps/server/src/app.ts`, `api/*.ts`, `core/image.ts`, `realtime/ws-plugin.ts`, `apps/web/src/App.tsx`, `profile/ProfileView.tsx` | PR #11 (`29d5a3e`), PR #15 (`26c253d`), PR #41~#43, 이슈 #21·#24 | `AT-05`, `AT-11`, `auth-routes.test.ts`, `avatar-routes.test.ts`, `T01`, `T02`, `T03`, `T05`, `T09` | `구현됨` |
+| `NFR-SEC-04` | 비밀값·환경 변수 Git 추적 금지(`.env.example`만 추적) 및 DB 내부 네트워크 격리 | 1.1, 2.9.18 | `.gitignore`, `.env.example`, `infra/compose.full.yaml` | PR #2 (`d4a939f`), PR #10 (`bfd3f2e`), PR #11 (`29d5a3e`) | `AT-01`, `AT-11`, `T00` | `.env` 분리 `구현됨`, 네트워크 격리 PR #10 |
+| `NFR-SEC-05` | 웹 보안 위협 방어(SQLi 파라미터 바인딩, React XSS 이스케이프, 헤더/body 토큰으로 쿠키 CSRF 배제, 인증 분당 10회 429, 응답 스택 비노출) | 1.1, 2.2.2, 2.10.0 | `apps/server/src/app.ts`, `repositories/*.ts`, `apps/web/src/api/auth-client.ts` | PR #11 (`29d5a3e`), PR #15 (`26c253d`), 이슈 #21 (`9b29bf5`) | `AT-11`, `auth-routes.test.ts`, `app.test.ts`, `T01`, `T09` | `구현됨` |
+| `NFR-PRIV-01` | 한국어 개인정보처리방침(`/privacy`)과 이용약관(`/terms`) 상시 접근 가능 | 2.2.2 | `apps/web/src/legal/LegalDocumentView.tsx`, `legal/legal-routing.ts`, `App.tsx` | 이슈 #64 / PR #71 (`c404491`) | `AT-12`, `T09` | 정적 본문·링크·라우팅 `구현됨` (PR #71 병합 전), 최종 정책·E2E 확인 별도 |
+| `NFR-UX-01` | UI 기본 표시 언어 한국어 일관 유지 | 2.2.2 | `apps/web/src/App.tsx`, `api/errors.ts`, `game/GomokuMatchView.tsx`, `profile/*.tsx` | 이슈 #21 (`9b29bf5`), #22 (`98218d9`), #24 (`dd77369`) | `AT-13`, `T09` | `구현됨` (#21, #22, #24) |
+| `NFR-UX-02` | 키보드 조작(전역 `Tab`/`Enter`/`Space`, 보드 화살표/Home/End, 모달 `Escape`), `:focus-visible`, 비색상 상태 표시 | 2.2.2 (`키보드 상세 동작 및 접근성·반응형 설계`) | `apps/web/src/game/GomokuMatchView.tsx`, `game/OthelloMatchView.tsx`, `profile/ProfileView.tsx`, `App.tsx`, `styles.css` | 이슈 #22, #64 / PR #71 (`c404491`), #65 / PR #72 (`e28c223`), #66 / PR #73 (`3d06126`) | `AT-13`, `T09` | 보드 키보드·모달 Escape·포커스 복귀 `구현됨` (브랜치), 브라우저 인수 별도 |
+| `NFR-UX-03` | `1440×900`, `768×1024`, `360×800` 세 기준 해상도 반응형 레이아웃 | 2.2.2 (`반응형 게임판 및 뷰포트 레이아웃`) | `apps/web/src/styles.css`, `game/GomokuMatchView.tsx`, `profile/ProfileView.tsx` | 이슈 #21 (`9b29bf5`), #22 (`98218d9`), #24 (`dd77369`) | `AT-13`, `T09` | `구현됨` (#21, #22, #24) |
+| `NFR-UX-04` | 공통 디자인 토큰("Warm Meeple & Roast")·타이포그래피·컴포넌트 일관성 | 2.2.2, `cyber_board_cafe_stitch_2026-10-28/DESIGN.md` | `apps/web/src/styles.css` | 이슈 #21 (`9b29bf5`), #22 (`98218d9`), #24 (`dd77369`) | `AT-13`, `T09` | `구현됨` (#21, #22, #24) |
+| `NFR-CONC-01` | 동시 요청·중복 클릭·동시 착수·재전송 시 상태 일관성 보장 (`FOR UPDATE` 잠금, `stateVersion`, `commandId` 멱등) | 2.6.12, 2.8.15, 2.8.16, 2.10.20 | `apps/server/src/services/game-command-service.ts`, `repositories/game-repository.ts`, `apps/web/src/game/GomokuMatchView.tsx`(`pendingCommand`) | PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-09`, `game-command-service.test.ts`, `T04`, `T05`, `B-IT-06`, `B-IT-07`, `B-IT-09` | `구현됨` |
+| `NFR-PERF-01` | 5개 동시 활성 대국(10 연결) 환경에서 p95(인증/프로필 ≤ 500ms, 매칭 ≤ 1,000ms, 착수 반영 ≤ 300ms) 충족 | 4.3 (`성능 측정 지점 및 검증 절차`) | `apps/server`, `packages/game-engine`, 부하 측정 스크립트(계획) | `계획` (`DEC-10`, 통합 후 측정) | `AT-14`, `T05` | `계획` (4.3 측정 절차 정의 완료) |
+| `NFR-REC-01` | 새로고침·일시 네트워크 단절 후 세션·대국 상태 복구 및 중복 명령 방지 | 2.2.2, 2.5.9, 2.6.13, 2.8.15 | `apps/server/src/realtime/ws-plugin.ts`, `services/game-command-service.ts`, `apps/web/src/App.tsx`, `game/ws-client.ts` | PR #11 (`29d5a3e`), PR #41~#43, 이슈 #20~#22 | `AT-06`, `AT-09`, `T01`, `T04` | `구현됨` (병합 전) |
+| `NFR-OPS-01` | 단일 명령 컨테이너 기동·종료·재생성 후 DB/아바타 영속 유지 및 `/api/health`, `/api/health/db` 제공 | 2.9.18, 2.10.22 | `apps/server/src/app.ts`, `index.ts`, `infra/compose.full.yaml`, `scripts/check-db.mjs` | PR #10 (`bfd3f2e`), PR #11 (`29d5a3e`), PR #15 (`26c253d`), 이슈 #28·PR #40 | `AT-01`, `AT-08`, `app.test.ts`, `T00`, `T07`, `T08`, `B-IT-10` | Health API `구현됨`, 전체 컨테이너 PR #10·#40 |
+| `NFR-OPS-02` | 시작 시 필수 환경 변수(`DATABASE_URL`, `JWT_SECRET` 32자 이상, `TWO_FACTOR_KEY`, `FT_OAUTH_*`) 검증 및 누락 시 명확한 오류 출력 | 2.2.3, 2.9.18, 2.10.23 | `apps/server/src/index.ts`, `scripts/container-start.mjs` | PR #11 (`29d5a3e`), PR #40 | `AT-01`, `app.test.ts`, `T00` | `구현됨` |
+| `CON-01` | 최신 Chrome 데스크톱 기준 호환성 및 런타임 콘솔 무오류 | 2.2.2 | `apps/web/src/*`, `config/playwright.config.ts` | PR #2 (`d4a939f`), 이슈 #21·#22·#24 | `AT-01~17`, `tests/app.spec.ts`, `T00~T10` | `구현됨` (통합 E2E 확장 예정) |
+| `CON-02` | 다중 사용자 동시 접속(서로 다른 브라우저 세션 2인 이상 실시간 대국) 지원 | 2.1.1, 2.5.9, 2.6.12 | `apps/server/src/realtime/ws-plugin.ts`, `matchmaking-queue.ts`, `apps/web/src/game/ws-client.ts` | PR #41~#43, 이슈 #19~#20, 이슈 #22 | `AT-03`, `AT-04`, `AT-07`, `T03`, `T04`, `T05` | `구현됨` (병합 전) |
 | `CON-03` | 단일 명령 컨테이너 실행 구성(`docker compose`) | 2.1.1, 2.9.18 | `infra/compose.yaml`, `infra/compose.full.yaml`, `package.json` | PR #2 (`d4a939f`), PR #10 (`bfd3f2e`), PR #40 | `AT-01`, `T00` | `계획` (PR #10·#40 병합 대기) |
-| `CON-04` | 플랫폼 공통 영역(인증·매칭·WS·저장)과 게임 규칙 엔진(`@cafe/game-engine`) 분리 | 2.2.4, 2.3.6, 2.10.19~20 | `packages/game-contracts`, `packages/game-engine`, `apps/server/src/services/game-command-service.ts` | PR #6 (`7064845`), PR #9 (`6538712`), PR #11 (`29d5a3e`), PR #45 (`d56ffbe`) | `AT-04`, `AT-07`, `T04`, `T05`, `game-command-service.test.ts` | `구현됨` |
-| `CON-05` | 오픈소스 라이브러리·자산 라이선스 및 출처 문서화 | 0, 2.2.2 | `README.md`, `package.json`, `Document/` | PR #2 (`d4a939f`), 최종 정리 `계획` (A) | `DEL-01` | `계획` |
-| `CON-06` | 시연용 초기/테스트 계정 준비(`npm run qa:accounts`)와 실제 DB 동작 분리 | 2.10.24 | `scripts/qa-accounts.mjs`, `scripts/check-gomoku-persistence.mjs` | PR #11 (`29d5a3e`) | `AT-01`, `AT-08`, `T00`, `T07` | `구현됨` |
-| `DEL-01` | 영문 루트 `README.md`(설치·실행·아키텍처·모듈·라이선스) 제출 | 0 | `README.md` | PR #2 (`d4a939f`), 최종 갱신 `계획` (A, E) | `AT-01`, `T00` | 기본 작성됨, 통합 반영 `계획` |
-| `DEL-02` | 요구사항·설계·규칙·계약·테스트·평가 체크리스트 문서 일관성 유지 | 전체 | `Document/SRS.md`, `SDS.md`, `GAME_RULES.md`, `contracts.md`, `TEST_PLAN.md`, `evaluation/*.md` | PR #4, PR #6, PR #9, PR #11, PR #15, PR #34 | 문서 교차 검토 | 진행 중 |
-| `DEL-03` | 핵심 기능 자동화 테스트(단위·통합·E2E) 포함 및 CI/로컬 재현 가능 | 4.1, [TEST_PLAN.md](TEST_PLAN.md) | `apps/server/src/**/*.test.ts`, `packages/game-engine/src/**/*.test.ts`, `tests/app.spec.ts` | PR #2, PR #9, PR #11, PR #12, PR #15 | `npm test`, `npm run test:e2e` | `구현됨` (오델로·통합 E2E 추가 예정) |
-| `DEL-04` | Git 브랜치·PR·코드 리뷰 이력 및 5인 역할 분담 증빙 | 0, 1 | GitHub Issues / PRs (`#1`~`#45`) | 전 PR | 평가 시 저장소 이력 확인 | `구현됨` |
+| `CON-04` | 플랫폼 공통 영역(인증·매칭·WS·저장)과 게임 규칙 엔진(`@cafe/game-engine`) 분리 | 2.2.4, 2.3.6, 2.10.19~20 | `packages/game-contracts`, `packages/game-engine`, `apps/server/src/services/game-command-service.ts` | PR #6 (`7064845`), PR #9 (`6538712`), PR #11 (`29d5a3e`), PR #45 (`d56ffbe`) | `AT-04`, `AT-07`, `game-command-service.test.ts`, `T03`, `T05` | `구현됨` |
+| `CON-05` | 오픈소스 라이브러리·자산 라이선스 및 출처 문서화 | 0, 2.2.2 | `README.md`, `package.json`, `Document/` | PR #2 (`d4a939f`), 최종 정리 `계획` (A) | `DEL-01`, `T10` | `계획` |
+| `CON-06` | 시연용 초기/테스트 계정 준비(`npm run qa:accounts`)와 실제 DB 동작 분리 | 2.10.24 | `scripts/qa-accounts.mjs`, `scripts/check-gomoku-persistence.mjs` | PR #11 (`29d5a3e`) | `AT-01`, `AT-08`, `T00`, `T01` | `구현됨` |
+| `DEL-01` | 영문 루트 `README.md`(설치·실행·아키텍처·모듈·라이선스) 제출 | 0 | `README.md` | PR #2 (`d4a939f`), 2026-11-09 영문 README 초안 갱신 | `AT-01`, `T00`, `T10` | 실행·환경 변수·역할·AI 사용·한계 갱신, 비작성자 재현·자산 출처 확인 별도 |
+| `DEL-02` | 요구사항·설계·규칙·계약·테스트·평가 체크리스트 문서 일관성 유지 | 전체 | `Document/SRS.md`, `SDS.md`, `GAME_RULES.md`, `contracts.md`, `TEST_PLAN.md`, `evaluation/*.md` | PR #4, PR #6, PR #9, PR #11, PR #15, PR #34 | 문서 교차 검토, `T10` | 진행 중 |
+| `DEL-03` | 핵심 기능 자동화 테스트(단위·통합·E2E) 포함 및 CI/로컬 재현 가능 | 4.1, [TEST_PLAN.md](TEST_PLAN.md) | `apps/server/src/**/*.test.ts`, `packages/game-engine/src/**/*.test.ts`, `apps/web/src/**/*.test.ts`, `tests/app.spec.ts`; #27 브랜치 `tests/gomoku.spec.ts` | PR #2, #9, #11, #12, #15, #58, #63, #71~#73; 통합 #27 (`b24ea10`) | `npm test`, `npm run test:e2e`, `T01~T09` | 단위·DB 테스트 코드 및 #27 오목 E2E `구현됨`, 약관·프로필·오델로 브라우저 E2E `계획` |
+| `DEL-04` | Git 브랜치·PR·코드 리뷰 이력 및 5인 역할 분담 증빙 | 0, 1 | GitHub Issues / PRs (`#1`~`#45`) | 전 PR | 평가 시 저장소 이력 확인, `T10` | `구현됨` |
 
 ### 4.3 인수 시나리오(`AT-01`~`17`)·시스템 테스트(`T00`~`T10`)·성능 측정 연결 (A·B 작성)
 
@@ -2280,21 +2305,21 @@ SRS 10.2 규칙에 따라 모든 SRS 요구사항 ID(`FR-*`, `DATA-*`, `NFR-*`, 
 |---|---|---|---|
 | `AT-01` | 컨테이너 기동과 HTTPS 접속 | `T00` (기동·HTTPS·기본 화면) | `apps/server/src/app.test.ts`, `tests/app.spec.ts`, `docker compose` 기동 점검 |
 | `AT-02` | 회원가입, 로그인, 프로필 수정, 로그아웃 | `T01` (가입·로그인·2FA·OAuth·로그아웃), `T02` (프로필·아바타), `B-IT-01`, `B-IT-02`, `B-IT-05` | `auth-routes.test.ts`, `user-routes.test.ts`, `tokens.test.ts` |
-| `AT-03` | 친구 요청·수락과 대국 시작 (자동 매칭·친구 초대) | `T02` (친구 요청·수락·온라인), `T03` (자동 매칭·친구 초대·중복 참가 차단) | D 매칭·구독 테스트(`#17`~`#19`), 친구 API 테스트(E 추가 예정) |
-| `AT-04` | 오목 정상 대국과 종료 (5목 승리·무승부·기권) | `T04` (오목 대국·무효 수 거절·기권), `B-IT-07` | `packages/game-engine/src/gomoku/*.test.ts`, `game-command-service.test.ts` |
-| `AT-05` | 무효 게임 명령 거절 (차례 외·점유 칸·범위 밖·비참가자) | `T04`, `T05`, `B-IT-08` | `gomoku/rules.test.ts`, `game-command-service.test.ts` |
-| `AT-06` | 재접속 복구와 누적 유예 시간(60초) 초과 처리 | `T06` (재접속·누적 60초 만료·서버 재시작 무효) | `game-command-service.test.ts`(`finishBySystem`), D 부재 타이머 테스트(`#20`) |
-| `AT-07` | 오델로 정상 대국과 종료 (뒤집기·자동 패스·돌 수 판정) | `T05` (오델로 대국·뒤집기·자동 패스·종료) | `packages/game-engine/src/othello/*.test.ts` (C 추가 예정) |
-| `AT-08` | 기록 영속성, 통계, 업적, 리더보드 | `T07` (기록·통계·업적·리더보드·컨테이너 재시작 보존), `B-IT-06`, `B-IT-07` | `stats-routes.test.ts`, `scripts/check-gomoku-persistence.mjs` |
-| `AT-09` | 동시성 및 중복 요청 처리 (`commandId` 멱등, `stateVersion` 충돌) | `T09` (동시 요청·중복 클릭·성능), `B-IT-09`, `B-IT-10` | `game-command-service.test.ts` |
-| `AT-10` | 단일 사용자의 다중 연결·기기 전환 (`session.replaced`) | `T03`, `T06` | D WebSocket 구독 제어권 전환 테스트(`#17`, `#20`) |
-| `AT-11` | 보안 및 잘못된 입력 방어 (HTTPS/WSS, 해시, 400/413/415/422/429, 비노출) | `T08` (보안·개인정보·이용약관), `B-IT-01~04`, `B-IT-08` | `auth-routes.test.ts`, `avatar-routes.test.ts`, `image.test.ts`, `app.test.ts` |
-| `AT-12` | 개인정보처리방침과 이용약관 접근성 (`/privacy`, `/terms`) | `T08` (보안·개인정보·이용약관) | 브라우저 라우트 접근 확인 (`tests/app.spec.ts` 확장 예정) |
-| `AT-13` | 한국어 UI, 키보드 조작, 반응형 화면 (`1440×900`, `768×1024`, `360×800`) | `T10` (한국어·키보드·반응형·디자인 일관성) | Playwright 뷰포트·키보드 검증 (`tests/app.spec.ts` 확장 예정) |
-| `AT-14` | 응답 시간 (`NFR-PERF-01` p95 목표치) | `T09` (동시 요청·중복 클릭·성능) | 아래 **2. 성능 측정 지점 및 검증 방법** 참조 |
-| `AT-15` | 42 OAuth 로그인과 기존 계정 연결 | `T01` (가입·로그인·2FA·OAuth·로그아웃), `B-IT-04` | `oauth-routes.test.ts` |
-| `AT-16` | 2단계 인증(2FA) 설정·검증·복구 코드·비활성화 | `T01` (가입·로그인·2FA·OAuth·로그아웃), `B-IT-03` | `two-factor-routes.test.ts`, `totp.test.ts` |
-| `AT-17` | 서버 재시작 시 미완료 경기 `void`(`server_restart`) 정리 | `T06` (재접속·누적 60초 만료·서버 재시작 무효) | `game-command-service.test.ts`, `voidUnfinishedGames` 검증 |
+| `AT-03` | 친구 요청·수락과 대국 시작 (자동 매칭·친구 초대) | `T06` (친구·초대 변형), `T03` (자동 매칭), `T05` (경합) | `matchmaking.test.ts`, D 매칭·구독 테스트, 친구 API/E2E 추가 예정 |
+| `AT-04` | 오목 정상 대국과 종료 (5목 승리·무승부·기권) | `T03` (오목 한 판), `T07` (기권·무승부), `B-IT-08` | `gomoku/*.test.ts`, `game-command-service.test.ts`, #27 브랜치 `tests/gomoku.spec.ts` |
+| `AT-05` | 무효 게임 명령 거절 (차례 외·점유 칸·범위 밖·비참가자) | `T03`, `T05`, `B-IT-07` | `gomoku/rules.test.ts`, `othello/rules.test.ts`, `game-command-service.test.ts` |
+| `AT-06` | 재접속 복구와 누적 유예 시간(60초) 초과 처리 | `T04` (복구·지연), `T07` (이탈 예산 소진) | D 부재 타이머 테스트, #27 브랜치 `tests/gomoku.spec.ts` (복귀 일부) |
+| `AT-07` | 오델로 정상 대국과 종료 (뒤집기·자동 패스·돌 수 판정) | `T03` (3.1 오델로 변형), `T07` (종료 예외) | `othello/*.test.ts` (PR #58), `othello-state.test.ts` (PR #73); 브라우저 E2E 계획 |
+| `AT-08` | 기록 영속성, 통계, 업적, 리더보드 | `T08` (통계), `T07` (재시작), `B-IT-08` | `stats-routes.test.ts`, 통합 서버 계약을 충족한 `check-gomoku-persistence.mjs` |
+| `AT-09` | 동시성 및 중복 요청 처리 (`commandId` 멱등, `stateVersion` 충돌) | `T04`, `T05`, `B-IT-06`, `B-IT-07`, `B-IT-09` | `game-command-service.test.ts` |
+| `AT-10` | 단일 사용자의 다중 연결·기기 전환 (`session.replaced`) | `T04`, `T05` | D WebSocket 구독 제어권 전환 테스트 |
+| `AT-11` | 보안 및 잘못된 입력 방어 (HTTPS/WSS, 해시, 400/413/415/422/429, 비노출) | `T00`, `T01`, `T02`, `T05`, `T09`, `B-IT-04`, `B-IT-05` | `auth-routes.test.ts`, `avatar-routes.test.ts`, `image.test.ts`, `app.test.ts` |
+| `AT-12` | 개인정보처리방침과 이용약관 접근성 (`/privacy`, `/terms`) | `T09` (3.1 약관 변형) | `legal-routing.test.ts` (PR #71), 브라우저 E2E 계획 |
+| `AT-13` | 한국어 UI, 키보드 조작, 반응형 화면 (`1440×900`, `768×1024`, `360×800`) | `T09` (필수 UI) | Playwright 뷰포트·키보드 E2E 계획 |
+| `AT-14` | 응답 시간 (`NFR-PERF-01` p95 목표치) | `T05` 환경에서 별도 부하 측정 | 아래 **2. 성능 측정 지점 및 증빙 위치** 참조; 목표는 측정 결과가 아님 |
+| `AT-15` | 42 OAuth 로그인과 기존 계정 연결 | `T01` (3.1 인증 확장) | `oauth-routes.test.ts`, `auth-client.test.ts`; 실 42 별도 |
+| `AT-16` | 2단계 인증(2FA) 설정·검증·복구 코드·비활성화 | `T01` (3.1 인증 확장) | `two-factor-routes.test.ts`, `totp.test.ts`, `auth-client.test.ts` |
+| `AT-17` | 서버 재시작 시 미완료 경기 `void`(`server_restart`) 정리 | `T07`, `B-IT-08` | `game-command-service.test.ts`, `voidUnfinishedGames` 검증 |
 
 #### 2. 성능 측정 지점 및 증빙 위치 (`NFR-PERF-01`, `AT-14`)
 
@@ -2317,6 +2342,8 @@ SRS `NFR-PERF-01`은 단일 호스트 Docker Compose 실행 환경에서 **5개 
 | 준비·시작 절차, 색상 배정, 초대 유효기간 | **결정 (B 초안, D·A 확인)**: 준비 단계 없음(매칭 성립·초대 수락 즉시 `playing`), 자동 매칭 무작위·초대는 보낸 사람 흑, 초대 유효기간 60초 (2.2, 2.7) | DEC-06 |
 | 이탈 시간 저장 위치·감지 지연·경기 복귀 | **결정 (D·A 합의)**: 메모리, 최대 20초, `paused`·복귀 전환 시 `stateVersion`을 올리지 않음. 로그인·새로고침 시 `auth.ok.activeMatchId`가 있으면 즉시 `/match/:matchId`로 이동 후 `match.subscribe` (2.2, 2.5의 9번, 2.6의 13번) | DEC-03, DEC-07 |
 | 초대(`invite.*`)·`presence` 담당 | #16~#20에 초대 이슈가 없음. D가 맡을지 이슈를 따로 만들지, `presence`를 E와 어떻게 나눌지 | FR-ROOM, FR-SOC-03 |
+| 친구 요청 ID·경합 | #38 / PR #68의 E 추가 제안: 새 요청에 새 requestId, 오래된 수락·거절은 404, 현재 요청 시각 갱신·처리 시각 초기화. 삽입 최초 시도 포함 최대 3회 후 마지막 재조회도 0행이면 409 `FRIEND_REQUEST_CONFLICT`. B 확인 전이며 2.10.29의 확정 계약으로 취급하지 않는다 | FR-SOC-01, #38 |
+| 친구 거절 안내·온라인 초기화 | #38의 A·D·E 확인 필요. 거절 전에 재요청 차단 의미 안내, 거절한 쪽의 검색·프로필 요청 경로 제공. 수락·WS 재인증 뒤 목록 재조회, 조회 중 presence가 오면 완료 후 재조회하는 안 및 상대/다른 탭 갱신 신호는 미합의 | FR-SOC-01~03, #38 |
 | 아바타 저장 위치·제공 방식 | **결정 (`구현됨`, PR #15)**: PNG/JPEG 2 MiB·1024px 이하, `AVATAR_DIR`(컨테이너 named volume `avatars`) 저장, `GET /api/media/avatars/{name}` 제공 (2.9, 2.10.25) | DEC-05 |
 | 전적 비공개, 탈퇴 표시·닉네임 스냅샷, 경기 기록 보존 기간 | B, A. 보존 기간은 B 제안 영구 보존(2.10.27) | DEC-05, DEC-09 |
 | 같은 commandId·다른 payload | payload 해시 저장 후 불일치 거절할지 | B, C, D |
@@ -2328,7 +2355,7 @@ SDS v0.1은 B 범위를 구현 기준으로 채웠고, v0.2에서 다른 담당�
 | 담당 | 채울 내용 | SRS 근거 | SDS 위치 | 상태 |
 |---|---|---|---|---|
 | A | 화면 목록·화면 전이(`auth.ok.activeMatchId` 대국 복귀 포함), 게임 목록·플레이 가능 상태, 규칙 안내(내용은 C), 경기 입력·기권 확인, 로딩·빈·오류·재접속 표시, 키보드·포커스 상세 동작, 반응형 게임판, CSS 도구와 공통 스타일 위치, 토큰 보관 방식 | §10.1 화면·접근성, FR-CAT-01~02, FR-GAME-04, NFR-UX-02~04 | 2.2의 2번 | **작성·확인 완료 (v0.3)** |
-| C | 규칙 버전(`rulesVersion`)으로 엔진을 고르는 방법, 오델로 초기 배치·`0..7` 좌표·뒤집기·자동 패스·돌 수 판정과 snapshot·result 표현, 수순 재생 복원, 금수·장목 확장 모듈과 테스트 지점, 엔진 거절 코드 목록 | FR-G2-01~05, FR-CAT-02, CON-04 | 2.2의 4번, 2.7 | `B 초안`, C 확인 필요 |
+| C | 규칙 버전(`rulesVersion`)으로 엔진을 고르는 방법, 오델로 초기 배치·`0..7` 좌표·뒤집기·자동 패스·돌 수 판정과 snapshot·result 표현, 수순 재생 복원, 금수·장목 확장 모듈과 테스트 지점, 엔진 거절 코드 목록 | FR-G2-01~05, FR-CAT-02, CON-04 | 2.2의 4번, 2.7 | 엔진 PR #58 `구현됨`; GAME_RULES #36 및 실행 서버 연결·통합 검증 별도 |
 | D | 방·대기열·초대 상태와 불변조건(사용자당 활성 참가 위치 하나의 저장·잠금 방식), 매칭 확정·취소·초대 수락 경합, 준비·시작 주체, 색상 배정, WebSocket 라이브러리·이벤트별 payload·검증·오류, 세션 폐기 후 연결 처리, 경기 제어 연결 선택(다중 탭·기기), 이탈 감지 방식·최대 지연·누적 시계 저장 위치, 양쪽 부재·복귀/만료 경합, 재시작 시 대기 정리 | FR-ROOM-01~04, FR-MATCH-01~02, FR-RT-01~05, DEC-03·06·07 | 2.5의 9번, 2.6의 13번, 2.7 | D 확인 완료 (PR #34 리뷰) |
 | E | 친구 요청·수락·거절·삭제 API와 경합, 사용자 검색 범위, 다중 접속 온라인 집계(D와), 설정 우선순위(셸·`.env`·기본값), 개발·preview 프록시의 PORT 일치, 개발 프로세스 정리, PR #10에 인증 환경 변수 반영 | FR-SOC-01~03, CON-03·05·06, NFR-OPS-02 | 2.9, 계획 스키마 | E 확인 완료 (PR #39) |
 | A, B | 요구사항 ID별 추적 레코드(SRS 10.2 형식), TEST_PLAN의 T 시나리오와 AT-01~17 연결, 성능 측정 지점·증빙 위치 | SRS §10.2, NFR-PERF-01 | 4장 (4.2, 4.3) | **작성·확인 완료 (v0.3)** |
@@ -2337,4 +2364,6 @@ SDS v0.1은 B 범위를 구현 기준으로 채웠고, v0.2에서 다른 담당�
 
 | 문서 위치 | 남아 있는 내용 | 맞출 기준 | 담당 |
 |---|---|---|---|
-| `GAME_RULES.md` 3~4장 | 단순 60초 복귀, 동률 순위 `nickname → userId` | 누적 60초(DEC-03), `wins → winRate → userId`(DEC-08) | C |
+| `GAME_RULES.md` 1·3~4장 | 화면/T03은 1-based, 단순 60초 복귀, 동률 순위 `nickname → userId` | 현재 UI·API·TEST_PLAN은 0-based, 누적 60초(DEC-03), `wins → winRate → userId`(DEC-08). C의 #36 규칙 문서 업데이트와 통합 필요 | C |
+
+`TEST_PLAN.md`는 이번 동기화에서 T03의 0-based 수순·자동 매칭 시작, DEC-03 누적 예산, T08의 DEC-08 정렬과 확장 시나리오를 반영했다. T00~T10 ID는 기존 로드맵 그대로 유지하며 4.2·4.3 매핑도 그 의미에 맞춘다. README는 구현·계획·브랜치 통합 상태를 구분한 영문 제출 초안으로 갱신했다.
