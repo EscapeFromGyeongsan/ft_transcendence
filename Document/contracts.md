@@ -494,14 +494,16 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 ## 12. WebSocket `/api/ws` (IF-03)
 
-REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 연결 거절·close code·메시지를 기록한다. 이 경로는 HTTP 응답 본문이 없는 upgrade라 Swagger(`/docs`)에서 숨긴다(`schema.hide`). 여기 적힌 내용은 #41 기준이며, 경기 구독·명령·매칭·재접속 메시지는 #42·#43·#49·#50이 이 장에 이어서 추가한다.
+REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 연결 거절·close code·메시지를 기록한다. 이 경로는 HTTP 응답 본문이 없는 upgrade라 Swagger(`/docs`)에서 숨긴다(`schema.hide`). 연결·인증은 #41, 경기 구독은 #42, 명령은 #43, 자동 매칭은 #49, 끊김·재접속은 #50 기준이다.
 
 ### 12.1 연결과 인증
 
 1. 클라이언트는 `GET /api/ws`로 연결한다. access token은 URL·헤더에 넣지 않는다(프록시·접근 로그에 남지 않게 하기 위함).
 2. 연결 후 5초 안에 첫 메시지로 `auth`를 보낸다. 서버는 JWT와 서버 세션을 함께 확인하고 `auth.ok`로 답한다.
 3. `auth.ok`를 받기 전에는 다른 메시지를 보내지 않는다. 인증 처리 중 들어온 메시지는 4401로 닫는다.
-4. 인증은 연결 시점에만 한다. 연결 중 access token이 만료돼도 연결은 유지되고, 세션 폐기(로그아웃)만 연결을 닫는다.
+4. 인증은 연결 시점에만 한다. 연결 중 access token이 만료돼도 연결은 유지되고, 세션 폐기(로그아웃, refresh token 재사용 감지)만 연결을 닫는다.
+5. `auth.ok`의 `activeMatchId`는 끝나지 않은(`waiting`·`playing`·`paused`) 경기 ID이고 없으면 `null`이다. 클라이언트는 이 값으로 진행 중 경기를 다시 구독한다(12.7).
+6. 한 연결의 메시지는 도착 순서대로 하나씩 처리한다. 예를 들어 앞선 `match.subscribe`의 응답 전에 뒤의 `match.unsubscribe`가 처리되지 않는다.
 
 ### 12.2 메시지 형식
 
@@ -510,10 +512,22 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 | 방향 | `type` | `payload` | 설명 |
 |---|---|---|---|
 | C → S | `auth` | `{ accessToken }` | 연결 후 첫 메시지 |
-| S → C | `auth.ok` | `{ userId }` | 인증 성공 |
+| S → C | `auth.ok` | `{ userId, activeMatchId }` | 인증 성공. `activeMatchId`는 `number \| null` |
 | C → S | `ping` | `{}` | 앱 레벨 연결 확인 |
 | S → C | `pong` | `{}` | `ping` 응답 |
-| S → C | `error` | `{ code, message }` | 연결을 유지하는 오류. 지원하지 않는 `type`이면 `UNSUPPORTED_MESSAGE` |
+| S → C | `error` | `{ code, message, matchId? }` | 연결을 유지하는 오류. 코드는 아래 표 |
+
+`error`의 `code`는 다음 중 하나다. 클라이언트는 `message`가 아니라 `code`로 분기한다. 게임 명령의 거절은 `error`가 아니라 `game.error`로 보낸다(12.5).
+
+| `code` | 상황 |
+|---|---|
+| `INVALID_MESSAGE` | payload 필드가 틀림(`matchId`·`gameType`·`game.command` 형식), 등록되지 않은 `gameType`, 경기와 다른 `gameType`의 명령 |
+| `UNSUPPORTED_MESSAGE` | 알 수 없는 `type` |
+| `NOT_FOUND` | 없는 경기 구독 (`matchId` 포함) |
+| `NOT_PARTICIPANT` | 참가자가 아닌 경기 구독 (`matchId` 포함) |
+| `ALREADY_ACTIVE` | 이미 대기 중이거나 끝나지 않은 경기가 있는데 `queue.join` |
+| `ALREADY_MATCHED` | 경기를 만드는 중이라 `queue.leave`를 받을 수 없음 |
+| `INTERNAL_ERROR` | 처리 중 서버 오류, 매칭 경기 생성 실패 |
 
 ### 12.3 연결 거절과 close code
 
@@ -523,9 +537,74 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 | 5초 안에 `auth`가 오지 않음 | 4401 `Authentication timed out.` |
 | 첫 메시지가 `auth`가 아니거나 `accessToken`이 없음, 인증 중 다른 메시지 | 4401 `Authenticate first.` |
 | 토큰 무효·만료, 폐기된 세션 | 4401 `Invalid or expired token.` |
-| 로그아웃으로 세션 폐기 | 그 세션의 모든 연결을 4401 `Session ended.` |
+| 로그아웃·refresh token 재사용으로 세션 폐기 | 그 세션의 모든 연결을 4401 `Session ended.` |
+| 마지막 pong·메시지 뒤 20초 동안 응답 없음 (12.7) | 서버가 연결을 끊음(`terminate`, 클라이언트에는 1006) |
 | JSON이 아니거나 envelope 형식이 틀림, binary 프레임 | 4400 `Malformed message.` |
 | 16 KiB를 넘는 메시지 | 1009 (`ws`의 `maxPayload`) |
 | 인증 중 DB·인증 서비스 장애 | 1011 `Service unavailable.` |
 
 4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 갱신도 실패하면 로그인 화면으로 보낸다. 4400·1009는 클라이언트 버그이므로 같은 메시지로 재시도하지 않는다.
+
+### 12.4 경기 구독
+
+| 방향 | `type` | `payload` | 설명 |
+|---|---|---|---|
+| C → S | `match.subscribe` | `{ matchId }` | 참가자만 가능 |
+| S → C | `match.snapshot` | `GameSnapshot` (5장) | 구독 응답. 일시정지·재개(12.7)와 `VERSION_CONFLICT`(12.5) 뒤에도 보낸다 |
+| C → S | `match.unsubscribe` | `{ matchId }` | 구독 해제. 구독하지 않은 경기여도 성공 |
+| S → C | `match.unsubscribed` | `{ matchId }` | 해제 응답 |
+| S → C | `session.replaced` | `{ matchId }` | 같은 사용자가 다른 연결로 구독해 이 연결이 입력 권한을 잃음 |
+
+- 서버는 구독 목록에 먼저 등록한 뒤 snapshot을 읽는다. 그 사이 commit된 갱신도 놓치지 않으며, snapshot보다 오래된 갱신이 먼저 도착할 수 있다.
+- **상태 적용 규칙**: 클라이언트는 `match.snapshot`은 `stateVersion`이 **같거나 높으면**, `game.updated`는 **높을 때만** 현재 상태를 바꾼다. 일시정지·재개는 `stateVersion`을 올리지 않고 `status`만 바꾸기 때문이다.
+- **입력 권한**(FR-MATCH-02): 경기·사용자마다 마지막으로 구독한 연결 하나만 `game.command`를 보낼 수 있다. 이전 연결은 `session.replaced`를 받지만 구독은 유지돼 갱신을 계속 받는다. 다시 조작하려면 그 연결에서 다시 구독한다.
+
+### 12.5 게임 명령
+
+| 방향 | `type` | `payload` | 받는 쪽 |
+|---|---|---|---|
+| C → S | `game.command` | `GameCommand`(3·4장)에서 `userId`를 뺀 것 | — |
+| S → C | `game.ack` | `{ matchId, commandId, stateVersion, duplicate }` | 요청한 연결 |
+| S → C | `game.updated` | `GameSnapshot` | 경기 구독자 전체 |
+| S → C | `game.error` | `{ code, message, matchId, commandId, duplicate }` | 요청한 연결 |
+
+- 행동하는 사용자는 payload가 아니라 인증된 연결에서 정한다. `commandId`는 UUID, `expectedVersion`은 0 이상 정수다. `action`은 `place`(정수 `row`·`col`) 또는 `resign`이다.
+- 서버는 명령이 DB에 commit된 뒤에만 보낸다. 적용되면 요청자에게 `game.ack`, 구독자 전체에 `game.updated`를 보낸다. 이미 보낸 버전보다 새롭지 않은 상태는 broadcast하지 않는다.
+- `game.error`의 `code`는 8장의 여덟 코드와 다음 두 코드다.
+  - `NOT_SUBSCRIBED`: 이 연결이 경기를 구독하지 않음. 다시 구독한 뒤 보낸다.
+  - `SESSION_REPLACED`: 이 연결에 입력 권한이 없음(12.4).
+- `VERSION_CONFLICT`이면 `game.error` 뒤에 최신 `match.snapshot`을 요청자에게 보낸다.
+- 같은 `commandId`를 다시 보내면 처음 결과를 `duplicate: true`로 돌려준다(9.1절). 적용된 명령이면 최신 snapshot도 다시 broadcast한다. 상태를 갱신한 뒤 새 행동을 할 때는 새 `commandId`를 쓴다.
+
+### 12.6 자동 매칭
+
+| 방향 | `type` | `payload` | 설명 |
+|---|---|---|---|
+| C → S | `queue.join` | `{ gameType }` | 등록된 게임만 가능 |
+| S → C | `queue.joined` | `{ gameType }` | 대기열에 들어감 |
+| C → S | `queue.leave` | `{}` | 대기 취소. 대기 중이 아니어도 성공 |
+| S → C | `queue.left` | `{}` | 취소 응답 |
+| S → C | `queue.matched` | `{ matchId, gameType }` | 경기 생성. 사용자의 **모든** 연결에 보냄 |
+
+- 게임 종류별로 먼저 온 순서대로 두 명씩 짝을 짓고, 흑·백은 무작위로 정한다. 경기는 바로 `playing`으로 만들어진다. `queue.matched`를 받은 클라이언트는 `match.subscribe`로 경기를 연다.
+- 사용자당 대기 신청은 하나다. 여러 탭에서 동시에 `queue.join`을 보내도 하나만 들어가고, 나머지는 `ALREADY_ACTIVE`를 받는다.
+- 다른 탭의 `queue.join`이 진행 중 경기를 확인하는 사이에 `queue.leave`가 오면 그 신청은 취소되고, 그 탭도 `queue.left`를 받는다.
+- 대기 항목은 신청한 연결에 묶여 있어 그 연결이 닫히면 대기열에서 빠진다. 경기를 만드는 중에는 취소할 수 없고(`ALREADY_MATCHED`), 생성에 실패하면 두 사람 모두 `INTERNAL_ERROR`를 받고 대기 전 상태로 돌아간다.
+- 대기열은 메모리에만 있다. 서버가 재시작하면 대기열은 사라지고 진행 중 경기는 `void`(`server_restart`)가 된다.
+
+### 12.7 끊김 감지와 재접속
+
+**끊김 감지**: 서버는 10초마다 WebSocket ping frame을 보낸다. 브라우저가 자동으로 pong을 답하므로 클라이언트 코드는 필요 없다. 마지막 pong 또는 메시지 뒤 20초 동안 아무것도 오지 않으면 서버가 연결을 끊는다. 앱 레벨 `ping`(12.2)은 클라이언트가 서버의 생존을 확인할 때 쓴다.
+
+**이탈과 일시정지**: 사용자의 그 경기 구독 연결이 0개가 되면 이탈로 본다. 하트비트로 끊긴 경우에는 마지막으로 응답한 시각부터 이탈로 센다.
+
+| 방향 | `type` | `payload` | 받는 쪽 |
+|---|---|---|---|
+| S → C | `player.disconnected` | `{ matchId, userId, remainingMs }` | 이탈자를 뺀 구독자 |
+| S → C | `player.reconnected` | `{ matchId, userId, remainingMs }` | 복귀자를 뺀 구독자 |
+| S → C | `match.snapshot` | `status: "paused"` 또는 `"playing"` | 구독자 전체 |
+
+- 이탈자가 있으면 경기를 `paused`로 바꾸고, 모두 돌아오면 `playing`으로 되돌린다. `paused` 동안의 `game.command`는 `GAME_NOT_ACTIVE`로 거절된다.
+- **누적 이탈 시간**(DEC-03): 사용자마다 경기 하나에 60초다. 돌아와도 다시 채워지지 않는다. `remainingMs`는 그 사용자에게 남은 시간이다.
+- 누군가의 시간이 다 차면 그 순간 이탈 중인 사용자로 결과를 확정한다. 한 명이면 상대 승리, 두 명이면 `void`이고 사유는 `disconnect_timeout`이다. 만료 뒤에 돌아와도 취소되지 않는다. 결과가 저장될 때까지 서버가 다시 시도하고, 저장되면 `game.updated`(`finished`)를 보낸다.
+- **재접속**: 클라이언트는 다시 연결해 `auth`를 보내고, `auth.ok`의 `activeMatchId`가 있으면 `match.subscribe`로 같은 경기를 연다. 새 `match.snapshot`이 현재 상태다.
