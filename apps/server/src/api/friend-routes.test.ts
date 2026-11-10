@@ -48,7 +48,7 @@ test("friend routes return 503 without database configuration", async () => {
     headers: { authorization: "Bearer invalid" },
   });
   // Missing DB is detected during auth. No API data is exposed.
-  expect([401, 503]).toContain(response.statusCode);
+  expect(response.statusCode).toBe(503);
   await app.close();
 });
 
@@ -68,7 +68,7 @@ describe.skipIf(!testDatabaseUrl)("friend REST with PostgreSQL", () => {
   beforeEach(async () => {
     await resetTestDatabase(database);
     await app?.close();
-    app = await buildApp({}, testDatabaseUrl, { jwtSecret });
+    app = await buildApp({}, testDatabaseUrl, { jwtSecret }, undefined, () => false);
     tokens = [];
     for (const name of nicknames) {
       const register = await app.inject({
@@ -192,6 +192,13 @@ describe.skipIf(!testDatabaseUrl)("friend REST with PostgreSQL", () => {
     expect(responses.filter((r) => r.statusCode === 409)).toHaveLength(1);
     const [row] = await database.db.select().from(friendships).where(eq(friendships.id, id));
     expect(["accepted", "declined"]).toContain(row.status);
+  });
+
+  test("unbound online registry does not falsely report friends as offline", async () => {
+    const id = (await send(1, 2)).json().requestId;
+    await accept(2, id);
+    const unbound = createFriendService(database.db);
+    await expect(unbound.getFriends(1)).rejects.toThrow();
   });
 
   test("accepted friend ID query only includes accepted relationships", async () => {
