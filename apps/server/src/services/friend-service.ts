@@ -241,6 +241,7 @@ export function createFriendService(
   /** 닉네임 접두사 검색 결과는 계정의 공개 필드로 최대 20명만 제공합니다. */
   async function searchUsers(actorId: number, nickname: string): Promise<Array<{ id: number; nickname: string; avatarUrl: string | null }>> {
     const prefix = nickname.trim();
+    if (!prefix) return [];
     return db.select(profileFields)
       .from(users)
       .where(and(
