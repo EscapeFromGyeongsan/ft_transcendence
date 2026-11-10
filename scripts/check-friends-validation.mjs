@@ -86,6 +86,7 @@ try {
     url,
     { jwtSecret: "pr95-http-validation-secret-at-least-32-characters" },
     undefined,
+    undefined,
     (id) => id === 3,
   );
   await app.listen({ host: "127.0.0.1", port: 0 });

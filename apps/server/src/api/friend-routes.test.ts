@@ -6,7 +6,7 @@ import {
   expect,
   test,
 } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { setTimeout as delay } from "node:timers/promises";
 import type { PoolClient } from "pg";
 import type { FastifyInstance } from "fastify";
@@ -86,6 +86,7 @@ test("friend routes document every response status in Swagger", async () => {
     "413",
     "415",
     "422",
+    "429",
     "500",
     "503",
   ]);
@@ -124,6 +125,7 @@ describe.skipIf(!testDatabaseUrl)("friend REST with PostgreSQL", () => {
       {},
       testDatabaseUrl,
       { jwtSecret },
+      undefined,
       undefined,
       () => false,
     );
@@ -280,7 +282,28 @@ describe.skipIf(!testDatabaseUrl)("friend REST with PostgreSQL", () => {
     expect((await accept(2, id)).statusCode).toBe(200);
     expect((await accept(2, id)).statusCode).toBe(409);
     expect((await decline(2, id)).statusCode).toBe(409);
-    expect((await accept(3, id)).statusCode).toBe(403);
+    for (const action of [accept, decline]) {
+      const existing = await action(3, id);
+      const missing = await action(3, 9999);
+      expect(existing.statusCode).toBe(404);
+      expect(existing.json()).toEqual(missing.json());
+    }
+  });
+
+  test("accept, decline and delete enforce their documented rate limit", async () => {
+    const calls = [
+      () => accept(1, 9999),
+      () => decline(1, 9999),
+      () => call(1, "DELETE", "/api/friends/2"),
+    ];
+    for (const invoke of calls) {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        expect((await invoke()).statusCode).toBe(404);
+      }
+      const blocked = await invoke();
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error.code).toBe("RATE_LIMITED");
+    }
   });
 
   test("validation, auth and user discovery do not expose private fields", async () => {
@@ -350,6 +373,35 @@ describe.skipIf(!testDatabaseUrl)("friend REST with PostgreSQL", () => {
     expect(response.statusCode).toBe(409);
     expect(response.json().error.code).toBe("REQUEST_NOT_PENDING");
     expect((await send(1, 2)).json().error.code).toBe("REQUEST_DECLINED");
+  });
+
+  test("looks up the winning request after the last empty insert result", async () => {
+    // Delay the competing request until the third INSERT without wall-clock timing.
+    await database.db.execute(sql`CREATE SEQUENCE test_friend_attempts`);
+    await database.db.execute(sql`
+      CREATE FUNCTION test_friend_insert_race() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF pg_trigger_depth() > 1 THEN RETURN NEW; END IF;
+        IF nextval('test_friend_attempts') = 3 THEN
+          INSERT INTO friendships (user_low_id, user_high_id, requested_by_id)
+          VALUES (NEW.user_low_id, NEW.user_high_id, NEW.user_high_id);
+        END IF;
+        RETURN NULL;
+      END;
+      $$`);
+    await database.db.execute(sql`
+      CREATE TRIGGER test_friend_insert_race BEFORE INSERT ON friendships
+      FOR EACH ROW EXECUTE FUNCTION test_friend_insert_race()`);
+    try {
+      const response = await send(1, 2);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().status).toBe("accepted");
+    } finally {
+      await database.db.execute(
+        sql`DROP FUNCTION test_friend_insert_race() CASCADE`,
+      );
+      await database.db.execute(sql`DROP SEQUENCE test_friend_attempts`);
+    }
   });
 
   test("accept returns 404 when a locked accepted relationship is deleted", async () => {

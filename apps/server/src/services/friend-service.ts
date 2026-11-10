@@ -108,7 +108,8 @@ export function createFriendService(
       const { low, high } = pair(actorId, otherId);
       const condition = forPair(actorId, otherId);
 
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      const maxInsertAttempts = 3;
+      for (let attempt = 0; attempt <= maxInsertAttempts; attempt += 1) {
         const [existing] = await tx
           .select()
           .from(friendships)
@@ -144,15 +145,20 @@ export function createFriendService(
 
           // The former recipient initiates a NEW request with a NEW id.
           await tx.delete(friendships).where(eq(friendships.id, existing.id));
+        } else if (attempt === maxInsertAttempts) {
+          break;
         }
 
-        const [inserted] = await tx
+        const insert = tx
           .insert(friendships)
-          .values({ userLowId: low, userHighId: high, requestedById: actorId })
-          .onConflictDoNothing({
-            target: [friendships.userLowId, friendships.userHighId],
-          })
-          .returning({ id: friendships.id });
+          .values({ userLowId: low, userHighId: high, requestedById: actorId });
+        const [inserted] = await (
+          existing
+            ? insert
+            : insert.onConflictDoNothing({
+                target: [friendships.userLowId, friendships.userHighId],
+              })
+        ).returning({ id: friendships.id });
         if (inserted)
           return {
             ok: true,
@@ -163,6 +169,8 @@ export function createFriendService(
               status: "pending",
             },
           };
+        if (existing)
+          throw new Error("Failed to replace the declined request.");
         // Competing INSERT and subsequent DELETE can leave the next SELECT empty.
       }
       return { ok: false, code: "FRIEND_REQUEST_CONFLICT" };
@@ -179,12 +187,19 @@ export function createFriendService(
       const [row] = await tx
         .select()
         .from(friendships)
-        .where(eq(friendships.id, requestId))
+        .where(
+          and(
+            eq(friendships.id, requestId),
+            or(
+              eq(friendships.userLowId, actorId),
+              eq(friendships.userHighId, actorId),
+            ),
+          ),
+        )
         .for("update");
       if (!row) return { ok: false, code: "NOT_FOUND" };
-      const recipientId =
-        row.requestedById === row.userLowId ? row.userHighId : row.userLowId;
-      if (recipientId !== actorId) return { ok: false, code: "FORBIDDEN" };
+      if (row.requestedById === actorId)
+        return { ok: false, code: "FORBIDDEN" };
       if (row.status !== "pending")
         return { ok: false, code: "REQUEST_NOT_PENDING" };
       const sender = await findUser(tx, row.requestedById);

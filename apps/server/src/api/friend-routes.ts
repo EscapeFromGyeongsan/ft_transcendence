@@ -219,6 +219,7 @@ export function registerFriendRoutes(
     "/api/friends/requests/:requestId/accept",
     {
       onRequest,
+      config: friendRateLimit,
       schema: {
         ...requiresAuth,
         summary: "받은 친구 요청 수락",
@@ -226,7 +227,9 @@ export function registerFriendRoutes(
         response: {
           200: { description: "수락 완료", ...resultSchema },
           ...mutationErrors,
-          403: errorSchema("수신자가 아님", ["FORBIDDEN"]),
+          403: errorSchema("발신자는 자신의 요청을 수락할 수 없음", [
+            "FORBIDDEN",
+          ]),
           404: errorSchema("요청 없음", ["NOT_FOUND"]),
           409: errorSchema("이미 처리된 요청", ["REQUEST_NOT_PENDING"]),
         },
@@ -248,6 +251,7 @@ export function registerFriendRoutes(
     "/api/friends/requests/:requestId/decline",
     {
       onRequest,
+      config: friendRateLimit,
       schema: {
         ...requiresAuth,
         summary: "받은 친구 요청 거절",
@@ -255,7 +259,9 @@ export function registerFriendRoutes(
         response: {
           204: noBody,
           ...mutationErrors,
-          403: errorSchema("수신자가 아님", ["FORBIDDEN"]),
+          403: errorSchema("발신자는 자신의 요청을 거절할 수 없음", [
+            "FORBIDDEN",
+          ]),
           404: errorSchema("요청 없음", ["NOT_FOUND"]),
           409: errorSchema("이미 처리된 요청", ["REQUEST_NOT_PENDING"]),
         },
@@ -277,6 +283,7 @@ export function registerFriendRoutes(
     "/api/friends/:userId",
     {
       onRequest,
+      config: friendRateLimit,
       schema: {
         ...requiresAuth,
         summary: "수락된 친구 관계 삭제",
@@ -287,6 +294,7 @@ export function registerFriendRoutes(
           401: unauthenticatedResponse,
           404: errorSchema("수락된 친구 관계 없음", ["NOT_FOUND"]),
           422: bodyErrorResponses[422],
+          429: rateLimitResponse,
           ...serverErrorResponses,
         },
       },

@@ -20,6 +20,11 @@ const userParams = {
 };
 const notFound = errorSchema("존재하지 않는 사용자", ["NOT_FOUND"]);
 
+/**
+ * 전적 통계·경기 기록·리더보드 route를 등록합니다.
+ *
+ * @remarks 서비스 getter가 설정 없음으로 {@link ServiceUnavailableError}를 던지면 503이 됩니다.
+ */
 export function registerStatsRoutes(
   app: FastifyInstance,
   getAuth: () => AuthService,

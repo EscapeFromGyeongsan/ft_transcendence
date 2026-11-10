@@ -1,6 +1,6 @@
 # 게임 공통 계약
 
-- 문서 버전: 0.3.1 / 작성일: 2026-10-08 / 수정일: 2026-10-28 (KST)
+- 문서 버전: 0.4.0 / 작성일: 2026-10-08 / 수정일: 2026-10-28 (KST)
 - 상태: PR #6 B의 계약 구조 승인 및 후속 문서 보완 — 미결정 항목은 10절 참조
 - 관련 이슈: [#5 공통 계약 초안](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/5)
 - 작성 책임: dong-hki / 문서 작성 지원: Codex
@@ -102,11 +102,11 @@ import type {
 
 현재 오목 예제는 `expectedVersion: 0`으로 첫 착수를 요청하고, 갱신 상태를 `stateVersion: 1`로 표현한다. PR #11의 착수·기권 성공은 상태 버전을 1 증가시키며 거절·중복 재전송은 증가시키지 않는다. 중복 처리와 검사 순서는 9.1절에 기록한다. 대기·일시정지·복귀 등 나머지 생명주기의 버전 증가는 추가 합의 대상이다. 현재 서버는 명령 기록을 경기 기록과 함께 보관하며 자동 삭제·만료를 구현하지 않는다.
 
-현재 서버(PR #11)는 게임별 엔진을 `{ version, rules }`로 등록한다. `createMatch()`는 호출자에게 규칙 버전을 받지 않고 등록 버전으로 저장한다. 착수 시 저장 버전과 등록 버전이 다르면 적용하지 않고 트랜잭션을 롤백한다. 오목 예제는 PR #12 엔진의 `gomoku-freestyle-v1`을 사용한다. 현재 서버는 게임별 한 버전을 지원하며, 공통 `rulesVersion: string` 타입은 향후 다른 게임이나 버전 등록을 허용한다. 여러 규칙 버전의 동시 운영은 이번 범위에 포함하지 않는다.
+현재 서버(PR #11)는 게임별 엔진을 `{ version, rules, board }`로 등록한다. `board(moves)`는 저장된 착수로 현재 보드를 만들어 `getSnapshot()`에 쓴다. `createMatch()`는 호출자에게 규칙 버전을 받지 않고 등록 버전으로 저장한다. 착수 시 저장 버전과 등록 버전이 다르면 적용하지 않고 트랜잭션을 롤백한다. 오목 예제는 PR #12 엔진의 `gomoku-freestyle-v1`을 사용한다. 현재 서버는 게임별 한 버전을 지원하며, 공통 `rulesVersion: string` 타입은 향후 다른 게임이나 버전 등록을 허용한다. 여러 규칙 버전의 동시 운영은 이번 범위에 포함하지 않는다.
 
 ```ts
 createGameCommandService(db, {
-  gomoku: { version: "gomoku-freestyle-v1", rules: gomoku.rules },
+  gomoku: { version: "gomoku-freestyle-v1", rules: gomoku.rules, board: gomoku.board },
 });
 ```
 
@@ -368,7 +368,7 @@ PR #12의 `4971d30`에서 `applyMove`와 `GomokuRulesInput.action`을 착수 전
 }
 ```
 
-현재 오류 객체에는 `matchId`, `commandId`나 최신 snapshot이 없다. 요청 연결·재동기화·전송 envelope는 후속 검토 대상이며, 현재 서버 서비스의 검사 우선순위는 9.1절을 따른다. 서버는 차례 위반을 엔진 호출 전에 `NOT_YOUR_TURN`으로 거절한다. 현재 오목 엔진은 공개 코드 중 `INVALID_ACTION`, `GAME_FINISHED`만 반환한다. B는 엔진 오류를 공개 코드의 부분집합으로 제한하고 미등록 코드는 서버 오류로 처리하도록 제안했다. 현재 서버의 `RuleDecision.code`는 아직 `string`이며 타입 제한과 미등록 코드 방어는 B의 #6 병합 후 작업이다. #29·#31에서 소비자 확인을 추적한다.
+현재 오류 객체에는 `matchId`, `commandId`나 최신 snapshot이 없다. 요청 연결·재동기화·전송 envelope는 후속 검토 대상이며, 현재 서버 서비스의 검사 우선순위는 9.1절을 따른다. 서버는 차례 위반을 엔진 호출 전에 `NOT_YOUR_TURN`으로 거절한다. 현재 오목 엔진은 공개 코드 중 `INVALID_ACTION`, `GAME_FINISHED`만 반환한다. B는 엔진 오류를 공개 코드의 부분집합으로 제한하고 미등록 코드는 서버 오류로 처리하도록 제안했다. 서버의 `RuleDecision.code`는 `INVALID_ACTION | GAME_FINISHED`로 제한했고, 실행 중 엔진이 다른 코드를 돌려주면 거절 기록 없이 서버 오류로 롤백한다. #29·#31에서 소비자 확인을 추적한다.
 
 PR #11의 내부 `CommandResult`는 `status`, `duplicate`와 성공 시 `stateVersion`, 실패 시 `code`를 반환한다. 이것을 전송용 `GameError`로 변환하는 계층에서 `message`와 요청 연결 정보를 구성해야 한다. 클라이언트는 표시용 `message`가 아니라 `code`로 분기한다.
 
@@ -376,7 +376,7 @@ PR #11의 내부 `CommandResult`는 `status`, `duplicate`와 성공 시 `stateVe
 
 TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 서버에서 별도로 검증해야 한다. 인증 사용자와 경기 참가자의 연결, 현재 차례, 좌표의 정수·범위·빈칸 여부, 버전 충돌 및 중복 요청 처리는 서버·게임 엔진에서 검증할 책임이다.
 
-이 문서는 공통 데이터 객체를 정의하는 초안이다. REST endpoint·HTTP 상태 코드, WebSocket 이벤트 이름·메시지 포장 형식·요청 응답 연결 방식은 해당 구현과 함께 추가한다. `GameError.code`만으로 HTTP 상태 코드나 WebSocket 이벤트를 확정하지 않는다.
+이 문서는 공통 데이터 객체를 정의하는 초안이다. REST endpoint별 HTTP 상태 코드는 11절에 기록한다. WebSocket 이벤트 이름·메시지 포장 형식·요청 응답 연결 방식은 해당 구현과 함께 추가한다. `GameError.code`만으로 HTTP 상태 코드나 WebSocket 이벤트를 확정하지 않는다.
 
 ### 9.1 서버 명령 처리 순서와 중복 재전송
 
@@ -422,19 +422,125 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 - [x] 현재 서버의 등록 버전 저장·착수 시 일치 검사와 오목 `gomoku-freestyle-v1`을 반영했다(2026-10-28).
 - [x] 서버 리뷰의 숫자 ID·기권 행동·오류 코드와 실제 명령 처리 순서를 코드·예제·문서에 반영했다(2026-10-24). B가 계약 구조를 승인했다(2026-10-28).
 - [ ] #29: 현재 최초 결과 재전송·명령 기록 자동 만료 없음과 B의 유지 제안을 소비자가 확인한다.
-- [ ] #29·#31: 공개 코드 부분집합 정책을 소비자가 확인하고 B가 서버 타입·미등록 코드 방어를 구현한다.
+- [x] B가 서버 타입을 공개 코드 부분집합으로 제한하고 미등록 코드를 서버 오류로 처리했다(2026-10-28).
+- [ ] #29·#31: 공개 코드 부분집합 정책을 소비자가 확인한다.
 - [ ] 대기 중 참가자 미배정, 일시정지·종료 시 차례, 종료 결과의 필드 조합을 어떻게 제한할 것인가?
 - [ ] 종료 결과 명칭과 게임별 사유를 `GAME_RULES.md` 및 SRS와 어떻게 통일할 것인가?
 - [ ] 오류의 요청 연결, 재동기화 방식, REST·WebSocket 전달 형식을 어떻게 정할 것인가?
 
 요청자는 필드 설명·예제 흐름·좌표 기준을 검토하고, 2026-10-12 게임별 행동·상태·결과를 분리하는 확장 구조의 반영을 요청했다. 2026-10-24에는 B의 서버 리뷰를 반영했다. 나머지 미결정 항목과 구현 초안의 최종 승인은 B/C/D의 서버·게임·UI 연결 관점 검토 대상으로 유지한다.
 
+## 11. REST API 상태 코드
 
-## 11. 친구 REST API 계약 (#69, Draft)
+서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 아래 표는 2026-10-28 Swagger 출력에서 옮겼다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
 
-> 구현 브랜치 `feat/friends-rest-api-69` 기준. 인증된 사용자의 Bearer access token을 사용합니다. 실제 PostgreSQL 통합 테스트와 D의 온라인 상태 연동은 PR에서 별도 검증합니다.
+### 11.1 오류 응답 형식
 
-### 11.1 공개 타입
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "...", "details": {} } }
+```
+
+- 화면·클라이언트는 `code`로 분기한다. `message`는 표시·디버깅용이다.
+- `details`는 선택 필드다.
+- 8절의 `GameError`는 게임 명령 결과이며, REST 오류 응답과 같은 객체가 아니다.
+
+### 11.2 공통 코드
+
+| 상태 | `code` | 언제 |
+|---|---|---|
+| 400 | `BAD_REQUEST` | 본문을 해석할 수 없음 (깨진 JSON, multipart) |
+| 401 | `UNAUTHENTICATED` | token 없음·만료·위조, 폐기·만료된 세션 |
+| 413 | `PAYLOAD_TOO_LARGE` | 본문 크기 제한 초과 (JSON 1 MiB, 아바타 2 MiB) |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type |
+| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패 |
+| 429 | `RATE_LIMITED` | 요청 횟수 제한 초과 |
+| 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
+| 503 | `SERVICE_UNAVAILABLE` | DB 미설정·연결 실패 등 의존 서비스 장애 |
+
+본문을 받는 POST·PATCH는 본문이 없어도 보내면 해석하므로 400·413·415가 붙는다.
+
+### 11.3 엔드포인트별 상태 코드
+
+괄호 안은 그 상태에서 나오는 `code`다. 11.2의 공통 의미와 같은 코드는 상태만 적는다.
+
+| 메서드·경로 | 성공 | 오류 |
+|---|---|---|
+| `GET /api/health` | 200 | 없음 |
+| `GET /api/health/db` | 200 | 503 |
+| `POST /api/auth/register` | 201 | 400, 409 (`EMAIL_TAKEN`, `NICKNAME_TAKEN`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/auth/login` | 200 (2FA 계정은 `challengeToken`) | 400, 401 (`INVALID_CREDENTIALS`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/auth/refresh` | 200 | 400, 401, 413, 415, 422, 429, 500, 503 |
+| `POST /api/auth/logout` | 204 | 400, 401, 413, 415, 500, 503 |
+| `POST /api/auth/2fa/verify` | 200 | 400, 401 (`UNAUTHENTICATED`, `INVALID_TWO_FACTOR_CODE`), 413, 415, 422, 429, 500, 503 |
+| `GET /api/auth/2fa` | 200 | 401, 500, 503 |
+| `POST /api/auth/2fa/setup` | 200 | 400, 401, 409 (`TWO_FACTOR_ALREADY_ENABLED`), 413, 415, 500, 503 |
+| `POST /api/auth/2fa/enable` | 200 | 400 (`BAD_REQUEST`, `INVALID_TWO_FACTOR_CODE`), 401, 409 (`TWO_FACTOR_NOT_SET_UP`, `TWO_FACTOR_ALREADY_ENABLED`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/auth/2fa/disable` | 204 | 400 (`BAD_REQUEST`, `INVALID_TWO_FACTOR_CODE`), 401, 409 (`TWO_FACTOR_NOT_ENABLED`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/auth/oauth/42/login` | 200 | 400, 413, 415, 429, 500, 503 |
+| `POST /api/auth/oauth/42/link` | 200 | 400, 401, 413, 415, 500, 503 |
+| `POST /api/auth/oauth/42/callback` | 200 | 400, 401 (`OAUTH_STATE_INVALID`, `OAUTH_FAILED`, `UNAUTHENTICATED`), 409 (`EMAIL_TAKEN`, `OAUTH_ACCOUNT_LINKED`, `OAUTH_ALREADY_LINKED`), 413, 415, 422 (`VALIDATION_ERROR`, `OAUTH_EMAIL_MISSING`), 429, 500, 502 (`OAUTH_PROVIDER_ERROR`), 503 |
+| `GET /api/users?nickname=` | 200 (공개 프로필 최대 20건) | 401, 422, 429, 500, 503 |
+| `GET /api/friends` | 200 (친구, 받은 요청, 보낸 요청) | 401, 500, 503 |
+| `POST /api/friends/requests` | 201 (신규 요청), 200 (맞요청 수락) | 400, 401, 404 (`USER_NOT_FOUND`), 409 (`ALREADY_FRIENDS`, `REQUEST_PENDING`, `REQUEST_DECLINED`, `FRIEND_REQUEST_CONFLICT`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/accept` | 200 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/decline` | 204 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `DELETE /api/friends/{userId}` | 204 | 400, 401, 404 (`NOT_FOUND`), 413, 415, 422, 429, 500, 503 |
+| `GET /api/users/me` | 200 | 401, 500, 503 |
+| `PATCH /api/users/me` | 200 | 400, 401, 409 (`NICKNAME_TAKEN`), 413, 415, 422, 500, 503 |
+| `GET /api/users/{userId}` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users/{userId}/stats` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users/{userId}/matches` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |
+| `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
+| `DELETE /api/users/me/avatar` (PR #15) | 204 | 401, 500, 503 |
+| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
+
+- 친구 요청의 수락·거절에서 발신자가 자기 요청을 처리하려고 하면 403을 반환한다. 제3자에게는 요청의 존재 여부와 관계없이 404를 반환한다.
+- 경기 조회·명령 API는 REST에 없다. 경기는 WebSocket(IF-03, D)으로 다루고, 그 오류는 8절 `GameError`를 쓴다.
+
+## 12. WebSocket `/api/ws` (IF-03)
+
+REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 연결 거절·close code·메시지를 기록한다. 이 경로는 HTTP 응답 본문이 없는 upgrade라 Swagger(`/docs`)에서 숨긴다(`schema.hide`). 여기 적힌 내용은 #41 기준이며, 경기 구독·명령·매칭·재접속 메시지는 #42·#43·#49·#50이 이 장에 이어서 추가한다.
+
+### 12.1 연결과 인증
+
+1. 클라이언트는 `GET /api/ws`로 연결한다. access token은 URL·헤더에 넣지 않는다(프록시·접근 로그에 남지 않게 하기 위함).
+2. 연결 후 5초 안에 첫 메시지로 `auth`를 보낸다. 서버는 JWT와 서버 세션을 함께 확인하고 `auth.ok`로 답한다.
+3. `auth.ok`를 받기 전에는 다른 메시지를 보내지 않는다. 인증 처리 중 들어온 메시지는 4401로 닫는다.
+4. 인증은 연결 시점에만 한다. 연결 중 access token이 만료돼도 연결은 유지되고, 세션 폐기(로그아웃)만 연결을 닫는다.
+
+### 12.2 메시지 형식
+
+모든 메시지는 텍스트 프레임의 JSON `{ type, requestId?, payload }`이다. `payload`는 객체, `requestId`는 1~64자 문자열이다. 요청에 `requestId`가 있으면 그 요청의 응답·오류에 같은 값을 돌려준다.
+
+| 방향 | `type` | `payload` | 설명 |
+|---|---|---|---|
+| C → S | `auth` | `{ accessToken }` | 연결 후 첫 메시지 |
+| S → C | `auth.ok` | `{ userId }` | 인증 성공 |
+| C → S | `ping` | `{}` | 앱 레벨 연결 확인 |
+| S → C | `pong` | `{}` | `ping` 응답 |
+| S → C | `error` | `{ code, message }` | 연결을 유지하는 오류. 지원하지 않는 `type`이면 `UNSUPPORTED_MESSAGE` |
+
+### 12.3 연결 거절과 close code
+
+| 상황 | 결과 |
+|---|---|
+| 같은 IP에서 1분에 30번을 넘는 연결 요청 | upgrade 없이 HTTP 429 `RATE_LIMITED` |
+| 5초 안에 `auth`가 오지 않음 | 4401 `Authentication timed out.` |
+| 첫 메시지가 `auth`가 아니거나 `accessToken`이 없음, 인증 중 다른 메시지 | 4401 `Authenticate first.` |
+| 토큰 무효·만료, 폐기된 세션 | 4401 `Invalid or expired token.` |
+| 로그아웃으로 세션 폐기 | 그 세션의 모든 연결을 4401 `Session ended.` |
+| JSON이 아니거나 envelope 형식이 틀림, binary 프레임 | 4400 `Malformed message.` |
+| 16 KiB를 넘는 메시지 | 1009 (`ws`의 `maxPayload`) |
+| 인증 중 DB·인증 서비스 장애 | 1011 `Service unavailable.` |
+
+4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 갱신도 실패하면 로그인 화면으로 보낸다. 4400·1009는 클라이언트 버그이므로 같은 메시지로 재시도하지 않는다.
+
+## 13. 친구 REST API 계약 (#69, Draft)
+
+> 구현 브랜치 `feat/friends-rest-api-69` 기준. 인증된 사용자의 Bearer access token을 사용합니다. 경로별 HTTP 상태 코드는 11.3에 기록합니다. 실제 연결의 온라인 상태는 #82 통합에서 확인합니다.
+
+### 13.1 공개 타입
 
 ```ts
 type FriendUser = { userId: number; nickname: string; avatarUrl: string | null };
@@ -452,36 +558,22 @@ type FriendsList = {
 
 이메일·세션·비밀번호 해시는 친구 응답 및 사용자 검색에서 노출하지 않습니다. `requestId`는 DB `friendships.id`이며 JSON 안전 정수입니다. 생성 응답은 `201 pending`, 맞요청 수락과 수신자의 수락은 `200 accepted`입니다. 수락과 거절은 목록에서 읽은 가장 최근 `requestId`를 사용해야 합니다.
 
-### 11.2 경로별 상태 코드
-
-| Method | 경로 | 성공 | 추가 오류 상태 (공통 500/503 별도) |
-|---|---|---|---|
-| GET | `/api/users?nickname=<prefix>` | 200, 닉네임 접두사 검색 최대 20명 (`{ id, nickname, avatarUrl }[]`) | 401 인증, 422 입력, 429 요청 과다 |
-| GET | `/api/friends` | 200 `FriendsList` | 401 인증 |
-| POST | `/api/friends/requests` `{userId}` | 201 신규 pending / 200 맞요청 accepted | 400 JSON 오류, 401 인증, 404 USER_NOT_FOUND, 409 ALREADY_FRIENDS / REQUEST_PENDING / REQUEST_DECLINED / FRIEND_REQUEST_CONFLICT, 413 본문 크기, 415 본문 형식, 422 자기 자신 또는 잘못된 ID, 429 요청 과다 |
-| POST | `/api/friends/requests/{requestId}/accept` | 200 `FriendRequestResult` (accepted) | 400, 401, 403 FORBIDDEN, 404 NOT_FOUND, 409 REQUEST_NOT_PENDING, 413, 415, 422 |
-| POST | `/api/friends/requests/{requestId}/decline` | 204 본문 없음 | 400, 401, 403 FORBIDDEN, 404 NOT_FOUND, 409 REQUEST_NOT_PENDING, 413, 415, 422 |
-| DELETE | `/api/friends/{userId}` | 204 수락된 친구 삭제 | 400, 401, 404 NOT_FOUND, 413, 415, 422 |
-
-모든 실패 응답은 공통 `{ error: { code, message } }` 형식입니다. DB 예외는 공통 오류 처리의 500 또는 503을 따릅니다. 본문이 없는 POST에서도 잘못된 JSON이 전달되면 400이 발생할 수 있습니다.
-
-### 11.3 상태 전환과 권한
+### 13.2 상태 전환과 권한
 
 - 사용자 쌍은 `min(userId), max(userId)` 기준으로 단 하나만 존재합니다. `requested_by_id`는 반드시 그 쌍에 포함됩니다.
 - 자신에게 보내는 요청은 422, 존재하지 않는 사용자에게 보내는 요청은 404, 같은 방향 pending 재요청은 409 `REQUEST_PENDING`, 이미 수락된 친구에게 보내는 요청은 409 `ALREADY_FRIENDS`입니다.
 - 반대편 pending에 새 요청을 보내면 그 관계를 accepted로 바꾸며 200을 반환합니다.
-- 수신자만 수락·거절할 수 있고, 처리된 요청은 다시 처리할 수 없습니다. 수신자가 아닌 사용자는 403, 이전에 삭제된 request ID는 404입니다.
+- 수신자만 수락·거절할 수 있고, 처리된 요청은 다시 처리할 수 없습니다. 발신자가 자신의 요청을 처리하면 403입니다. 제3자의 요청이나 존재하지 않는 ID에는 동일한 404를 반환합니다.
 - 거절당한 기존 발신자는 재요청할 수 없습니다(409 `REQUEST_DECLINED`). 거절한 사용자가 먼저 다시 요청할 때는 **기존 declined 행을 삭제하고 새 행을 만들어 ID를 새로 부여**합니다. 이전 요청 ID로는 새 요청을 조작할 수 없습니다.
 - 친구 삭제는 accepted 관계에만 적용합니다. pending/declined 행은 이 경로로 삭제되지 않습니다.
 - 동시 신규 요청은 UNIQUE + `ON CONFLICT DO NOTHING` 및 잠금 후 재조회를 사용합니다. 재조회 중 삭제가 끼어 다시 0행인 경우 삽입을 최대 3회 시도하며, 계속 충돌하면 409 `FRIEND_REQUEST_CONFLICT`입니다. 서버 DB pool의 statement timeout은 별도의 상한입니다.
 
-### 11.4 온라인 상태와 알림 — 후속 통합 (#82)
+### 13.3 온라인 상태와 알림 — 후속 통합 (#82)
 
 `GET /api/friends`의 `online`은 인증 완료된 WebSocket 연결 수를 기준으로 D의 `isUserOnline`을 주입받아 계산할 예정입니다. 현재 #69 단독 브랜치에는 D 연결 registry가 없으므로 **수락된 친구가 있을 때 `GET /api/friends`는 503 `SERVICE_UNAVAILABLE`**로 응답합니다. 미확인 상태를 임의로 offline(`false`)으로 표시하지 않습니다. D가 `isUserOnline(userId)`를 `buildApp`에 주입하면 정상적으로 인증 연결 집계를 표시합니다.
 
 D와 합의한 `listAcceptedFriendIds(userId)`는 구현했습니다. 연결 registry 기반 `presence`, 관계 변경 직후 `friends.changed`, WS 종료·세션 폐기 후 온라인 갱신은 #82와 후속 통합에서 연결해야 합니다. A는 수락 성공 후 목록을 재조회해 온라인 상태를 재동기화합니다.
 
-### 11.5 스키마 및 migration 통합 주의
+### 13.4 스키마 및 migration 통합 주의
 
 `0004_friendships`를 `master`의 현재 `0003` 스냅샷에 이어 작성했습니다. 다른 미병합 PR(#79·#89 등)에도 다음 migration 번호가 사용될 수 있으므로 병합 순서가 정해지면 뒤에 병합하는 쪽은 migration·snapshot·journal을 다시 생성해야 합니다.
-
