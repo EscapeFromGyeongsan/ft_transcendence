@@ -19,6 +19,7 @@
     "build": "tsc --noEmit && npm run build --workspace @cafe/web",
     "test": "vitest run --config=config/vitest.config.ts",
     "test:watch": "vitest --config=config/vitest.config.ts",
+    "test:gomoku:persistence": "node --experimental-strip-types scripts/check-gomoku-persistence.mjs",
     "test:e2e": "playwright test --config=config/playwright.config.ts",
     "preview": "npm run preview --workspace @cafe/web -- --host 0.0.0.0",
     "format": "prettier --write apps packages tests scripts config infra *.json"
@@ -32,6 +33,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",
     "prettier": "^3.9.8",
     "typescript": "^7.0.2",
@@ -39,9 +41,11 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@fastify/multipart": "10.1.3",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/swagger": "^9.9.0",
     "@fastify/swagger-ui": "^6.1.1",
+    "@fastify/websocket": "^11.3.4",
     "argon2": "^0.45.1",
     "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
