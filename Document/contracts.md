@@ -428,3 +428,60 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 - [ ] 오류의 요청 연결, 재동기화 방식, REST·WebSocket 전달 형식을 어떻게 정할 것인가?
 
 요청자는 필드 설명·예제 흐름·좌표 기준을 검토하고, 2026-10-12 게임별 행동·상태·결과를 분리하는 확장 구조의 반영을 요청했다. 2026-10-24에는 B의 서버 리뷰를 반영했다. 나머지 미결정 항목과 구현 초안의 최종 승인은 B/C/D의 서버·게임·UI 연결 관점 검토 대상으로 유지한다.
+
+
+## 11. 친구 REST API 계약 (#69, Draft)
+
+> 구현 브랜치 `feat/friends-rest-api-69` 기준. 인증된 사용자의 Bearer access token을 사용합니다. 실제 PostgreSQL 통합 테스트와 D의 온라인 상태 연동은 PR에서 별도 검증합니다.
+
+### 11.1 공개 타입
+
+```ts
+type FriendUser = { userId: number; nickname: string; avatarUrl: string | null };
+type FriendRequest = FriendUser & { requestId: number; createdAt: string };
+type FriendRequestResult = FriendUser & {
+  requestId: number;
+  status: "pending" | "accepted";
+};
+type FriendsList = {
+  friends: (FriendUser & { online: boolean })[];
+  incoming: FriendRequest[];
+  outgoing: FriendRequest[];
+};
+```
+
+이메일·세션·비밀번호 해시는 친구 응답 및 사용자 검색에서 노출하지 않습니다. `requestId`는 DB `friendships.id`이며 JSON 안전 정수입니다. 생성 응답은 `201 pending`, 맞요청 수락과 수신자의 수락은 `200 accepted`입니다. 수락과 거절은 목록에서 읽은 가장 최근 `requestId`를 사용해야 합니다.
+
+### 11.2 경로별 상태 코드
+
+| Method | 경로 | 성공 | 추가 오류 상태 (공통 500/503 별도) |
+|---|---|---|---|
+| GET | `/api/users?nickname=<prefix>` | 200, 닉네임 접두사 검색 최대 20명 (`{ id, nickname, avatarUrl }[]`) | 401 인증, 422 입력, 429 요청 과다 |
+| GET | `/api/friends` | 200 `FriendsList` | 401 인증 |
+| POST | `/api/friends/requests` `{userId}` | 201 신규 pending / 200 맞요청 accepted | 400 JSON 오류, 401 인증, 404 USER_NOT_FOUND, 409 ALREADY_FRIENDS / REQUEST_PENDING / REQUEST_DECLINED / FRIEND_REQUEST_CONFLICT, 413 본문 크기, 415 본문 형식, 422 자기 자신 또는 잘못된 ID, 429 요청 과다 |
+| POST | `/api/friends/requests/{requestId}/accept` | 200 `FriendRequestResult` (accepted) | 400, 401, 403 FORBIDDEN, 404 NOT_FOUND, 409 REQUEST_NOT_PENDING, 413, 415, 422 |
+| POST | `/api/friends/requests/{requestId}/decline` | 204 본문 없음 | 400, 401, 403 FORBIDDEN, 404 NOT_FOUND, 409 REQUEST_NOT_PENDING, 413, 415, 422 |
+| DELETE | `/api/friends/{userId}` | 204 수락된 친구 삭제 | 400, 401, 404 NOT_FOUND, 413, 415, 422 |
+
+모든 실패 응답은 공통 `{ error: { code, message } }` 형식입니다. DB 예외는 공통 오류 처리의 500 또는 503을 따릅니다. 본문이 없는 POST에서도 잘못된 JSON이 전달되면 400이 발생할 수 있습니다.
+
+### 11.3 상태 전환과 권한
+
+- 사용자 쌍은 `min(userId), max(userId)` 기준으로 단 하나만 존재합니다. `requested_by_id`는 반드시 그 쌍에 포함됩니다.
+- 자신에게 보내는 요청은 422, 존재하지 않는 사용자에게 보내는 요청은 404, 같은 방향 pending 재요청은 409 `REQUEST_PENDING`, 이미 수락된 친구에게 보내는 요청은 409 `ALREADY_FRIENDS`입니다.
+- 반대편 pending에 새 요청을 보내면 그 관계를 accepted로 바꾸며 200을 반환합니다.
+- 수신자만 수락·거절할 수 있고, 처리된 요청은 다시 처리할 수 없습니다. 수신자가 아닌 사용자는 403, 이전에 삭제된 request ID는 404입니다.
+- 거절당한 기존 발신자는 재요청할 수 없습니다(409 `REQUEST_DECLINED`). 거절한 사용자가 먼저 다시 요청할 때는 **기존 declined 행을 삭제하고 새 행을 만들어 ID를 새로 부여**합니다. 이전 요청 ID로는 새 요청을 조작할 수 없습니다.
+- 친구 삭제는 accepted 관계에만 적용합니다. pending/declined 행은 이 경로로 삭제되지 않습니다.
+- 동시 신규 요청은 UNIQUE + `ON CONFLICT DO NOTHING` 및 잠금 후 재조회를 사용합니다. 재조회 중 삭제가 끼어 다시 0행인 경우 삽입을 최대 3회 시도하며, 계속 충돌하면 409 `FRIEND_REQUEST_CONFLICT`입니다. 서버 DB pool의 statement timeout은 별도의 상한입니다.
+
+### 11.4 온라인 상태와 알림 — 후속 통합 (#82)
+
+`GET /api/friends`의 `online`은 인증 완료된 WebSocket 연결 수를 기준으로 D의 `isUserOnline`을 주입받아 계산할 예정입니다. 현재 #69 단독 브랜치에는 D 연결 registry가 없으므로 온라인 여부는 실제 통합 전까지 `false`로 임시 응답합니다. **이를 실제 offline 검증으로 해석하면 안 됩니다.**
+
+D와 합의한 `listAcceptedFriendIds(userId)`는 구현했습니다. 연결 registry 기반 `presence`, 관계 변경 직후 `friends.changed`, WS 종료·세션 폐기 후 온라인 갱신은 #82와 후속 통합에서 연결해야 합니다. A는 수락 성공 후 목록을 재조회해 온라인 상태를 재동기화합니다.
+
+### 11.5 스키마 및 migration 통합 주의
+
+`0004_friendships`를 `master`의 현재 `0003` 스냅샷에 이어 작성했습니다. 다른 미병합 PR(#79·#89 등)에도 다음 migration 번호가 사용될 수 있으므로 병합 순서가 정해지면 뒤에 병합하는 쪽은 migration·snapshot·journal을 다시 생성해야 합니다.
+
