@@ -6,6 +6,7 @@ import multipart from "@fastify/multipart";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
+import { registerFriendRoutes } from "./api/friend-routes.ts";
 import { registerStatsRoutes } from "./api/stats-routes.ts";
 import { registerAvatarRoutes } from "./api/avatar-routes.ts";
 import { errorBody } from "./schemas/errors.ts";
@@ -31,6 +32,10 @@ import {
   createUserService,
   type UserService,
 } from "./services/user-service.ts";
+import {
+  createFriendService,
+  type FriendService,
+} from "./services/friend-service.ts";
 import {
   createStatsService,
   type StatsService,
@@ -115,6 +120,12 @@ export async function buildApp(
   const getUsers = (): UserService => {
     if (!users) throw new ServiceUnavailableError();
     return users;
+  };
+  // D #82 supplies the authenticated connection registry when WS is integrated.
+  const friends = database ? createFriendService(database.db) : undefined;
+  const getFriends = (): FriendService => {
+    if (!friends) throw new ServiceUnavailableError();
+    return friends;
   };
   const stats = database ? createStatsService(database.db) : undefined;
   const getStats = (): StatsService => {
@@ -274,6 +285,7 @@ export async function buildApp(
   registerTwoFactorRoutes(app, getAuth, getTwoFactor);
   registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers);
+  registerFriendRoutes(app, getAuth, getFriends);
   registerStatsRoutes(app, getAuth, getStats);
   registerAvatarRoutes(app, getAuth, getAvatars);
   return app;
