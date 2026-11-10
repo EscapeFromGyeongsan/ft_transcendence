@@ -78,6 +78,7 @@ export async function buildApp(
   authConfig?: AuthConfig,
   // Directory for uploaded avatars. Without it the avatar endpoints answer 503.
   avatarDir?: string,
+  isUserOnline?: (userId: number) => boolean,
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -121,8 +122,8 @@ export async function buildApp(
     if (!users) throw new ServiceUnavailableError();
     return users;
   };
-  // D #82 supplies the authenticated connection registry when WS is integrated.
-  const friends = database ? createFriendService(database.db) : undefined;
+  // D #82 injects the authenticated connection registry after WS integration.
+  const friends = database ? createFriendService(database.db, isUserOnline) : undefined;
   const getFriends = (): FriendService => {
     if (!friends) throw new ServiceUnavailableError();
     return friends;
