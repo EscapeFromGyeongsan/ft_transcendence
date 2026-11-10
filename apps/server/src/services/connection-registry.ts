@@ -44,7 +44,12 @@ export function createConnectionRegistry() {
   }
 
   return {
-    /** 인증에 성공한 연결을 세션에 등록합니다. */
+    /**
+     * 인증에 성공한 연결을 세션과 사용자에 등록합니다.
+     *
+     * @param userId - 연결의 사용자. `sendToUser()`가 이 사용자의 모든 연결을
+     *   찾을 때 씁니다.
+     */
     add(sessionId: string, socket: WebSocket, userId: number) {
       addTo(bySession, sessionId, socket);
       addTo(byUser, userId, socket);

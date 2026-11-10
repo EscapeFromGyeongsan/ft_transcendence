@@ -156,6 +156,22 @@ describe("matchmaking", () => {
     expect(matchmaking.isQueued(3)).toBe(true);
   });
 
+  test("a leave from another tab cancels a join still checking the DB", async () => {
+    let release!: () => void;
+    const { matchmaking, games } = setup();
+    games.findActiveMatchId.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve(undefined))),
+    );
+    const join = matchmaking.join(1, fakeSocket(), "gomoku");
+    expect(matchmaking.leave(1)).toBe("left");
+    release();
+    expect(await join).toBe("cancelled");
+    expect(matchmaking.isQueued(1)).toBe(false);
+
+    // The cancel applies only to that join.
+    expect(await matchmaking.join(1, fakeSocket(), "gomoku")).toBe("joined");
+  });
+
   test("a socket closed during the active-match lookup is not queued", async () => {
     const { matchmaking } = setup();
     const socket = fakeSocket();
