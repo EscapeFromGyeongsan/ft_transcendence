@@ -9,7 +9,7 @@ export function createStatsService(db: Database) {
     /**
      * 사용자의 게임 종류별 통계와 DEC-08 업적·진행도를 계산합니다.
      *
-     * @returns 사용자가 없으면 `undefined`
+     * @returns 사용자가 없거나 탈퇴했으면 `undefined`
      *
      * @remarks 무효 경기는 `played`와 승률에 들어가지 않습니다.
      */
@@ -42,7 +42,7 @@ export function createStatsService(db: Database) {
     /**
      * 사용자의 끝난 경기 기록을 최신순으로 한 페이지 읽습니다.
      *
-     * @returns 사용자가 없으면 `undefined`. `nextBefore`를 다음 호출의 `before`로 넘기면 더 오래된 페이지를 읽습니다(없으면 `null`).
+     * @returns 사용자가 없거나 탈퇴했으면 `undefined`. `nextBefore`를 다음 호출의 `before`로 넘기면 더 오래된 페이지를 읽습니다(없으면 `null`).
      */
     async getMatches(
       userId: number,

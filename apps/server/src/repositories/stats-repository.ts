@@ -34,6 +34,9 @@ const opponent = alias(gamePlayers, "opponent");
  *
  * @param options - `before`는 이 경기 ID보다 오래된 것만(cursor), `limit`은 페이지 크기
  * @returns 최대 `limit + 1`행. 마지막 한 행은 다음 페이지가 있는지 판단용입니다.
+ *
+ * @remarks
+ * 상대 닉네임은 경기 당시 값(`nickname_snapshot`)이라 이후 닉네임 변경·탈퇴와 관계없이 그대로입니다. 상대가 탈퇴했으면 `opponentDeleted`가 `true`입니다(DEC-09).
  */
 export function findFinishedMatches(
   db: Executor,
@@ -105,6 +108,7 @@ export function findLeaderboard(db: Executor, gameType: string, limit: number) {
     .limit(limit);
 }
 
+/** 탈퇴하지 않은 사용자가 있는지 확인합니다. 탈퇴한 사용자의 통계·경기 기록 조회를 404로 만드는 기준입니다. */
 export async function userExists(db: Executor, userId: number) {
   const [row] = await db
     .select({ id: users.id })

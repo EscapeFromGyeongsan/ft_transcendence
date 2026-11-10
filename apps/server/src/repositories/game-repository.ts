@@ -23,6 +23,12 @@ export async function insertGame(
   return game;
 }
 
+/**
+ * 경기 참가자 행을 추가합니다.
+ *
+ * @remarks
+ * 같은 INSERT에서 사용자의 현재 닉네임을 `nickname_snapshot`으로 저장합니다. 경기 기록은 이 값을 보여 주므로 이후 닉네임 변경·탈퇴가 과거 기록을 바꾸지 않습니다(DEC-09).
+ */
 export async function insertPlayer(
   db: Executor,
   values: { gameId: number; userId: number; seat: Seat },

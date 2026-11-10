@@ -78,7 +78,7 @@ export const games = pgTable(
   ],
 );
 
-/** 경기 참가자와 좌석(`black`/`white`)입니다. `result`는 경기가 끝날 때 채웁니다. */
+/** 경기 참가자와 좌석(`black`/`white`)입니다. `result`는 경기가 끝날 때 채우고, `nickname_snapshot`은 경기 생성 시 닉네임입니다. */
 export const gamePlayers = pgTable(
   "game_players",
   {

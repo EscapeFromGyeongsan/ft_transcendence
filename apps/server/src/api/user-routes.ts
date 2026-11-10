@@ -31,7 +31,7 @@ const signedOut = () =>
   errorBody("UNAUTHENTICATED", "Authentication required.");
 
 /**
- * 내 정보 조회·닉네임 변경·공개 프로필 route를 등록합니다.
+ * 내 정보 조회·닉네임 변경·회원 탈퇴·공개 프로필 route를 등록합니다.
  *
  * @remarks 서비스 getter가 설정 없음으로 {@link ServiceUnavailableError}를 던지면 503이 됩니다.
  */
