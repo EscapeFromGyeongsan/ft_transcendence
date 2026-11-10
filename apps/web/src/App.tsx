@@ -618,7 +618,14 @@ export function App() {
           setGomokuState((prev) =>
             applyIncomingSnapshot(prev, snapshot, "match.snapshot"),
           );
-          setView("gomoku");
+          // 약관·개인정보 화면을 열람 중이면 스냅샷은 반영하되 화면은 유지합니다.
+          setView((current) =>
+            current === "terms" ||
+            current === "privacy" ||
+            current === "notFound"
+              ? current
+              : "gomoku",
+          );
         },
         onGameUpdated(snapshot) {
           saveActiveMatchIdToStorage(
