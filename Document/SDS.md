@@ -1911,15 +1911,15 @@ flowchart TD
 
 ---
 
-#### 2.10.29 친구 (E 검토안, FR-SOC-01~03)
+#### 2.10.29 친구 (E 구현 Draft PR #95, FR-SOC-01~03)
 
-스키마는 2.4의 계획 스키마를 사용한다. 정렬한 사용자 쌍을 UNIQUE로 유지하고 요청자는 반드시 쌍에 속해야 한다. 아래 응답과 경합 처리 방식은 [#38의 B·E 검토](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38)를 반영했다. 5장의 남은 결정은 담당자 확인 후 확정한다.
+스키마는 2.4의 계획 스키마를 바탕으로 [#95 Draft](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95)에 추가했다. 정렬한 사용자 쌍 UNIQUE, 요청자 쌍 포함 CHECK, pending/accepted/declined 상태 및 처리 시각 CHECK, FK 삭제 정책을 둔다. 아래 내용은 [#38의 B·A·D·E 합의](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38)와 PR #95 구현 코드를 동기화한 **검증 전 상태**이다. #95는 PostgreSQL 테스트·migration 충돌 정리·D #82 연동·코드 리뷰가 남은 Draft이므로 master에 구현 완료된 것으로 표시하지 않는다.
 
 | Endpoint | 성공 | 오류 |
 |---|---|---|
 | `GET /api/users?nickname=` | 200 닉네임 접두사 일치 최대 20명 (탈퇴자 제외, email 미포함) | 401, 422, 429 |
 | `GET /api/friends` | 200 `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }` | 401 |
-| `POST /api/friends/requests` `{ userId }` | 201 (pending 생성), 200 (상대가 보낸 pending 요청에 맞요청하여 수락) | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED`, 422 (자기 자신) |
+| `POST /api/friends/requests` `{ userId }` | 201 (pending 생성), 200 (상대가 보낸 pending 요청에 맞요청하여 수락) | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED` / `FRIEND_REQUEST_CONFLICT`, 422 (자기 자신) |
 | `POST /api/friends/requests/{id}/accept` | 200 | 401, 403 (받는 사람 아님), 404, 409 (pending 아님) |
 | `POST /api/friends/requests/{id}/decline` | 204 | 401, 403, 404, 409 |
 | `DELETE /api/friends/{userId}` | 204 (호출자와 대상의 accepted 관계 삭제) | 401, 404 (accepted 관계 없음) |
@@ -1936,7 +1936,7 @@ flowchart TD
     Row -->|"pending, 내가 보냄"| R409b[409 REQUEST_PENDING]
     Row -->|"pending, 상대가 보냄"| Acc["accepted로 변경 (맞요청은 수락으로 처리)"] --> R200[200]
     Row -->|"declined, 내가 보냈다가 거절당함"| R409c[409 REQUEST_DECLINED]
-    Row -->|"declined, 내가 거절했었음"| Re["pending, requested_by = 나로 갱신"] --> R201
+    Row -->|"declined, 내가 거절했었음"| Re["이전 declined 행 DELETE 후 신규 pending INSERT (새 ID)"] --> R201
     Ins -.->|"ON CONFLICT: 삽입 결과 0행"| Retry{"재조회 결과?"}
     Retry -->|"행이 있으면 잠근 뒤 상태 판정"| Row
     Retry -->|"수락·삭제가 겹쳐 0행"| Recheck["상한 내 조회·삽입 재시도"]
@@ -1945,12 +1945,13 @@ flowchart TD
 
 - `GET /api/friends`의 공통 사용자 정보는 `{ userId, nickname, avatarUrl }`이다. `friends`에는 `online`을, `incoming`과 `outgoing`에는 `requestId`와 `createdAt`을 붙인다. `declined` 행은 목록에 포함하지 않는다.
 - 신규 요청 201, 맞요청 수락 200, 명시적 수락 200은 공통 사용자 정보에 `requestId`와 `status`를 붙인다. `requestId`는 `friendships.id`이며 `status`는 `pending` 또는 `accepted`다. 거절 204에는 응답 본문이 없다.
-- 요청은 정렬한 사용자 쌍을 `SELECT ... FOR UPDATE`로 조회한 뒤, 행이 없으면 `INSERT ... ON CONFLICT DO NOTHING RETURNING id`를 시도한다. 삽입이 0행이면 새 쿼리로 다시 조회한다. 그 사이 수락과 삭제가 일어나면 재조회도 0행일 수 있다. 재시도 상한과 상한 도달 시 HTTP 응답은 B와 확정한다.
+- 요청은 정렬한 사용자 쌍을 `SELECT ... FOR UPDATE`로 조회한 뒤, 행이 없으면 `INSERT ... ON CONFLICT DO NOTHING RETURNING id`를 시도한다. 삽입이 0행이면 새 쿼리로 다시 조회한다. 그 사이 수락과 삭제가 일어나면 재조회도 0행일 수 있다. 최초 INSERT를 포함해 최대 3번 시도하며, 마지막 재조회도 0행이면 409 `FRIEND_REQUEST_CONFLICT`를 반환한다([#38 B 동의](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38#issuecomment-6756532269)). 잠금 대기는 별도 `lock_timeout` 없이 DB pool의 3초 `statement_timeout`에 포함된다. SQLSTATE `57014`를 503 `SERVICE_UNAVAILABLE`로 처리하는 별도 [PR #93](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/93) 의존성을 고려한다.
 - 수락과 거절은 관계 행을 잠근 뒤 수신자 권한과 `pending` 상태를 확인한다. 수락 후 도착한 거절은 409다. 친구 삭제는 호출자와 대상의 `accepted` 행에만 적용한다. `declined` 행을 유지해야 재요청 차단이 유지된다.
-- 거절한 사용자는 검색이나 상대 프로필에서 먼저 요청할 수 있다. 화면에는 거절 전에 상대의 재요청이 차단된다는 점을 표시한다. 같은 행을 `pending`으로 재사용할 때 현재 요청 시각으로 `created_at`을 갱신하고 이전 처리 시각을 지우는 안은 B·A 확인이 필요하다.
-- 온라인 상태는 DB에 저장하지 않는다. D의 사용자별 인증 연결 수가 0 ↔ 1 이상으로 바뀔 때 수락된 친구에게 `presence`를 보낸다. `GET /api/friends`도 같은 집계를 사용한다. 수락 응답에 `online`이 없으므로 성공 후 목록을 다시 조회한다는 안을 제안한다. 목록 갱신과 `presence`가 겹칠 때의 적용 순서는 A·D와 정한다.
+- 거절한 사용자는 검색이나 상대 프로필에서 먼저 요청할 수 있다. 화면에는 거절 전에 상대의 재요청이 차단된다는 점을 표시한다. 거절자가 먼저 재요청하면 **이전 declined 행을 같은 트랜잭션에서 삭제하고 새 pending 행을 생성**한다. 새 `requestId`와 새 `created_at`이 발급되고 처리 시각은 비어 있다. 이전 ID에 대한 수락·거절은 404로 처리하며, 거절당한 쪽의 직접 재요청은 409 `REQUEST_DECLINED`를 유지한다. B·A가 이 정책에 동의했다.
+- 온라인 상태는 DB에 저장하지 않는다. D의 인증 완료 WS 연결 registry(#82)가 집계하는 사용자별 연결 수 0 ↔ 1 이상 변화에 따라 수락된 친구에게 `presence`를 보낸다. E의 #95는 `listAcceptedFriendIds(userId)` 조회를 제공했지만, **D 연결 집계 함수가 아직 주입되지 않아 `online`은 임시 false로 반환**하며 온라인 상태 기능은 미통합이다. 수락·맞요청 수락·WS 재인증·목록 변경 후 A는 `GET /api/friends`로 재조회하고, 조회 중 이벤트가 들어오면 재조회 완료 뒤 한 번 추가 조회한다. 단순히 `false`로 반환된 미통합 값은 실제 오프라인이라고 해석하지 않는다. DB commit 후 양쪽 사용자의 인증 연결에 `friends.changed {}`를 보내는 별도 알림은 D와 후속 통합한다.
 - 탈퇴 시 그 사용자의 `friendships` 행을 모두 지운다(2.10.27).
-- 상태 코드는 구현 시 `schema.response`와 contracts.md 11장에 함께 기록한다(프로젝트 규칙).
+- #95 Draft는 각 route의 `schema.response`와 `Document/contracts.md` 11장에 상태 코드를 기재했다. 모든 성공·오류 및 경합 동작의 독립 재현은 아직 완료되지 않았다.
+- #95의 migration `0004_friendships`는 master의 `0003` 기준이다. 다른 미병합 PR #79·#89도 0004를 사용하므로 병합 순서 확정 시 뒤쪽 migration 번호와 snapshot/journal을 재생성해야 한다.
 
 ## 3. Design rationale
 
