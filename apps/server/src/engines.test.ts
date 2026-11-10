@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
-import { gomoku } from "@cafe/game-engine";
+import { gomoku, othello } from "@cafe/game-engine";
 import { buildApp } from "./app.ts";
 import { gameEngines } from "./engines.ts";
 import {
@@ -37,12 +37,17 @@ function inbox(socket: WebSocket) {
   };
 }
 
-test("the gomoku engine is registered in the IF-04 format", () => {
+test("the gomoku and othello engines are registered in the IF-04 format", () => {
   expect(gameEngines.gomoku).toMatchObject({
     version: gomoku.GOMOKU_RULES_VERSION,
   });
   expect(gameEngines.gomoku?.rules).toBe(gomoku.rules);
   expect(gameEngines.gomoku?.board).toBe(gomoku.board);
+  expect(gameEngines.othello).toMatchObject({
+    version: othello.OTHELLO_RULES_VERSION,
+  });
+  expect(gameEngines.othello?.rules).toBe(othello.rules);
+  expect(gameEngines.othello?.board).toBe(othello.board);
 });
 
 describe.skipIf(!testDatabaseUrl)("registered engines end to end", () => {
@@ -87,11 +92,12 @@ describe.skipIf(!testDatabaseUrl)("registered engines end to end", () => {
     return { socket, next, userId: payload.userId as number };
   }
 
-  test("two queued players are matched and play gomoku to five in a row", async () => {
-    const players = [await connect(1), await connect(2)];
+  // Queues two new players for the game and subscribes both to the match.
+  async function startMatch(gameType: "gomoku" | "othello", n: number) {
+    const players = [await connect(n), await connect(n + 1)];
     for (const { socket } of players) {
       socket.send(
-        JSON.stringify({ type: "queue.join", payload: { gameType: "gomoku" } }),
+        JSON.stringify({ type: "queue.join", payload: { gameType } }),
       );
     }
     const matched = await players[0].next("queue.matched");
@@ -105,39 +111,56 @@ describe.skipIf(!testDatabaseUrl)("registered engines end to end", () => {
       );
       snapshot = (await next("match.snapshot")).payload;
     }
-    expect(snapshot).toMatchObject({
-      rulesVersion: gomoku.GOMOKU_RULES_VERSION,
-      status: "playing",
-    });
     const seats = snapshot.players as { black: number; white: number };
     const black = players.find((p) => p.userId === seats.black)!;
     const white = players.find((p) => p.userId === seats.white)!;
 
-    // Black builds row 7, white plays on row 0, alternating.
     let version = 0;
-    const play = async (
-      player: typeof black,
-      row: number,
-      col: number,
-    ): Promise<Record<string, unknown>> => {
+    // Sends one placement and returns the reply that answers it, skipping
+    // broadcasts of the opponent's earlier moves.
+    const place = async (player: typeof black, row: number, col: number) => {
       player.socket.send(
         JSON.stringify({
           type: "game.command",
           payload: {
             matchId,
-            gameType: "gomoku",
+            gameType,
             commandId: randomUUID(),
             expectedVersion: version,
             action: { type: "place", row, col },
           },
         }),
       );
-      expect(await player.next("game.ack")).toMatchObject({
+      for (;;) {
+        const reply = await player.next();
+        if (reply.type === "game.ack" || reply.type === "game.error") {
+          return reply;
+        }
+      }
+    };
+    const play = async (player: typeof black, row: number, col: number) => {
+      expect(await place(player, row, col)).toMatchObject({
+        type: "game.ack",
         payload: { stateVersion: version + 1 },
       });
       version++;
       return (await player.next("game.updated")).payload;
     };
+    const close = () => players.forEach(({ socket }) => socket.terminate());
+    return { snapshot, seats, black, white, place, play, close };
+  }
+
+  test("two queued players are matched and play gomoku to five in a row", async () => {
+    const { snapshot, seats, black, white, play, close } = await startMatch(
+      "gomoku",
+      1,
+    );
+    expect(snapshot).toMatchObject({
+      rulesVersion: gomoku.GOMOKU_RULES_VERSION,
+      status: "playing",
+    });
+
+    // Black builds row 7, white plays on row 0, alternating.
     for (let col = 0; col < 4; col++) {
       await play(black, 7, col);
       await play(white, 0, col);
@@ -147,6 +170,42 @@ describe.skipIf(!testDatabaseUrl)("registered engines end to end", () => {
       status: "finished",
       result: { outcome: "win", winnerId: seats.black, reason: "five_in_row" },
     });
-    for (const { socket } of players) socket.terminate();
+    close();
+  });
+
+  test("two queued players are matched and play othello with flips", async () => {
+    const { snapshot, seats, black, place, play, close } = await startMatch(
+      "othello",
+      3,
+    );
+    expect(snapshot).toMatchObject({
+      rulesVersion: othello.OTHELLO_RULES_VERSION,
+      status: "playing",
+      currentPlayerId: seats.black,
+      board: othello.createInitialState().board,
+    });
+
+    // A corner flips nothing at the start, so the engine refuses it.
+    expect(await place(black, 0, 0)).toMatchObject({
+      type: "game.error",
+      payload: { code: "INVALID_ACTION" },
+    });
+
+    // The first legal move for black, as the engine sees it.
+    const initial = othello.createInitialState();
+    const cells = initial.board.flatMap((line, row) =>
+      line.map((_, col) => ({ row, col })),
+    );
+    const move = cells.find(
+      ({ row, col }) =>
+        othello.applyMove(initial, { type: "place", row, col }, "black").ok,
+    )!;
+    const updated = await play(black, move.row, move.col);
+    expect(updated).toMatchObject({
+      status: "playing",
+      currentPlayerId: seats.white,
+      board: othello.board([{ ...move, stone: "black" }]),
+    });
+    close();
   });
 });
