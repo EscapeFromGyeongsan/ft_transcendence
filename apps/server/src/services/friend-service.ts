@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import type { Database, Executor } from "../db/client.ts";
 import { friendships } from "../db/schema/friendships.ts";
 import { users } from "../db/schema/users.ts";
+import { ServiceUnavailableError } from "./auth-service.ts";
 
 export type FriendUser = {
   userId: number;
@@ -55,12 +56,13 @@ const profileFields = {
  * @returns 친구 요청·목록·검색·수락·거절·삭제 기능
  *
  * @remarks
- * 온라인 여부의 진실 공급원은 D의 연결 registry입니다. D가 연결되기 전에는
- * 함수가 전달되지 않으므로 false를 반환하며, 실시간 상태 기능은 미통합입니다.
+ * 온라인 여부의 진실 공급원은 D의 인증 연결 registry입니다. 함수를
+ * 주입하지 않으면 수락된 친구가 있을 때 503으로 응답해, 임의의 false로
+ * 온라인 사용자를 오프라인으로 표시하지 않습니다.
  */
 export function createFriendService(
   db: Database,
-  isUserOnline: (userId: number) => boolean = () => false,
+  isUserOnline?: (userId: number) => boolean,
 ) {
   async function findUser(executor: Executor, userId: number) {
     const [profile] = await executor
@@ -228,6 +230,7 @@ export function createFriendService(
       if (!other) continue;
       const person = visible(other);
       if (row.status === "accepted") {
+        if (!isUserOnline) throw new ServiceUnavailableError();
         response.friends.push({ ...person, online: isUserOnline(otherId) });
       } else if (row.status === "pending") {
         const item = { ...person, requestId: row.id, createdAt: row.createdAt.toISOString() };
