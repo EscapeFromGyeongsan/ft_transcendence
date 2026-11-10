@@ -52,6 +52,8 @@ export async function hasUnfinishedMatch(db: Executor, userId: number) {
  * 사용자 행은 남겨 `games`·`game_players`·`moves`의 참조를 유지합니다. 이메일·닉네임은
  * `deleted:<id>`로 바꿉니다. 검증 규칙이 `:`를 허용하지 않아 실제 계정과 겹치지 않고,
  * 원래 이메일·닉네임은 새 계정이 다시 쓸 수 있습니다.
+ *
+ * @returns 이번에 폐기한 세션 ID. 이미 폐기된 세션은 들어가지 않습니다.
  */
 export async function anonymizeUser(db: Executor, userId: number, now: Date) {
   const sessionIds = db
@@ -61,10 +63,11 @@ export async function anonymizeUser(db: Executor, userId: number, now: Date) {
   await db
     .delete(refreshTokens)
     .where(inArray(refreshTokens.sessionId, sessionIds));
-  await db
+  const revoked = await db
     .update(sessions)
     .set({ revokedAt: now })
-    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
+    .returning({ id: sessions.id });
   await db.delete(oauthAccounts).where(eq(oauthAccounts.userId, userId));
   await db.delete(oauthStates).where(eq(oauthStates.userId, userId));
   await db.delete(twoFactorSecrets).where(eq(twoFactorSecrets.userId, userId));
@@ -85,4 +88,5 @@ export async function anonymizeUser(db: Executor, userId: number, now: Date) {
       updatedAt: sql`now()`,
     })
     .where(eq(users.id, userId));
+  return revoked.map((session) => session.id);
 }

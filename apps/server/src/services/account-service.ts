@@ -22,11 +22,16 @@ export type DeleteAccountResult =
         | "ACTIVE_MATCH";
     };
 
-/** 회원 탈퇴를 맡는 서비스를 만듭니다. */
+/**
+ * 회원 탈퇴를 맡는 서비스를 만듭니다.
+ *
+ * @param onSessionsRevoked - 탈퇴로 폐기한 세션 ID를 commit 후에 받습니다. 실시간 계층이 그 세션의 연결을 닫는 데 씁니다(IF-03).
+ */
 export function createAccountService(
   db: Database,
   twoFactor?: TwoFactorService,
   avatars?: AvatarService,
+  onSessionsRevoked?: (sessionIds: string[]) => void,
 ) {
   return {
     /**
@@ -35,7 +40,7 @@ export function createAccountService(
      * @remarks
      * 본인 확인은 비밀번호, 비밀번호가 없는 OAuth 계정은 2FA 코드(복구 코드 포함),
      * 2FA도 없으면 {@link RECENT_LOGIN_SECONDS} 안의 로그인입니다. 끝나지 않은 경기가
-     * 있으면 결과가 열린 채 남지 않도록 거절합니다. 아바타 파일은 commit 뒤에 지웁니다.
+     * 있으면 결과가 열린 채 남지 않도록 거절합니다. 아바타 파일 삭제와 세션 연결 종료는 commit 뒤에 합니다.
      *
      * @param sessionId - 요청한 세션. 최근 로그인 확인에 씁니다.
      * @throws {@link ServiceUnavailableError} 2FA 계정인데 2FA 키가 설정되지 않은 경우
@@ -49,7 +54,12 @@ export function createAccountService(
       const result = await db.transaction(
         async (
           tx,
-        ): Promise<DeleteAccountResult & { avatarUrl?: string | null }> => {
+        ): Promise<
+          DeleteAccountResult & {
+            avatarUrl?: string | null;
+            revokedSessionIds?: string[];
+          }
+        > => {
           const user = await repo.findActiveUserForUpdate(tx, userId);
           if (!user) return { ok: false, code: "NOT_FOUND" };
           // Checked before the code so a refused request never uses up a
@@ -77,11 +87,12 @@ export function createAccountService(
             }
           }
 
-          await repo.anonymizeUser(tx, userId, now);
-          return { ok: true, avatarUrl: user.avatarUrl };
+          const revokedSessionIds = await repo.anonymizeUser(tx, userId, now);
+          return { ok: true, avatarUrl: user.avatarUrl, revokedSessionIds };
         },
       );
       if (!result.ok) return result;
+      onSessionsRevoked?.(result.revokedSessionIds ?? []);
       // After commit: a leftover file is harmless, a rolled-back deletion
       // with its avatar gone is not.
       await avatars?.removeFile(result.avatarUrl ?? null);

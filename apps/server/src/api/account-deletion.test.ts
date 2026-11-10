@@ -213,6 +213,24 @@ describe.skipIf(!testDatabaseUrl)("account deletion with PostgreSQL", () => {
     ]);
   });
 
+  test("deletion closes open WebSocket connections of the account", async () => {
+    await app.ready();
+    const socket = await app.injectWS("/api/ws");
+    const authOk = new Promise((resolve) => socket.once("message", resolve));
+    socket.send(
+      JSON.stringify({ type: "auth", payload: { accessToken: token } }),
+    );
+    await authOk;
+    const closed = new Promise<{ code: number; reason: string }>((resolve) =>
+      socket.once("close", (code, reason) =>
+        resolve({ code, reason: reason.toString() }),
+      ),
+    );
+
+    expect((await deleteMe({ password: "password-123" })).statusCode).toBe(204);
+    expect(await closed).toEqual({ code: 4401, reason: "Session ended." });
+  });
+
   test("an unfinished match blocks deletion", async () => {
     await games.createMatch({
       gameType: "gomoku",
