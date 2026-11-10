@@ -1,12 +1,18 @@
+/** 파일 내용에서 읽은 이미지 형식과 크기(px)입니다. */
 export type ImageInfo = { type: "png" | "jpg"; width: number; height: number };
 
 const pngSignature = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
-// Reads the real format and size from the file bytes. The file name and the
-// client's Content-Type are never trusted. Returns undefined for anything that
-// is not a well-formed PNG or JPEG header.
+/**
+ * 파일 내용에서 실제 이미지 형식과 크기를 읽습니다.
+ *
+ * @returns PNG 또는 JPEG 헤더가 올바르면 형식과 크기, 아니면 `undefined`
+ *
+ * @remarks
+ * 파일 이름과 클라이언트의 Content-Type은 믿지 않습니다. 헤더만 읽으며 이미지 전체를 디코딩하지는 않습니다.
+ */
 export function inspectImage(data: Buffer): ImageInfo | undefined {
   if (
     data.length >= 24 &&

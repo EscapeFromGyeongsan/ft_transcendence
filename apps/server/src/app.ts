@@ -3,6 +3,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
+import websocket from "@fastify/websocket";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
@@ -44,10 +45,17 @@ import {
   createAccountService,
   type AccountService,
 } from "./services/account-service.ts";
+import { createConnectionRegistry } from "./services/connection-registry.ts";
+import {
+  closeCodes,
+  registerRealtimeRoutes,
+  type RealtimeConfig,
+} from "./api/ws-routes.ts";
 
 const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
 
-// Connection-level failures (DB down, pool timeout) map to 503, not 500.
+// Connection-level failures (DB down, pool timeout) and statement timeouts
+// (57014, includes lock waits) map to 503, not 500.
 function isDatabaseUnavailable(error: unknown) {
   if (error instanceof ServiceUnavailableError) return true;
   for (
@@ -61,6 +69,7 @@ function isDatabaseUnavailable(error: unknown) {
     if (
       unavailableCodes.has(code) ||
       code.startsWith("08") ||
+      code === "57014" ||
       code.startsWith("57P") ||
       message.includes("timeout exceeded when trying to connect") ||
       message.includes("Connection terminated")
@@ -88,6 +97,7 @@ export async function buildApp(
   authConfig?: AuthConfig,
   // Directory for uploaded avatars. Without it the avatar endpoints answer 503.
   avatarDir?: string,
+  realtimeConfig?: RealtimeConfig,
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -113,6 +123,23 @@ export async function buildApp(
   const getAuth = (): AuthService => {
     if (!auth) throw new ServiceUnavailableError();
     return auth;
+  };
+  const connections = createConnectionRegistry();
+  // Logout also closes the WebSocket connections opened with that session.
+  const routeAuth: AuthService | undefined = auth && {
+    ...auth,
+    async logout(sessionId: string) {
+      await auth.logout(sessionId);
+      connections.closeSession(
+        sessionId,
+        closeCodes.unauthenticated,
+        "Session ended.",
+      );
+    },
+  };
+  const getRouteAuth = (): AuthService => {
+    if (!routeAuth) throw new ServiceUnavailableError();
+    return routeAuth;
   };
   const oauth =
     auth && authConfig?.oauth42
@@ -212,6 +239,7 @@ export async function buildApp(
   await app.register(multipart, {
     limits: { fileSize: avatarMaxBytes, files: 1 },
   });
+  await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
   await app.register(swagger, {
     openapi: {
       info: { title: "Cyber Board Cafe API", version: "0.1.0" },
@@ -292,11 +320,12 @@ export async function buildApp(
       }
     },
   );
-  registerAuthRoutes(app, getAuth);
+  registerAuthRoutes(app, getRouteAuth);
   registerTwoFactorRoutes(app, getAuth, getTwoFactor);
   registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers, getAccounts);
   registerStatsRoutes(app, getAuth, getStats);
   registerAvatarRoutes(app, getAuth, getAvatars);
+  registerRealtimeRoutes(app, getAuth, connections, realtimeConfig);
   return app;
 }
