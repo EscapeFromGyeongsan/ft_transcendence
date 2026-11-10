@@ -45,6 +45,8 @@ export type SystemFinish = {
   expectedVersion: number;
 };
 
+// "skipped" means nothing changed: the match is missing, already finished,
+// or its stateVersion no longer matches expectedVersion.
 export type SystemFinishResult =
   | { status: "finished"; stateVersion: number }
   | { status: "skipped" };
@@ -263,9 +265,9 @@ export function createGameCommandService(
 
     // Called by the match layer (D) when a disconnect budget runs out. Takes
     // the same match lock as apply(), so a move or resign that commits first
-    // wins and this call does nothing (status or version moved on). Pause and
-    // resume keep stateVersion, so a return alone does not stop a stale call;
-    // D rechecks absent players and cancels the timer on return.
+    // wins and this call does nothing (status or version moved on). The result
+    // is fixed at the expiry instant (DEC-03): D passes the users absent at
+    // that moment, and a return after expiry does not cancel the finish.
     finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
       return db.transaction(async (tx) => {
         const game = await repo.findGameForUpdate(tx, input.matchId);
