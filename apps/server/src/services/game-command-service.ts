@@ -7,7 +7,8 @@ export type GameAction = PlaceAction | { type: "resign" };
 
 export type Finish =
   | { outcome: "win"; winner: Seat; reason: string }
-  | { outcome: "draw"; reason: "draw" };
+  | { outcome: "draw"; reason: "draw" }
+  | { outcome: "void"; reason: string };
 
 // Decision returned by a game engine for one placement. The engine owns the
 // rules (C); this service owns locking, versioning and persistence (B).
@@ -37,6 +38,19 @@ export type CommandResult =
   | { status: "applied"; stateVersion: number; duplicate: boolean }
   | { status: "rejected"; code: string; duplicate: boolean };
 
+export type SystemFinish = {
+  matchId: number;
+  reason: "disconnect_timeout";
+  absentUserIds: number[];
+  expectedVersion: number;
+};
+
+// "skipped" means nothing changed: the match is missing, already finished,
+// or its stateVersion no longer matches expectedVersion.
+export type SystemFinishResult =
+  | { status: "finished"; stateVersion: number }
+  | { status: "skipped" };
+
 const commandTypes = { place: "place", resign: "resign" } as const;
 
 async function finishMatch(
@@ -61,8 +75,8 @@ async function finishMatch(
   });
   for (const player of players) {
     const result =
-      finish.outcome === "draw"
-        ? "draw"
+      finish.outcome !== "win"
+        ? finish.outcome
         : player.userId === winnerUserId
           ? "win"
           : "loss";
@@ -246,6 +260,47 @@ export function createGameCommandService(
           stateVersion: nextVersion,
           duplicate: false,
         };
+      });
+    },
+
+    // Called by the match layer (D) when a disconnect budget runs out. Takes
+    // the same match lock as apply(), so a move or resign that commits first
+    // wins and this call does nothing (status or version moved on). The result
+    // is fixed at the expiry instant (DEC-03): D passes the users absent at
+    // that moment, and a return after expiry does not cancel the finish.
+    finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
+      return db.transaction(async (tx) => {
+        const game = await repo.findGameForUpdate(tx, input.matchId);
+        if (!game) return { status: "skipped" };
+        const players = await repo.findPlayers(tx, game.id);
+        const absent = new Set(input.absentUserIds);
+        if (
+          absent.size === 0 ||
+          [...absent].some((id) => !players.some((p) => p.userId === id))
+        ) {
+          throw new Error(
+            `absentUserIds must be participants of match ${game.id}.`,
+          );
+        }
+        if (game.status !== "playing" && game.status !== "paused") {
+          return { status: "skipped" };
+        }
+        if (game.stateVersion !== input.expectedVersion) {
+          return { status: "skipped" };
+        }
+
+        const present = players.filter((p) => !absent.has(p.userId));
+        const finish: Finish =
+          present.length === 1
+            ? {
+                outcome: "win",
+                winner: present[0].seat as Seat,
+                reason: input.reason,
+              }
+            : { outcome: "void", reason: input.reason };
+        const nextVersion = game.stateVersion + 1;
+        await finishMatch(tx, game.id, players, finish, nextVersion);
+        return { status: "finished", stateVersion: nextVersion };
       });
     },
 
