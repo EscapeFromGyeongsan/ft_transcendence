@@ -260,6 +260,9 @@ export function registerRealtimeRoutes(
     const result = await matchmaking.join(userId, socket, gameType);
     if (result === "joined") {
       send(socket, "queue.joined", { gameType }, requestId);
+    } else if (result === "cancelled") {
+      // Another tab left while this join was checking the DB.
+      send(socket, "queue.left", {}, requestId);
     } else if (result === "ALREADY_ACTIVE") {
       sendError(
         socket,
