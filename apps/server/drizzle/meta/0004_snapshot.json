@@ -83,12 +83,8 @@
           "name": "oauth_accounts_user_id_users_id_fk",
           "tableFrom": "oauth_accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -98,18 +94,12 @@
         "oauth_accounts_provider_user_unique": {
           "name": "oauth_accounts_provider_user_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "provider",
-            "provider_user_id"
-          ]
+          "columns": ["provider", "provider_user_id"]
         },
         "oauth_accounts_user_provider_unique": {
           "name": "oauth_accounts_user_provider_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id",
-            "provider"
-          ]
+          "columns": ["user_id", "provider"]
         }
       },
       "policies": {},
@@ -182,12 +172,8 @@
           "name": "oauth_states_user_id_users_id_fk",
           "tableFrom": "oauth_states",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -195,12 +181,8 @@
           "name": "oauth_states_session_id_sessions_id_fk",
           "tableFrom": "oauth_states",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -288,12 +270,8 @@
           "name": "two_factor_challenges_user_id_users_id_fk",
           "tableFrom": "two_factor_challenges",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -303,9 +281,7 @@
         "two_factor_challenges_token_hash_unique": {
           "name": "two_factor_challenges_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -374,12 +350,8 @@
           "name": "two_factor_recovery_codes_user_id_users_id_fk",
           "tableFrom": "two_factor_recovery_codes",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -389,9 +361,7 @@
         "two_factor_recovery_codes_code_hash_unique": {
           "name": "two_factor_recovery_codes_code_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code_hash"
-          ]
+          "columns": ["code_hash"]
         }
       },
       "policies": {},
@@ -440,12 +410,8 @@
           "name": "two_factor_secrets_user_id_users_id_fk",
           "tableFrom": "two_factor_secrets",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -539,12 +505,8 @@
           "name": "game_commands_game_id_games_id_fk",
           "tableFrom": "game_commands",
           "tableTo": "games",
-          "columnsFrom": [
-            "game_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["game_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -552,12 +514,8 @@
           "name": "game_commands_user_id_users_id_fk",
           "tableFrom": "game_commands",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -567,10 +525,7 @@
         "game_commands_game_command_unique": {
           "name": "game_commands_game_command_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "game_id",
-            "command_id"
-          ]
+          "columns": ["game_id", "command_id"]
         }
       },
       "policies": {},
@@ -669,12 +624,8 @@
           "name": "game_players_game_id_games_id_fk",
           "tableFrom": "game_players",
           "tableTo": "games",
-          "columnsFrom": [
-            "game_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["game_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -682,12 +633,8 @@
           "name": "game_players_user_id_users_id_fk",
           "tableFrom": "game_players",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -697,18 +644,12 @@
         "game_players_game_user_unique": {
           "name": "game_players_game_user_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "game_id",
-            "user_id"
-          ]
+          "columns": ["game_id", "user_id"]
         },
         "game_players_game_seat_unique": {
           "name": "game_players_game_seat_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "game_id",
-            "seat"
-          ]
+          "columns": ["game_id", "seat"]
         }
       },
       "policies": {},
@@ -828,12 +769,8 @@
           "name": "games_winner_user_id_users_id_fk",
           "tableFrom": "games",
           "tableTo": "users",
-          "columnsFrom": [
-            "winner_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["winner_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -944,12 +881,8 @@
           "name": "moves_game_id_games_id_fk",
           "tableFrom": "moves",
           "tableTo": "games",
-          "columnsFrom": [
-            "game_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["game_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -957,12 +890,8 @@
           "name": "moves_user_id_users_id_fk",
           "tableFrom": "moves",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -972,19 +901,12 @@
         "moves_game_turn_unique": {
           "name": "moves_game_turn_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "game_id",
-            "turn_number"
-          ]
+          "columns": ["game_id", "turn_number"]
         },
         "moves_game_cell_unique": {
           "name": "moves_game_cell_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "game_id",
-            "row_idx",
-            "col_idx"
-          ]
+          "columns": ["game_id", "row_idx", "col_idx"]
         }
       },
       "policies": {},
@@ -1083,12 +1005,8 @@
           "name": "refresh_tokens_session_id_sessions_id_fk",
           "tableFrom": "refresh_tokens",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1098,9 +1016,7 @@
         "refresh_tokens_token_hash_unique": {
           "name": "refresh_tokens_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -1166,12 +1082,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1249,16 +1161,12 @@
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         },
         "users_nickname_unique": {
           "name": "users_nickname_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "nickname"
-          ]
+          "columns": ["nickname"]
         }
       },
       "policies": {},
@@ -1353,12 +1261,8 @@
           "name": "friendships_user_low_id_users_id_fk",
           "tableFrom": "friendships",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_low_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_low_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1366,12 +1270,8 @@
           "name": "friendships_user_high_id_users_id_fk",
           "tableFrom": "friendships",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_high_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_high_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1379,12 +1279,8 @@
           "name": "friendships_requested_by_id_users_id_fk",
           "tableFrom": "friendships",
           "tableTo": "users",
-          "columnsFrom": [
-            "requested_by_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requested_by_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1394,10 +1290,7 @@
         "friendships_pair_unique": {
           "name": "friendships_pair_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_low_id",
-            "user_high_id"
-          ]
+          "columns": ["user_low_id", "user_high_id"]
         }
       },
       "policies": {},
@@ -1416,7 +1309,7 @@
         },
         "friendships_timestamps_check": {
           "name": "friendships_timestamps_check",
-          "value": "(\"friendships\".\"status\" = 'pending' AND \"friendships\".\"accepted_at\" IS NULL AND \"friendships\".\"declined_at\" IS NULL) OR (\"friendships\".\"status\" = 'accepted' AND \"friendships\".\"accepted_at\" IS NOT NULL AND \"friendships\".\"declined_at\" IS NULL) OR (\"friendships\".\"status\" = 'declined' AND \"friendships\".\"accepted_at\" IS NULL AND \"friendships\".\"declined_at\" IS NOT NULL)"
+          "value": "(\"friendships\".\"status\" = 'pending' AND \"friendships\".\"accepted_at\" IS NULL AND \"friendships\".\"declined_at\" IS NULL)\n        OR (\"friendships\".\"status\" = 'accepted' AND \"friendships\".\"accepted_at\" IS NOT NULL AND \"friendships\".\"declined_at\" IS NULL)\n        OR (\"friendships\".\"status\" = 'declined' AND \"friendships\".\"accepted_at\" IS NULL AND \"friendships\".\"declined_at\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false

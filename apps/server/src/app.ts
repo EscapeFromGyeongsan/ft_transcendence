@@ -123,7 +123,9 @@ export async function buildApp(
     return users;
   };
   // D #82 injects the authenticated connection registry after WS integration.
-  const friends = database ? createFriendService(database.db, isUserOnline) : undefined;
+  const friends = database
+    ? createFriendService(database.db, isUserOnline)
+    : undefined;
   const getFriends = (): FriendService => {
     if (!friends) throw new ServiceUnavailableError();
     return friends;

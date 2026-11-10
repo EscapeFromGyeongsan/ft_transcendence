@@ -1,9 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { AuthService } from "../services/auth-service.ts";
-import type {
-  FriendError,
-  FriendService,
-} from "../services/friend-service.ts";
+import type { FriendError, FriendService } from "../services/friend-service.ts";
 import {
   bodyErrorResponses,
   errorBody,
@@ -15,7 +12,11 @@ import {
 } from "../schemas/errors.ts";
 import { createRequireAuth } from "./auth-routes.ts";
 
-const safeId = { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER };
+const safeId = {
+  type: "integer",
+  minimum: 1,
+  maximum: Number.MAX_SAFE_INTEGER,
+};
 const params = (field: string) => ({
   type: "object",
   properties: { [field]: safeId },
@@ -132,13 +133,18 @@ export function registerFriendRoutes(
           additionalProperties: false,
         },
         response: {
-          200: { description: "검색 결과 최대 20명", type: "array", items: searched },
+          200: {
+            description: "검색 결과 최대 20명",
+            type: "array",
+            items: searched,
+          },
           ...readErrors,
           422: bodyErrorResponses[422],
         },
       },
     },
-    async (request) => getFriends().searchUsers(request.auth!.userId, request.query.nickname),
+    async (request) =>
+      getFriends().searchUsers(request.auth!.userId, request.query.nickname),
   );
 
   app.get(
@@ -196,8 +202,13 @@ export function registerFriendRoutes(
     },
     async (request, reply) => {
       if (request.body.userId === request.auth!.userId)
-        return reply.code(422).send(errorBody("VALIDATION_ERROR", "Cannot add yourself."));
-      const result = await getFriends().requestFriend(request.auth!.userId, request.body.userId);
+        return reply
+          .code(422)
+          .send(errorBody("VALIDATION_ERROR", "Cannot add yourself."));
+      const result = await getFriends().requestFriend(
+        request.auth!.userId,
+        request.body.userId,
+      );
       if (result.ok) return reply.code(result.status).send(result.result);
       const error = friendError(result.code);
       return reply.code(error.status).send(error.body);
@@ -222,7 +233,11 @@ export function registerFriendRoutes(
       },
     },
     async (request, reply) => {
-      const result = await getFriends().decide(request.auth!.userId, request.params.requestId, "accept");
+      const result = await getFriends().decide(
+        request.auth!.userId,
+        request.params.requestId,
+        "accept",
+      );
       if (result.ok) return result.result;
       const error = friendError(result.code);
       return reply.code(error.status).send(error.body);
@@ -247,7 +262,11 @@ export function registerFriendRoutes(
       },
     },
     async (request, reply) => {
-      const result = await getFriends().decide(request.auth!.userId, request.params.requestId, "decline");
+      const result = await getFriends().decide(
+        request.auth!.userId,
+        request.params.requestId,
+        "decline",
+      );
       if (result.ok) return reply.code(204).send();
       const error = friendError(result.code);
       return reply.code(error.status).send(error.body);
@@ -273,9 +292,14 @@ export function registerFriendRoutes(
       },
     },
     async (request, reply) => {
-      const result = await getFriends().removeFriend(request.auth!.userId, request.params.userId);
+      const result = await getFriends().removeFriend(
+        request.auth!.userId,
+        request.params.userId,
+      );
       if (result.ok) return reply.code(204).send();
-      return reply.code(404).send(errorBody("NOT_FOUND", "Friendship not found."));
+      return reply
+        .code(404)
+        .send(errorBody("NOT_FOUND", "Friendship not found."));
     },
   );
 }

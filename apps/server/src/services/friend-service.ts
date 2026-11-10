@@ -35,8 +35,7 @@ export type FriendMutation =
   | { ok: true; status: 200 | 201; result: FriendRequestResult }
   | { ok: false; code: FriendError };
 export type FriendDecision =
-  | { ok: true; result: FriendRequestResult }
-  | { ok: false; code: FriendError };
+  { ok: true; result: FriendRequestResult } | { ok: false; code: FriendError };
 export type FriendRemoval = { ok: true } | { ok: false; code: "NOT_FOUND" };
 
 const pair = (a: number, b: number) =>
@@ -72,7 +71,9 @@ export function createFriendService(
     return profile;
   }
 
-  function visible(profile: NonNullable<Awaited<ReturnType<typeof findUser>>>): FriendUser {
+  function visible(
+    profile: NonNullable<Awaited<ReturnType<typeof findUser>>>,
+  ): FriendUser {
     return {
       userId: profile.id,
       nickname: profile.nickname,
@@ -122,12 +123,20 @@ export function createFriendService(
               return { ok: false, code: "REQUEST_PENDING" };
             await tx
               .update(friendships)
-              .set({ status: "accepted", acceptedAt: new Date(), declinedAt: null })
+              .set({
+                status: "accepted",
+                acceptedAt: new Date(),
+                declinedAt: null,
+              })
               .where(eq(friendships.id, existing.id));
             return {
               ok: true,
               status: 200,
-              result: { ...visible(target), requestId: existing.id, status: "accepted" },
+              result: {
+                ...visible(target),
+                requestId: existing.id,
+                status: "accepted",
+              },
             };
           }
           if (existing.requestedById === actorId)
@@ -140,13 +149,19 @@ export function createFriendService(
         const [inserted] = await tx
           .insert(friendships)
           .values({ userLowId: low, userHighId: high, requestedById: actorId })
-          .onConflictDoNothing({ target: [friendships.userLowId, friendships.userHighId] })
+          .onConflictDoNothing({
+            target: [friendships.userLowId, friendships.userHighId],
+          })
           .returning({ id: friendships.id });
         if (inserted)
           return {
             ok: true,
             status: 201,
-            result: { ...visible(target), requestId: inserted.id, status: "pending" },
+            result: {
+              ...visible(target),
+              requestId: inserted.id,
+              status: "pending",
+            },
           };
         // Competing INSERT and subsequent DELETE can leave the next SELECT empty.
       }
@@ -169,8 +184,7 @@ export function createFriendService(
       if (!row) return { ok: false, code: "NOT_FOUND" };
       const recipientId =
         row.requestedById === row.userLowId ? row.userHighId : row.userLowId;
-      if (recipientId !== actorId)
-        return { ok: false, code: "FORBIDDEN" };
+      if (recipientId !== actorId) return { ok: false, code: "FORBIDDEN" };
       if (row.status !== "pending")
         return { ok: false, code: "REQUEST_NOT_PENDING" };
       const sender = await findUser(tx, row.requestedById);
@@ -186,7 +200,11 @@ export function createFriendService(
         .where(eq(friendships.id, requestId));
       return {
         ok: true,
-        result: { ...visible(sender), requestId, status: action === "accept" ? "accepted" : "pending" },
+        result: {
+          ...visible(sender),
+          requestId,
+          status: action === "accept" ? "accepted" : "pending",
+        },
       };
     });
   }
@@ -214,18 +232,27 @@ export function createFriendService(
     const relations = await db
       .select()
       .from(friendships)
-      .where(or(eq(friendships.userLowId, actorId), eq(friendships.userHighId, actorId)))
+      .where(
+        or(
+          eq(friendships.userLowId, actorId),
+          eq(friendships.userHighId, actorId),
+        ),
+      )
       .orderBy(asc(friendships.id));
     const otherIds = relations.map((row) =>
       row.userLowId === actorId ? row.userHighId : row.userLowId,
     );
     const profiles = otherIds.length
-      ? await db.select(profileFields).from(users).where(inArray(users.id, otherIds))
+      ? await db
+          .select(profileFields)
+          .from(users)
+          .where(inArray(users.id, otherIds))
       : [];
     const byId = new Map(profiles.map((profile) => [profile.id, profile]));
     const response: FriendsList = { friends: [], incoming: [], outgoing: [] };
     for (const row of relations) {
-      const otherId = row.userLowId === actorId ? row.userHighId : row.userLowId;
+      const otherId =
+        row.userLowId === actorId ? row.userHighId : row.userLowId;
       const other = byId.get(otherId);
       if (!other) continue;
       const person = visible(other);
@@ -233,7 +260,11 @@ export function createFriendService(
         if (!isUserOnline) throw new ServiceUnavailableError();
         response.friends.push({ ...person, online: isUserOnline(otherId) });
       } else if (row.status === "pending") {
-        const item = { ...person, requestId: row.id, createdAt: row.createdAt.toISOString() };
+        const item = {
+          ...person,
+          requestId: row.id,
+          createdAt: row.createdAt.toISOString(),
+        };
         if (row.requestedById === actorId) response.outgoing.push(item);
         else response.incoming.push(item);
       }
@@ -242,32 +273,55 @@ export function createFriendService(
   }
 
   /** 닉네임 접두사 검색 결과는 계정의 공개 필드로 최대 20명만 제공합니다. */
-  async function searchUsers(actorId: number, nickname: string): Promise<Array<{ id: number; nickname: string; avatarUrl: string | null }>> {
+  async function searchUsers(
+    actorId: number,
+    nickname: string,
+  ): Promise<
+    Array<{ id: number; nickname: string; avatarUrl: string | null }>
+  > {
     const prefix = nickname.trim();
     if (!prefix) return [];
-    return db.select(profileFields)
+    return db
+      .select(profileFields)
       .from(users)
-      .where(and(
-        ne(users.id, actorId),
-        sql`left(lower(${users.nickname}), char_length(${prefix})) = lower(${prefix})`,
-      ))
+      .where(
+        and(
+          ne(users.id, actorId),
+          sql`left(lower(${users.nickname}), char_length(${prefix})) = lower(${prefix})`,
+        ),
+      )
       .orderBy(asc(users.nickname), asc(users.id))
       .limit(20);
   }
 
   /** D의 presence 이벤트를 수락된 친구에게만 전달할 때 사용하는 조회 함수입니다. */
   async function listAcceptedFriendIds(actorId: number): Promise<number[]> {
-    const rows = await db.select({
-      low: friendships.userLowId,
-      high: friendships.userHighId,
-    }).from(friendships).where(and(
-      or(eq(friendships.userLowId, actorId), eq(friendships.userHighId, actorId)),
-      eq(friendships.status, "accepted"),
-    ));
-    return rows.map((row) => row.low === actorId ? row.high : row.low);
+    const rows = await db
+      .select({
+        low: friendships.userLowId,
+        high: friendships.userHighId,
+      })
+      .from(friendships)
+      .where(
+        and(
+          or(
+            eq(friendships.userLowId, actorId),
+            eq(friendships.userHighId, actorId),
+          ),
+          eq(friendships.status, "accepted"),
+        ),
+      );
+    return rows.map((row) => (row.low === actorId ? row.high : row.low));
   }
 
-  return { requestFriend, decide, removeFriend, getFriends, searchUsers, listAcceptedFriendIds };
+  return {
+    requestFriend,
+    decide,
+    removeFriend,
+    getFriends,
+    searchUsers,
+    listAcceptedFriendIds,
+  };
 }
 
 export type FriendService = ReturnType<typeof createFriendService>;

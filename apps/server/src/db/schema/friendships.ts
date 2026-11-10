@@ -43,7 +43,10 @@ export const friendships = pgTable(
   (table) => [
     unique("friendships_pair_unique").on(table.userLowId, table.userHighId),
     index("friendships_high_idx").on(table.userHighId),
-    check("friendships_pair_order_check", sql`${table.userLowId} < ${table.userHighId}`),
+    check(
+      "friendships_pair_order_check",
+      sql`${table.userLowId} < ${table.userHighId}`,
+    ),
     check(
       "friendships_requester_check",
       sql`${table.requestedById} IN (${table.userLowId}, ${table.userHighId})`,
