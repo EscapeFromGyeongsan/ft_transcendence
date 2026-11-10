@@ -14,7 +14,11 @@ import type { Seat } from "../repositories/game-repository.ts";
 
 export type GameAction = PlaceAction | ResignAction;
 export type ErrorCode = GameError["code"];
-// Engines report only rule outcomes; every other code is decided here (IF-01).
+/**
+ * 엔진이 돌려줄 수 있는 거절 코드입니다.
+ *
+ * @remarks 엔진은 규칙 판정만 보고하고, 나머지 코드는 이 서비스가 정합니다(IF-01).
+ */
 export type EngineErrorCode = Extract<
   ErrorCode,
   "INVALID_ACTION" | "GAME_FINISHED"
@@ -25,40 +29,61 @@ export type Finish =
   | { outcome: "draw"; reason: "draw" }
   | { outcome: "void"; reason: string };
 
-// Decision returned by a game engine for one placement. The engine owns the
-// rules (C); this service owns locking, versioning and persistence (B).
+/**
+ * 착수 한 번에 대한 엔진의 판정입니다.
+ *
+ * @remarks 규칙은 엔진(C)이, 잠금·버전·저장은 이 서비스(B)가 맡습니다.
+ */
 export type RuleDecision =
   | { ok: false; code: EngineErrorCode }
   | { ok: true; nextTurn: Seat | null; finish?: Finish };
 
 export type StoredMove = { row: number; col: number; stone: string };
 
+/**
+ * 게임 엔진의 착수 판정 함수입니다.
+ *
+ * @remarks `moves`는 서버에 저장된 이전 착수 전체(수 번호 순)입니다. 엔진은 상태를 저장하지 않고 이 기록만으로 판정합니다.
+ */
 export type GameRules = (input: {
   moves: StoredMove[];
   seat: Seat;
   action: PlaceAction;
 }) => RuleDecision;
 
-// One engine per game type. The server, not the caller, decides which rules
-// version a new match uses, so only registered versions are ever stored.
-// board() rebuilds the position from stored moves (Othello flips need rules).
+/**
+ * 게임 종류마다 등록하는 엔진입니다.
+ *
+ * @remarks
+ * 새 경기의 규칙 버전은 호출자가 아니라 서버가 정하므로 등록된 버전만 저장됩니다.
+ * `board()`는 저장된 착수 기록으로 판을 다시 만듭니다(오델로 뒤집기에는 규칙이 필요해서 엔진이 맡음).
+ */
 export type RegisteredRules = {
   version: string;
   rules: GameRules;
   board: (moves: StoredMove[]) => Cell[][];
 };
 
-// The contract command plus the actor, which comes from authentication and
-// never from the client payload (IF-02).
+/**
+ * 계약의 명령에 행위자를 붙인 것입니다.
+ *
+ * @remarks `userId`는 인증에서 오며 클라이언트 payload에서 받지 않습니다(IF-02).
+ */
 export type GameCommand = GameCommandBase & {
   userId: number;
   action: GameAction;
 };
 
+/** {@link GameCommandService.apply}의 결과입니다. `duplicate`는 이미 처리한 `commandId`의 저장된 결과를 다시 돌려준 경우입니다. */
 export type CommandResult =
   | { status: "applied"; stateVersion: number; duplicate: boolean }
   | { status: "rejected"; code: ErrorCode; duplicate: boolean };
 
+/**
+ * 서버가 경기를 끝내는 요청입니다(이탈 만료).
+ *
+ * @remarks `expectedVersion`이 현재 버전과 다르면 그 사이 착수·종료가 있었던 것으로 보고 아무것도 하지 않습니다.
+ */
 export type SystemFinish = {
   matchId: number;
   reason: "disconnect_timeout";
@@ -66,10 +91,16 @@ export type SystemFinish = {
   expectedVersion: number;
 };
 
-// "skipped" means nothing changed: the match is missing, already finished,
-// or its stateVersion no longer matches expectedVersion.
+/**
+ * `finishBySystem()`의 결과입니다.
+ *
+ * @remarks
+ * `skipped`는 아무것도 바꾸지 않았다는 뜻입니다. 경기가 없거나, 이미 끝났거나, `stateVersion`이 `expectedVersion`과 달라진 경우입니다.
+ */
 export type SystemFinishResult =
   { status: "finished"; stateVersion: number } | { status: "skipped" };
+
+export type PauseStatus = Extract<GameStatus, "playing" | "paused">;
 
 const commandTypes = { place: "place", resign: "resign" } as const;
 const engineErrorCodes: readonly string[] = [
@@ -108,14 +139,28 @@ async function finishMatch(
   }
 }
 
-// Run once at startup, before listen. Clocks and sockets of unfinished matches
-// did not survive the restart, so they end as void in one transaction.
-// Assumes a single API instance: another running instance would lose its
-// live matches.
+/**
+ * 진행 중인 경기를 모두 무효(`server_restart`)로 한 트랜잭션에서 끝냅니다.
+ *
+ * @returns 무효로 끝낸 경기 ID
+ *
+ * @remarks
+ * 시작할 때 listen 전에 한 번 호출합니다. 재시작으로 미완료 경기의 시계와 소켓이 사라지기 때문입니다(DEC-07).
+ * API 인스턴스 하나를 전제합니다. 다른 인스턴스가 돌고 있으면 그 진행 경기도 끝나 버립니다.
+ */
 export function voidUnfinishedGames(db: Database) {
   return db.transaction((tx) => repo.voidUnfinishedGames(tx, "server_restart"));
 }
 
+/**
+ * 경기 생성·명령 적용·서버 종료·상태 전환·조회를 맡는 서버 권위 서비스를 만듭니다.
+ *
+ * @param rulesByGameType - 게임 종류별 등록 엔진. 등록되지 않은 종류를 쓰면 예외입니다.
+ *
+ * @remarks
+ * 경기를 바꾸는 경로는 모두 경기 행 잠금을 먼저 잡으므로 한 경기의 변경은 직렬화됩니다.
+ * 네트워크 전송은 이 서비스의 Promise가 끝난 뒤(commit 후)에 해야 합니다.
+ */
 export function createGameCommandService(
   db: Database,
   rulesByGameType: Partial<Record<GameType, RegisteredRules>>,
@@ -141,7 +186,14 @@ export function createGameCommandService(
     );
 
   return {
-    // Starts a two-player match directly in "playing" (matchmaking is D's part).
+    /**
+     * 2인 경기를 만들어 바로 `playing`, 흑 차례로 시작합니다.
+     *
+     * @returns 새 경기 ID
+     * @throws 등록되지 않은 `gameType`인 경우
+     *
+     * @remarks 규칙 버전은 등록된 엔진의 버전으로 저장합니다. 매칭은 D가 맡습니다.
+     */
     async createMatch(input: {
       gameType: GameType;
       blackUserId: number;
@@ -170,9 +222,17 @@ export function createGameCommandService(
       });
     },
 
-    // Order: lock match → participant → duplicate commandId → status →
-    // expectedVersion → rules → save move/version/command/result → commit.
-    // Network sends must happen after this resolves, never inside it.
+    /**
+     * 착수·기권 명령 하나를 한 트랜잭션에서 검증하고 적용합니다.
+     *
+     * @returns 적용되면 새 `stateVersion`, 거절되면 공개 오류 코드. 같은 참가자가 같은 `commandId`를 다시 보내면 처음 결과를 `duplicate: true`로 돌려줍니다.
+     * @throws 엔진이 공개 목록 밖의 코드를 돌려주거나, 저장된 규칙 버전과 등록 버전이 다른 경우(롤백, 기록 없음)
+     *
+     * @remarks
+     * 순서: 경기 잠금 → 참가자 → 중복 `commandId` → 상태 → `expectedVersion` → 규칙 → 착수·버전·명령·결과 저장 → commit.
+     * 거절도 명령 기록으로 남깁니다. 다른 사용자가 쓴 `commandId`는 `COMMAND_ID_CONFLICT`입니다.
+     * 네트워크 전송은 이 Promise가 끝난 뒤에 해야 하고 안에서 하면 안 됩니다.
+     */
     apply(command: GameCommand): Promise<CommandResult> {
       return db.transaction(async (tx) => {
         const game = await repo.findGameForUpdate(tx, command.matchId);
@@ -310,11 +370,16 @@ export function createGameCommandService(
       });
     },
 
-    // Called by the match layer (D) when a disconnect budget runs out. Takes
-    // the same match lock as apply(), so a move or resign that commits first
-    // wins and this call does nothing (status or version moved on). The result
-    // is fixed at the expiry instant (DEC-03): D passes the users absent at
-    // that moment, and a return after expiry does not cancel the finish.
+    /**
+     * 이탈 예산이 다 된 경기를 끝냅니다. 한 명이 부재면 상대 승리, 둘 다 부재면 무효입니다.
+     *
+     * @returns 끝냈으면 새 `stateVersion`. 경기가 없거나 이미 끝났거나 버전이 달라졌으면 `skipped`
+     * @throws `absentUserIds`가 비었거나 참가자가 아닌 사용자가 들어 있는 경우
+     *
+     * @remarks
+     * 경기 진행 계층(D)이 호출합니다. `apply()`와 같은 경기 잠금을 쓰므로 먼저 commit된 착수·종료로 버전이나 종료 상태가 바뀌면 `skipped`입니다.
+     * 결과는 예산 만료 순간에 확정됩니다(DEC-03). D는 만료 순간의 부재자를 넘기고, 만료 뒤 복귀해도 이 종료는 취소되지 않습니다.
+     */
     finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
       return db.transaction(async (tx) => {
         const game = await repo.findGameForUpdate(tx, input.matchId);
@@ -351,11 +416,42 @@ export function createGameCommandService(
       });
     },
 
-    // Raw rows for checks that need them (participants, history).
+    /**
+     * 경기가 아직 `from` 상태일 때만 `to`로 바꿉니다.
+     *
+     * @returns 바꿨으면 `true`, 상태가 이미 달라졌거나 경기가 없으면 `false`
+     *
+     * @remarks
+     * 경기 진행 계층(D)이 이탈(`playing` → `paused`)과 복귀(`paused` → `playing`)에 씁니다.
+     * 상태를 비교하고 바꾸므로 늦게 온 이탈 처리가 끝난 경기를 다시 열지 않습니다.
+     * `stateVersion`은 올리지 않습니다. 일시정지는 `player.*` 이벤트로 알립니다(IF-05).
+     */
+    setStatus(
+      matchId: number,
+      from: PauseStatus,
+      to: PauseStatus,
+    ): Promise<boolean> {
+      return repo.updateGameStatus(db, matchId, from, to);
+    },
+
+    /**
+     * 경기·참가자·착수 행을 한 REPEATABLE READ 읽기 전용 트랜잭션에서 읽습니다.
+     *
+     * @returns 경기가 없으면 `undefined`
+     *
+     * @remarks 참가자 확인·기록 조회처럼 원본 행이 필요한 경우에 씁니다. 세 값은 항상 같은 시점을 가리킵니다.
+     */
     getMatch,
 
-    // Server-confirmed state in the shared contract shape, for match.snapshot,
-    // reconnects and VERSION_CONFLICT details (IF-01, IF-05).
+    /**
+     * 서버가 확정한 경기 상태를 공통 계약의 `GameSnapshot` 형태로 돌려줍니다.
+     *
+     * @returns 경기가 없으면 `undefined`
+     *
+     * @remarks
+     * `match.snapshot`, 재접속, `VERSION_CONFLICT` 복구에 씁니다(IF-01, IF-05).
+     * 판은 엔진의 `board()`로 만들고, 결과는 DB에 저장된 값을 씁니다. 좌석은 사용자 ID로 바꿔 담습니다.
+     */
     async getSnapshot(matchId: number): Promise<GameSnapshot | undefined> {
       const match = await getMatch(matchId);
       if (!match) return undefined;

@@ -3,6 +3,12 @@ import type { Executor } from "../db/client.ts";
 import { users } from "../db/schema/users.ts";
 import type { PublicUser } from "./auth-repository.ts";
 
+/**
+ * 닉네임을 바꿉니다.
+ *
+ * @returns 바뀐 계정 정보. 사용자가 없으면 `undefined`
+ * @throws 닉네임 UNIQUE 위반(23505)
+ */
 export async function updateNickname(
   db: Executor,
   userId: number,
@@ -22,7 +28,7 @@ export async function updateNickname(
   return user;
 }
 
-// Fields other users may see. Email stays private to the owner.
+/** 다른 사용자에게 보여도 되는 프로필 필드만 읽습니다. 이메일은 본인에게만 공개하므로 포함하지 않습니다. */
 export async function findProfile(db: Executor, userId: number) {
   const [profile] = await db
     .select({

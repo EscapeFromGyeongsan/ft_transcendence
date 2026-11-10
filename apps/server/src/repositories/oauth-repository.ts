@@ -17,9 +17,15 @@ export async function insertState(
   await db.insert(oauthStates).values(values);
 }
 
-// Atomically marks an unused, unexpired state as used, so a callback
-// (or a replayed provider response) is accepted at most once, and only from
-// the browser that started the flow (matching browser_hash).
+/**
+ * 쓰지 않았고 만료 전인 state를 한 UPDATE로 사용 처리합니다.
+ *
+ * @returns state의 mode·사용자·세션. 없음·만료·이미 사용·브라우저 불일치면 `undefined`
+ *
+ * @remarks
+ * 원자적 갱신이라 callback(또는 재전송된 제공자 응답)은 최대 한 번만 받아들여집니다.
+ * 흐름을 시작한 브라우저(`browser_hash` 일치)에서 온 요청만 통과합니다.
+ */
 export async function consumeState(
   db: Executor,
   stateHash: string,
@@ -63,6 +69,11 @@ export async function findAccount(
   return row;
 }
 
+/**
+ * 외부 계정 연결을 저장합니다.
+ *
+ * @throws 이미 다른 계정에 연결된 제공자 사용자이거나, 이 계정에 같은 제공자 연결이 있으면 UNIQUE 위반(23505)
+ */
 export async function insertAccount(
   db: Executor,
   values: { userId: number; provider: string; providerUserId: string },
