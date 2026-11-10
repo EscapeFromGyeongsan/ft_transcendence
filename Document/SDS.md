@@ -193,7 +193,7 @@ flowchart LR
 |---|---|---|
 | Register, Login(email), Logout, 2FA, 42 OAuth, Link 42 | B | `구현됨` (API) |
 | View/Edit profile | B (API), A (UI) | `구현됨` (닉네임 변경·공개 프로필 API) |
-| Upload avatar | B (API), A (UI) | `계획` (10/24) |
+| Upload avatar | B (API), A (UI) | API `구현됨` (#14), UI `계획` |
 | Friend, online status | E (+ D 연결 상태) | `계획` |
 | Auto match, Invite, Ready, Reconnect | D | `계획` |
 | Play gomoku / othello, Resign | C (규칙), D (실행), B (저장) | 저장 `구현됨`, 규칙 일부(PR #9), 실행 `계획` |
@@ -354,7 +354,7 @@ flowchart TD
 - route는 검증·응답 형식만 담당하고, 처리 규칙은 service, SQL은 repository에 둔다.
 - 하나의 처리에 참여하는 repository 호출은 같은 `Executor`(트랜잭션)를 받는다. 일부만 저장되는 일이 없다.
 - 서비스는 `buildApp`에서 한 번 만든다. DB나 설정이 없으면 해당 route는 503을 반환한다(`ServiceUnavailableError`).
-- 공통 오류 처리: 검증 422, JSON 오류 400, Content-Type 415, rate limit 429, 42 장애 502, DB 연결 장애 503, 그 외 500. 응답 형식은 `{ "error": { "code", "message", "details?" } }`.
+- 공통 오류 처리: 검증 422, JSON 오류 400, Content-Type 415, rate limit 429, 42 장애 502, DB 연결 장애·statement timeout 503, 그 외 500. 응답 형식은 `{ "error": { "code", "message", "details?" } }`.
 
 #### 4. Domain boundary (플랫폼 경계, 명세 12장)
 
@@ -743,7 +743,7 @@ erDiagram
         bigint id PK
         boolean records_public "계획, NOT NULL DEFAULT true (DEC-05)"
         timestamptz deleted_at "계획, NULL = 활성 (DEC-09)"
-        text avatar_url "기존 컬럼, 업로드 시 /api/media/avatars/{id}-{rand}.png|jpg (PR #15)"
+        text avatar_url "업로드 시 /api/media/avatars/{id}-{rand}.png|jpg"
         varchar_254 email "탈퇴 시 NULL 또는 익명값으로 교체 (UNIQUE 해제)"
         varchar_32 nickname "탈퇴 시 NULL로 비워 재사용 허용"
     }
@@ -805,7 +805,7 @@ flowchart TD
 | 2FA | `GET /api/auth/2fa`, `POST /api/auth/2fa/setup`, `enable`, `disable`, `verify` | B | `구현됨` |
 | OAuth | `POST /api/auth/oauth/42/login`, `link`, `callback` | B | `구현됨` |
 | Users | `GET /api/users/me`, `PATCH /api/users/me`, `GET /api/users/{userId}` | B | `구현됨` |
-| Avatar | `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (2.10.25) | B | `계획` |
+| Avatar | `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar`, `GET /api/media/avatars/{name}` (2.10.25) | B | `구현됨` |
 | 전적 공개 설정 | `PATCH /api/users/me`의 `recordsPublic`, stats·matches의 403 (2.10.26) | B | `계획` |
 | 탈퇴 | `DELETE /api/users/me` (2.10.27) | B | `계획` |
 | Statistics | `GET /api/users/{userId}/stats`, `GET /api/users/{userId}/matches`, `GET /api/leaderboard` | B | `구현됨` |
@@ -845,7 +845,7 @@ type Envelope<T> = {
 | S→C | `match.snapshot` | `GomokuSnapshot \| OthelloSnapshot` | 구독·재접속·`VERSION_CONFLICT` 때 | `getSnapshot()` |
 | C→S | `game.command` | `GomokuCommand \| OthelloCommand` (`userId` 없음) | 런타임 검증 후 인증된 `userId`를 붙여 호출 | `apply()` |
 | S→C | `game.ack` | `{ matchId, commandId, stateVersion, duplicate }` | 요청자에게만. 결과가 `applied`일 때 보내고 요청의 `requestId`를 돌려줌. 중복 재전송이면 `duplicate: true` | `apply()` 결과 |
-| S→C | `game.updated` | 최신 snapshot | **commit 후**, `applied`이고 `duplicate: false`일 때만 구독자 전체에 | `apply()` 결과 |
+| S→C | `game.updated` | 최신 snapshot | **commit 후**, 결과가 `applied`이면 구독자 전체에. 중복 재전송(`duplicate: true`)도 보낸다(첫 전송이 실패했을 때 복구). 이미 보낸 `stateVersion` 이하이면 보내지 않음 | `apply()` 결과, `getSnapshot()` |
 | S→C | `game.error` | `GameError` + `{ matchId, commandId }` | 결과가 `rejected`일 때 요청자에게만. 중복 재전송의 최초 거절도 요청자에게만 | `CommandResult.code` |
 | S→C | `error` | `{ code, message, matchId? }` | `game.command` 결과 외의 모든 오류. 요청의 `requestId`를 돌려줌. 코드: `UNSUPPORTED_MESSAGE`(모르는 `type`), `INVALID_MESSAGE`(payload 검증 실패), `NOT_FOUND`·`NOT_PARTICIPANT`(`match.subscribe` 실패, `GameError` 코드 그대로), `INTERNAL_ERROR`(처리 중 예외) | - |
 | S→C | `player.disconnected` / `player.reconnected` | `{ matchId, userId, remainingMs }` | 상대에게 | - |
@@ -1349,7 +1349,7 @@ flowchart TD
 | db | PostgreSQL | 5432 | 없음 | data (internal) | postgres_data | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD_FILE` | `pg_isready` | - |
 
 - DB 포트는 외부에 공개하지 않는다. 호스트에서 포트를 여는 컨테이너는 web 하나다.
-- DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면 오류가 나고 공통 처리기가 503(연결 계열) 또는 500으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
+- DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면(잠금 대기 포함) 오류가 나고 공통 처리기가 503으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
 - 배포 브랜치에서 `index.ts`는 `API_HOST`와 `PORT`를 읽는다. 로컬 기본값은 `127.0.0.1:3001`이고 Compose는 컨테이너 간 접근을 위해 `0.0.0.0:3001`을 지정한다. 실시간 서버를 통합할 때 시작 코드에서 이 설정과 게임 엔진 등록을 함께 유지한다(#27).
 - PostgreSQL 비밀번호는 Compose secret 파일로 전달한다. API의 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`는 Compose의 `environment`로 전달한다.
 - 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
@@ -1808,31 +1808,34 @@ flowchart TD
 
 가입 API의 rate limit(분당 10회)을 거치므로 1분 안에 세 번 이상 실행하면 429로 멈출 수 있다.
 
-#### 2.10.25 아바타 업로드·삭제 `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (B, `구현됨`, PR #15, 10/30)
+#### 2.10.25 아바타 업로드·삭제 `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (B, `구현됨`)
 
 PR #15는 2026-10-30에 병합됐다. PNG/JPEG, 2 MiB 이하, 실제 형식 검사, 가로·세로 각각 1024px 이하를 구현하며 `@fastify/multipart`로 받는다. 파일 검사는 파일 내용으로 수행하고, 아바타가 없으면 UI에서 기본 이미지를 표시한다. 아래 경로·저장 설명은 #15 구현 기준이며 전체 실행 환경 연결은 2.9의 #28·#40에서 추적한다.
 
 ```mermaid
 flowchart TD
-    S([requireAuth 통과]) --> M{multipart/form-data?}
+    S([requireAuth 통과, 분당 10회]) --> M{multipart/form-data?}
     M -->|아니오| R415[415 UNSUPPORTED_MEDIA_TYPE]
     M -->|예| F{file 필드 1개?}
     F -->|아니오| R422[422 VALIDATION_ERROR]
+    M -.->|multipart 해석 실패| R400[400 BAD_REQUEST]
     F -->|예| Size{2 MiB 이하?}
     Size -->|아니오| R413[413 PAYLOAD_TOO_LARGE]
     Size -->|예| Magic{"파일 앞부분 바이트가 PNG 또는 JPEG 서명? (확장자·Content-Type은 믿지 않음)"}
     Magic -->|아니오| R415
-    Magic -->|예| Dim{"가로·세로 각각 1~1024px 이내? (PR #15 구현)"}
-    Dim -->|아니오| R422Image[422 IMAGE_TOO_BIG]
+    Magic -->|예| Dim{"가로·세로 1024px 이하?"}
+    Dim -->|아니오| R422b[422 IMAGE_TOO_BIG]
     Dim -->|예| Write["새 이름({userId}-{난수}.{png,jpg})으로 임시 파일 저장 후 rename"]
-    Write --> Up["users.avatar_url UPDATE"]
-    Up -->|성공| Old[이전 파일 삭제 시도] --> R200[200 갱신된 내 정보]
-    Up -->|실패| Clean[새 파일 삭제 시도, 이전 avatar_url 유지] --> R5xx[500 / 503]
-    S2([DELETE, requireAuth 통과]) --> Null["avatar_url = NULL (UI는 기본 이미지)"] --> Del[이전 파일 삭제 시도] --> R204[204]
+    Write --> Up["users 행 FOR UPDATE로 이전 URL 읽고 avatar_url UPDATE (한 트랜잭션)"]
+    Up -->|성공| Old[이전 파일 삭제] --> R200[200 갱신된 내 정보]
+    Up -->|실패| Clean[새 파일 삭제, 이전 avatar_url 유지] --> R5xx[500 / 503]
+    Up -->|사용자 행 없음| R401[401]
+    S2([DELETE, requireAuth 통과]) --> Null["avatar_url = NULL (UI는 기본 이미지)"] --> Del[이전 파일 삭제] --> R204["204 (아바타가 없어도)"]
 ```
 
-- 저장 위치: `AVATAR_DIR`(PR #15 기본값 `data/avatars`). 컨테이너에서는 api에 named volume `avatars`를 연결하고, `AVATAR_DIR`을 같은 마운트 경로로 설정한다(2.9, #28). DB에는 `/api/media/avatars/{name}` URL만 저장한다.
-- 제공: PR #15의 API가 `GET /api/media/avatars/{name}`으로 파일을 제공한다. Nginx는 기존 `/api/` 프록시로 전달하며 아바타 volume을 직접 읽거나 공유하지 않는다.
+- 저장 위치: `AVATAR_DIR`(기본 `data/avatars`). 컨테이너에서는 api 컨테이너의 volume으로 둔다(E, PR #10). DB에는 URL만 저장한다.
+- 제공: API가 `GET /api/media/avatars/{name}`으로 직접 제공한다. 기존 `/api/` 프록시만으로 개발 서버와 Nginx 모두에서 동작해 Nginx 설정과 volume 공유가 필요 없다. 인증 없이 `<img>`로 읽고, 이름이 매번 새로 만들어지므로 1년 immutable 캐시와 `nosniff`를 붙인다.
+- 서비스가 만든 이름(`{userId}-{16진수 16자}.{png,jpg}`)만 읽고 지운다. 요청 경로나 DB 값으로 디렉터리 밖을 가리킬 수 없다.
 - 교체 실패 시 기존 파일과 URL을 유지한다. 탈퇴 시 파일을 삭제한다(2.10.27).
 
 #### 2.10.26 전적 공개 설정 (B, `계획`)
@@ -1887,7 +1890,7 @@ flowchart TD
         T0(["finishBySystem(matchId, reason='disconnect_timeout', absentUserIds, expectedVersion)"]) --> T1[BEGIN, games FOR UPDATE]
         T1 --> T2{status가 playing 또는 paused?}
         T2 -->|아니오 이미 종료| T9["아무것도 안 함 (중복 종료 방지)"]
-        T2 -->|예| T3{"stateVersion = expectedVersion? (그 사이 복귀·착수 없음)"}
+        T2 -->|예| T3{"stateVersion = expectedVersion? (그 사이 착수·기권 없음)"}
         T3 -->|아니오| T9
         T3 -->|예| T4{부재자 수}
         T4 -->|1명| T5["outcome=win, winner=상대, reason=disconnect_timeout"]
@@ -1904,25 +1907,21 @@ flowchart TD
 ```
 
 - 서버 재시작 무효는 `index.ts`가 DB 확인 뒤 listen 전에 `voidUnfinishedGames()`로 처리한다. 진행 중 경기의 시계·연결은 재시작 후 남지 않기 때문이다. API 인스턴스가 하나라는 전제다. 여러 개를 띄우면 다른 인스턴스의 진행 중 경기까지 무효가 된다. 대기 상태 정리(D)는 `계획`이다.
-- 복귀와 만료가 겹치면 경기 행 잠금이 순서를 정한다. 먼저 commit한 쪽이 이기고, 나중 쪽은 버전 불일치나 종료 상태로 아무것도 하지 않는다.
+- 착수·기권과 만료가 겹치면 경기 행 잠금이 순서를 정한다. 먼저 commit한 쪽이 이기고, 나중 쪽은 버전 불일치나 종료 상태로 아무것도 하지 않는다.
+- 일시정지·복귀는 `stateVersion`을 올리지 않는다(#34 합의). 그래서 복귀만으로 이탈 종료 요청이 무시되지 않는다. 만료 전에 복귀하면 D가 이탈 타이머를 취소하고, 만료된 뒤에는 그 순간의 부재자로 결과를 확정한다(DEC-03). 만료 후 복귀는 종료를 취소하지 않는다.
 - `Finish` 타입에 `void`를 추가했다. 결과 사유 `disconnect_timeout`, `server_restart`는 계약 PR #6의 `TwoPlayerResult`와 같다.
-- `finishBySystem()`은 `{ status: "finished", stateVersion }` 또는 `{ status: "skipped" }`를 돌려준다. `finished`일 때만 D가 `GAME_FINISHED`를 보낸다. 없는 경기, 이미 종료, 버전 불일치는 `skipped`다.
+- `finishBySystem()`은 `{ status: "finished", stateVersion }` 또는 `{ status: "skipped" }`를 돌려준다. `finished`일 때만 D가 종료 snapshot(`result` 포함)을 `game.updated`로 보낸다. `GAME_FINISHED`는 이벤트가 아니라 `game.error` 거절 코드다. 없는 경기, 이미 종료, 버전 불일치는 `skipped`다.
 - `absentUserIds`가 비었거나 참가자가 아닌 사용자가 있으면 예외를 던진다. D의 호출 오류이므로 사용자에게 보낼 오류 코드가 아니다.
 
 ---
 
 #### 2.10.29 친구 (E 구현 Draft PR #95, FR-SOC-01~03)
 
-스키마는 2.4의 계획 스키마를 바탕으로 [#95 Draft](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95)에 추가했다. 정렬한 사용자 쌍 UNIQUE, 요청자 쌍 포함 CHECK, pending/accepted/declined 상태 및 처리 시각 CHECK, FK 삭제 정책을 둔다. 아래 내용은 [#38의 B·A·D·E 합의](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38)와 PR #95 구현 코드를 동기화한 **검증 전 상태**이다. #95는 PostgreSQL 테스트·migration 충돌 정리·D #82 연동·코드 리뷰가 남은 Draft이므로 master에 구현 완료된 것으로 표시하지 않는다.
+스키마는 2.4의 계획 스키마를 바탕으로 [#95 Draft](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95)에 추가했다. 정렬한 사용자 쌍 UNIQUE, 요청자 쌍 포함 CHECK, pending/accepted/declined 상태 및 처리 시각 CHECK, FK 삭제 정책을 둔다. 친구 REST 구현은 [#95 Draft](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95)의 `758459e`에서 PostgreSQL로 검증했다. D의 실제 연결 집계 연동(#82), 코드 리뷰 및 migration 순서 조정은 진행 중이다.
 
-| Endpoint | 성공 | 오류 |
-|---|---|---|
-| `GET /api/users?nickname=` | 200 닉네임 접두사 일치 최대 20명 (탈퇴자 제외, email 미포함) | 401, 422, 429 |
-| `GET /api/friends` | 200 `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }` | 401 |
-| `POST /api/friends/requests` `{ userId }` | 201 (pending 생성), 200 (상대가 보낸 pending 요청에 맞요청하여 수락) | 401, 404 `USER_NOT_FOUND`, 409 `ALREADY_FRIENDS` / `REQUEST_PENDING` / `REQUEST_DECLINED` / `FRIEND_REQUEST_CONFLICT`, 422 (자기 자신) |
-| `POST /api/friends/requests/{id}/accept` | 200 | 401, 403 (받는 사람 아님), 404, 409 (pending 아님) |
-| `POST /api/friends/requests/{id}/decline` | 204 | 401, 403, 404, 409 |
-| `DELETE /api/friends/{userId}` | 204 (호출자와 대상의 accepted 관계 삭제) | 401, 404 (accepted 관계 없음) |
+- 닉네임 검색은 최대 20명의 공개 프로필을 반환한다. 탈퇴 계정 제외는 #89와 통합한 뒤 적용한다.
+- 친구 목록은 수락된 친구와 받은·보낸 요청을 나눠 반환한다. 요청 생성·맞요청 수락·명시적 수락·거절·친구 삭제를 REST로 처리한다.
+- 경로별 HTTP 상태와 응답 형식은 [친구 REST 계약 11.3·13장](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/758459e197bf23ee48682166656548b192f9c1a5/Document/contracts.md#113-엔드포인트별-상태-코드)을 따른다.
 
 ```mermaid
 flowchart TD
@@ -1939,18 +1938,17 @@ flowchart TD
     Row -->|"declined, 내가 거절했었음"| Re["이전 declined 행 DELETE 후 신규 pending INSERT (새 ID)"] --> R201
     Ins -.->|"ON CONFLICT: 삽입 결과 0행"| Retry{"재조회 결과?"}
     Retry -->|"행이 있으면 잠근 뒤 상태 판정"| Row
-    Retry -->|"수락·삭제가 겹쳐 0행"| Recheck["상한 내 조회·삽입 재시도"]
-    Recheck --> Row
+    Retry -->|"재조회 0행, 삽입 3회 미만"| Ins
+    Retry -->|"세 번째 삽입 뒤에도 0행"| R409d["409 FRIEND_REQUEST_CONFLICT"]
 ```
 
 - `GET /api/friends`의 공통 사용자 정보는 `{ userId, nickname, avatarUrl }`이다. `friends`에는 `online`을, `incoming`과 `outgoing`에는 `requestId`와 `createdAt`을 붙인다. `declined` 행은 목록에 포함하지 않는다.
 - 신규 요청 201, 맞요청 수락 200, 명시적 수락 200은 공통 사용자 정보에 `requestId`와 `status`를 붙인다. `requestId`는 `friendships.id`이며 `status`는 `pending` 또는 `accepted`다. 거절 204에는 응답 본문이 없다.
-- 요청은 정렬한 사용자 쌍을 `SELECT ... FOR UPDATE`로 조회한 뒤, 행이 없으면 `INSERT ... ON CONFLICT DO NOTHING RETURNING id`를 시도한다. 삽입이 0행이면 새 쿼리로 다시 조회한다. 그 사이 수락과 삭제가 일어나면 재조회도 0행일 수 있다. 최초 INSERT를 포함해 최대 3번 시도하며, 마지막 재조회도 0행이면 409 `FRIEND_REQUEST_CONFLICT`를 반환한다([#38 B 동의](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38#issuecomment-6756532269)). 잠금 대기는 별도 `lock_timeout` 없이 DB pool의 3초 `statement_timeout`에 포함된다. SQLSTATE `57014`를 503 `SERVICE_UNAVAILABLE`로 처리하는 별도 [PR #93](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/93) 의존성을 고려한다.
-- 수락과 거절은 관계 행을 잠근 뒤 수신자 권한과 `pending` 상태를 확인한다. 수락 후 도착한 거절은 409다. 친구 삭제는 호출자와 대상의 `accepted` 행에만 적용한다. `declined` 행을 유지해야 재요청 차단이 유지된다.
+- 요청은 정렬한 사용자 쌍을 `SELECT ... FOR UPDATE`로 조회한 뒤, 행이 없으면 `INSERT ... ON CONFLICT DO NOTHING RETURNING id`를 시도한다. 삽입이 0행이면 새 쿼리로 다시 조회한다. 그 사이 수락과 삭제가 일어나면 재조회도 0행일 수 있다. 최초 INSERT를 포함해 최대 3번 시도하며, 마지막 재조회도 0행이면 409 `FRIEND_REQUEST_CONFLICT`를 반환한다([#38 B 동의](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/38#issuecomment-6756532269)). 잠금 대기는 별도 `lock_timeout` 없이 DB pool의 3초 `statement_timeout`에 포함된다. 병합된 [PR #93](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/93)의 공통 처리기가 SQLSTATE `57014`를 503 `SERVICE_UNAVAILABLE`로 처리한다.
+- 수락과 거절은 호출자가 속한 관계 행을 잠근 뒤 수신자 권한과 `pending` 상태를 확인한다. 발신자의 처리 요청은 403이고, 제3자와 존재하지 않는 ID에는 동일한 404를 반환한다. 수락 후 수신자가 다시 거절하면 409다. 친구 삭제는 호출자와 대상의 `accepted` 행에만 적용한다. `declined` 행을 유지해야 재요청 차단이 유지된다.
 - 거절한 사용자는 검색이나 상대 프로필에서 먼저 요청할 수 있다. 화면에는 거절 전에 상대의 재요청이 차단된다는 점을 표시한다. 거절자가 먼저 재요청하면 **이전 declined 행을 같은 트랜잭션에서 삭제하고 새 pending 행을 생성**한다. 새 `requestId`와 새 `created_at`이 발급되고 처리 시각은 비어 있다. 이전 ID에 대한 수락·거절은 404로 처리하며, 거절당한 쪽의 직접 재요청은 409 `REQUEST_DECLINED`를 유지한다. B·A가 이 정책에 동의했다.
 - 온라인 상태는 DB에 저장하지 않는다. D의 인증 완료 WS 연결 registry(#82)가 집계하는 사용자별 연결 수 0 ↔ 1 이상 변화에 따라 수락된 친구에게 `presence`를 보낸다. E의 #95는 `listAcceptedFriendIds(userId)` 조회를 제공했지만, **D 연결 집계 함수가 아직 주입되지 않아 수락된 친구가 있는 목록 조회는 503 `SERVICE_UNAVAILABLE`로 응답**하며 온라인 상태 기능은 미통합이다. D가 `isUserOnline(userId)`를 `buildApp`에 주입하면 그때부터 인증 연결 집계를 제공한다. 수락·맞요청 수락·WS 재인증·목록 변경 후 A는 `GET /api/friends`로 재조회하고, 조회 중 이벤트가 들어오면 재조회 완료 뒤 한 번 추가 조회한다. 단순히 `false`로 반환된 미통합 값은 실제 오프라인이라고 해석하지 않는다. DB commit 후 양쪽 사용자의 인증 연결에 `friends.changed {}`를 보내는 별도 알림은 D와 후속 통합한다.
-- 탈퇴 시 그 사용자의 `friendships` 행을 모두 지운다(2.10.27).
-- #95 Draft는 각 route의 `schema.response`와 `Document/contracts.md` 11장에 상태 코드를 기재했다. 모든 성공·오류 및 경합 동작의 독립 재현은 아직 완료되지 않았다.
+- 회원 탈퇴 연동(#84)에서 탈퇴자의 `friendships` 행을 모두 지운다(2.10.27).
 - #95의 migration `0004_friendships`는 master의 `0003` 기준이다. 다른 미병합 PR #79·#89도 0004를 사용하므로 병합 순서 확정 시 뒤쪽 migration 번호와 snapshot/journal을 재생성해야 한다.
 
 ## 3. Design rationale
@@ -2025,9 +2023,7 @@ flowchart TD
 | WebSocket 라이브러리 | 결정: `@fastify/websocket`(#41). 토큰 전달·heartbeat·이벤트는 2.5의 9번 | 문서화 명세 19장 |
 | 준비·시작 절차, 색상 배정, 초대 유효기간 | B 초안: 준비 단계 없음, 매칭 무작위·초대는 보낸 사람 흑, 초대 60초 (2.7). D, A 확인 | DEC-06 |
 | 이탈 시간 저장 위치·감지 지연 | 결정: 메모리, 최대 20초, `paused`·복귀 전환 시 `stateVersion`을 올리지 않음 (2.6의 13번) | DEC-03, DEC-07 |
-| 초대(`invite.*`)·`presence` 담당 | #16~#20에 초대 이슈가 없음. D가 맡을지 이슈를 따로 만들지, `presence`를 E와 어떻게 나눌지 | FR-ROOM, FR-SOC-02~03 |
-| 친구 요청 경합·시각 | B·E 확인. 재조회 0행의 재시도 상한·HTTP 응답, 같은 행 재사용 시 현재 요청 시각 및 처리 시각 초기화 | FR-SOC-01, #38 |
-| 친구 거절 안내·온라인 초기화 | A·D·E 확인. 거절 전 안내와 재요청 동선, 수락 직후 목록 갱신과 `presence` 적용 순서 | FR-SOC-01~02, #38 |
+| 친구 초대·온라인 상태 연동 | 초대는 #81, 온라인 집계와 관계 변경 알림은 #82에서 진행한다. #95와의 실제 연동 및 화면 검증이 남아 있다. | FR-ROOM, FR-SOC-02~03 |
 | 아바타 저장 위치 | B (PNG/JPEG 2MiB 이하 제안) | DEC-05 |
 | 전적 비공개, 탈퇴 표시·닉네임 스냅샷, 경기 기록 보존 기간 | B, A. 보존 기간은 B 제안 영구 보존(2.10.27) | DEC-05, DEC-09 |
 | 같은 commandId·다른 payload | payload 해시 저장 후 불일치 거절할지 | B, C, D |

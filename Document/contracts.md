@@ -395,6 +395,25 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 현재 서버는 같은 참가자가 같은 경기·`commandId`로 **다른 payload를 보내도 최초 결과를 재전송**한다. `COMMAND_ID_CONFLICT`는 현재 다른 사용자의 ID 재사용에만 해당한다. 새 행동에는 항상 새 `commandId`를 만들고 동일 요청 재전송에만 기존 값을 사용해야 한다. B는 최초 결과 재전송 유지와 해시 비교 미도입을 제안했다. #29에서 다른 소비자의 확인을 추적하며, 이번 문서 보완은 서버 동작을 변경하지 않는다.
 
+### 9.2 엔진 규칙 상태와 전송 snapshot
+
+`@cafe/game-engine`의 `gomoku.createInitialState()`는 `GomokuState`를 반환한다. 엔진 상태는 다음 필드로 구성한다.
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| `board` | `Cell[][]` | 15×15 오목 보드. 초기에는 모든 칸이 `null` |
+| `currentPlayerColor` | `PlayerColor \| null` | 현재 차례의 돌 색. 초기에는 `"black"`, 규칙상 종료 후에는 `null` |
+| `result` | `GomokuFinish \| null` | 진행 중에는 `null`. 승리 시 `{ outcome: "win", winner: PlayerColor, reason: "five_in_row" }`, 무승부 시 `{ outcome: "draw", reason: "draw" }` |
+
+엔진은 규칙 데이터로 작업한다. 경기 관리 계층이 `currentPlayerColor`를 배정된 흑·백 사용자 ID와 연결해 `currentPlayerId`를 구성하고, 경기 ID·규칙 버전·상태 버전·진행 상태·결과를 붙여 전송용 `GomokuSnapshot`을 만든다. 인증·명령 중복 처리·버전 관리·저장·전송은 경기 관리 계층의 책임이다.
+
+초기 상태 생성과 `gomoku.applyMove(state, action, playerColor)`를 구현했으며 팀 검토 대상이다. `action`은 착수 전용 `PlaceAction`이고 `playerColor`는 서버가 인증된 참가자에게 배정한 색이다. 엔진은 종료 여부, 정수·범위 좌표, 현재 차례, 빈칸을 검사한다. 정상 착수는 모든 행을 복사한 새 보드의 `{ ok: true, state }`를 반환한다. 가로·세로·두 대각선의 연속 5개 이상이면 승리하고, 승리 없이 보드가 차면 무승부이다. 금수는 없다. 종료 후에는 차례가 `null`이며 추가 착수를 `GAME_FINISHED`로 거절한다. 그 외 불법 착수는 `INVALID_ACTION`이다. 실패는 `{ ok: false, error: { code, message } }`이며 성공·실패 모두 입력 상태를 수정하지 않는다. 이 반환 형식은 엔진 호출 결과이며 REST·WebSocket의 응답 형식을 확정하지 않는다.
+
+엔진 입력은 유효한 15×15 규칙 상태와 구조가 검증된 행동이다. `gomoku.restoreState(moves)`는 저장 순서의 착수 기록으로 규칙 상태를 복원하고, 잘못된 이력에는 예외를 던진다. `gomoku.rules`는 팀 PR #11의 `GameRules`에 맞는 연결 함수이며 착수 기록을 재생한 뒤 다음 차례·종료 결과 또는 오류 코드를 반환한다. 제안 규칙 버전은 `gomoku.GOMOKU_RULES_VERSION`(`gomoku-freestyle-v1`)이다. 등록·버전 선택은 호출 계층에서 담당한다.
+
+실제 참가자·경기 진행 상태 검사, 기권·이탈·재시작에 따른 종료, 명령 중복·버전 관리, snapshot 구성·전송은 경기 관리 계층에서 연결해야 한다. 보드 재생만으로 기권·이탈 등의 결과를 복원할 수 없으므로 저장된 경기 상태·결과도 함께 사용한다. PR #6의 `769f809`는 숫자 ID와 기권을 포함하는 전송 계약을 추가한다. 이 문서에는 해당 전송 계약을 통합했다. 서버는 기권을 직접 처리하고 `PlaceAction`만 엔진에 전달한다. `GomokuRulesInput.action`도 착수 전용이며 엔진 연결 함수는 ID를 사용하지 않는다. 상세 공개 함수와 검증 방법은 [game-engine/README.md](../packages/game-engine/README.md)를 참조한다.
+
+
 ## 10. 요청자 및 팀 검토 항목
 
 - [x] 요청자가 필드 설명과 초기 상태 → 착수 → 갱신 예제 흐름을 검토했다(2026-10-08).
@@ -472,3 +491,41 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 - 403은 아직 쓰지 않는다. 다른 사용자의 자원을 바꾸는 API가 없고, `me` 경로는 인증된 사용자 자신만 다루기 때문이다.
 - 경기 조회·명령 API는 REST에 없다. 경기는 WebSocket(IF-03, D)으로 다루고, 그 오류는 8절 `GameError`를 쓴다.
+
+## 12. WebSocket `/api/ws` (IF-03)
+
+REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 연결 거절·close code·메시지를 기록한다. 이 경로는 HTTP 응답 본문이 없는 upgrade라 Swagger(`/docs`)에서 숨긴다(`schema.hide`). 여기 적힌 내용은 #41 기준이며, 경기 구독·명령·매칭·재접속 메시지는 #42·#43·#49·#50이 이 장에 이어서 추가한다.
+
+### 12.1 연결과 인증
+
+1. 클라이언트는 `GET /api/ws`로 연결한다. access token은 URL·헤더에 넣지 않는다(프록시·접근 로그에 남지 않게 하기 위함).
+2. 연결 후 5초 안에 첫 메시지로 `auth`를 보낸다. 서버는 JWT와 서버 세션을 함께 확인하고 `auth.ok`로 답한다.
+3. `auth.ok`를 받기 전에는 다른 메시지를 보내지 않는다. 인증 처리 중 들어온 메시지는 4401로 닫는다.
+4. 인증은 연결 시점에만 한다. 연결 중 access token이 만료돼도 연결은 유지되고, 세션 폐기(로그아웃)만 연결을 닫는다.
+
+### 12.2 메시지 형식
+
+모든 메시지는 텍스트 프레임의 JSON `{ type, requestId?, payload }`이다. `payload`는 객체, `requestId`는 1~64자 문자열이다. 요청에 `requestId`가 있으면 그 요청의 응답·오류에 같은 값을 돌려준다.
+
+| 방향 | `type` | `payload` | 설명 |
+|---|---|---|---|
+| C → S | `auth` | `{ accessToken }` | 연결 후 첫 메시지 |
+| S → C | `auth.ok` | `{ userId }` | 인증 성공 |
+| C → S | `ping` | `{}` | 앱 레벨 연결 확인 |
+| S → C | `pong` | `{}` | `ping` 응답 |
+| S → C | `error` | `{ code, message }` | 연결을 유지하는 오류. 지원하지 않는 `type`이면 `UNSUPPORTED_MESSAGE` |
+
+### 12.3 연결 거절과 close code
+
+| 상황 | 결과 |
+|---|---|
+| 같은 IP에서 1분에 30번을 넘는 연결 요청 | upgrade 없이 HTTP 429 `RATE_LIMITED` |
+| 5초 안에 `auth`가 오지 않음 | 4401 `Authentication timed out.` |
+| 첫 메시지가 `auth`가 아니거나 `accessToken`이 없음, 인증 중 다른 메시지 | 4401 `Authenticate first.` |
+| 토큰 무효·만료, 폐기된 세션 | 4401 `Invalid or expired token.` |
+| 로그아웃으로 세션 폐기 | 그 세션의 모든 연결을 4401 `Session ended.` |
+| JSON이 아니거나 envelope 형식이 틀림, binary 프레임 | 4400 `Malformed message.` |
+| 16 KiB를 넘는 메시지 | 1009 (`ws`의 `maxPayload`) |
+| 인증 중 DB·인증 서비스 장애 | 1011 `Service unavailable.` |
+
+4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 갱신도 실패하면 로그인 화면으로 보낸다. 4400·1009는 클라이언트 버그이므로 같은 메시지로 재시도하지 않는다.
