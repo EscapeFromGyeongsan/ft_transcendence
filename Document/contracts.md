@@ -477,7 +477,7 @@ type FriendsList = {
 
 ### 11.4 온라인 상태와 알림 — 후속 통합 (#82)
 
-`GET /api/friends`의 `online`은 인증 완료된 WebSocket 연결 수를 기준으로 D의 `isUserOnline`을 주입받아 계산할 예정입니다. 현재 #69 단독 브랜치에는 D 연결 registry가 없으므로 온라인 여부는 실제 통합 전까지 `false`로 임시 응답합니다. **이를 실제 offline 검증으로 해석하면 안 됩니다.**
+`GET /api/friends`의 `online`은 인증 완료된 WebSocket 연결 수를 기준으로 D의 `isUserOnline`을 주입받아 계산할 예정입니다. 현재 #69 단독 브랜치에는 D 연결 registry가 없으므로 **수락된 친구가 있을 때 `GET /api/friends`는 503 `SERVICE_UNAVAILABLE`**로 응답합니다. 미확인 상태를 임의로 offline(`false`)으로 표시하지 않습니다. D가 `isUserOnline(userId)`를 `buildApp`에 주입하면 정상적으로 인증 연결 집계를 표시합니다.
 
 D와 합의한 `listAcceptedFriendIds(userId)`는 구현했습니다. 연결 registry 기반 `presence`, 관계 변경 직후 `friends.changed`, WS 종료·세션 폐기 후 온라인 갱신은 #82와 후속 통합에서 연결해야 합니다. A는 수락 성공 후 목록을 재조회해 온라인 상태를 재동기화합니다.
 
