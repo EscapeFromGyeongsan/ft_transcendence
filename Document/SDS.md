@@ -191,7 +191,7 @@ flowchart LR
 |---|---|---|
 | Register, Login(email), Logout, 2FA, 42 OAuth, Link 42 | B | `구현됨` (API) |
 | View/Edit profile | B (API), A (UI) | `구현됨` (닉네임 변경·공개 프로필 API) |
-| Upload avatar | B (API), A (UI) | `계획` (10/24) |
+| Upload avatar | B (API), A (UI) | API `구현됨` (#14), UI `계획` |
 | Friend, online status | E (+ D 연결 상태) | `계획` |
 | Auto match, Invite, Ready, Reconnect | D | `계획` |
 | Play gomoku / othello, Resign | C (규칙), D (실행), B (저장) | 저장 `구현됨`, 규칙 일부(PR #9), 실행 `계획` |
@@ -280,7 +280,7 @@ flowchart TD
 - route는 검증·응답 형식만 담당하고, 처리 규칙은 service, SQL은 repository에 둔다.
 - 하나의 처리에 참여하는 repository 호출은 같은 `Executor`(트랜잭션)를 받는다. 일부만 저장되는 일이 없다.
 - 서비스는 `buildApp`에서 한 번 만든다. DB나 설정이 없으면 해당 route는 503을 반환한다(`ServiceUnavailableError`).
-- 공통 오류 처리: 검증 422, JSON 오류 400, Content-Type 415, rate limit 429, 42 장애 502, DB 연결 장애 503, 그 외 500. 응답 형식은 `{ "error": { "code", "message", "details?" } }`.
+- 공통 오류 처리: 검증 422, JSON 오류 400, Content-Type 415, rate limit 429, 42 장애 502, DB 연결 장애·statement timeout 503, 그 외 500. 응답 형식은 `{ "error": { "code", "message", "details?" } }`.
 
 #### 4. Domain boundary (플랫폼 경계, 명세 12장)
 
@@ -631,7 +631,7 @@ erDiagram
         bigint id PK
         boolean records_public "계획, NOT NULL DEFAULT true (DEC-05)"
         timestamptz deleted_at "계획, NULL = 활성 (DEC-09)"
-        text avatar_url "기존 컬럼, 업로드 시 /media/avatars/{id}-{rand}.png|jpg"
+        text avatar_url "업로드 시 /api/media/avatars/{id}-{rand}.png|jpg"
         varchar_254 email "탈퇴 시 NULL 또는 익명값으로 교체 (UNIQUE 해제)"
         varchar_32 nickname "탈퇴 시 NULL로 비워 재사용 허용"
     }
@@ -693,7 +693,7 @@ flowchart TD
 | 2FA | `GET /api/auth/2fa`, `POST /api/auth/2fa/setup`, `enable`, `disable`, `verify` | B | `구현됨` |
 | OAuth | `POST /api/auth/oauth/42/login`, `link`, `callback` | B | `구현됨` |
 | Users | `GET /api/users/me`, `PATCH /api/users/me`, `GET /api/users/{userId}` | B | `구현됨` |
-| Avatar | `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (2.10.25) | B | `계획` |
+| Avatar | `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar`, `GET /api/media/avatars/{name}` (2.10.25) | B | `구현됨` |
 | 전적 공개 설정 | `PATCH /api/users/me`의 `recordsPublic`, stats·matches의 403 (2.10.26) | B | `계획` |
 | 탈퇴 | `DELETE /api/users/me` (2.10.27) | B | `계획` |
 | Statistics | `GET /api/users/{userId}/stats`, `GET /api/users/{userId}/matches`, `GET /api/leaderboard` | B | `구현됨` |
@@ -1145,7 +1145,7 @@ flowchart TD
 | db | PostgreSQL | 5432 | 없음 | data (internal) | postgres_data | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD_FILE` | `pg_isready` | - |
 
 - DB 포트는 외부에 공개하지 않는다. 호스트에서 포트를 여는 컨테이너는 web 하나다.
-- DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면 오류가 나고 공통 처리기가 503(연결 계열) 또는 500으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
+- DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면(잠금 대기 포함) 오류가 나고 공통 처리기가 503으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
 - **PR #10 병합 시 합칠 것**: 현재 `index.ts`는 `127.0.0.1`에 고정 listen한다. PR #10은 `API_HOST`로 listen 주소를 받는다. 병합할 때 `API_HOST`와 위 인증·프록시 환경 변수를 함께 반영한다.
 - 비밀번호는 Compose secret 파일로 전달한다. B 구현으로 추가된 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`도 secret 또는 env 파일로 전달해야 한다(PR #10 병합 후 반영 필요).
 - 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
@@ -1579,30 +1579,34 @@ flowchart TD
 
 가입 API의 rate limit(분당 10회)을 거치므로 1분 안에 세 번 이상 실행하면 429로 멈출 수 있다.
 
-#### 2.10.25 아바타 업로드·삭제 `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (B, `계획`, 10/24)
+#### 2.10.25 아바타 업로드·삭제 `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar` (B, `구현됨`)
 
 DEC-05 제안(PNG/JPEG, 2 MiB 이하, 실제 형식 검사, 기본 이미지)을 따른다. `@fastify/multipart`로 받는다.
 
 ```mermaid
 flowchart TD
-    S([requireAuth 통과]) --> M{multipart/form-data?}
+    S([requireAuth 통과, 분당 10회]) --> M{multipart/form-data?}
     M -->|아니오| R415[415 UNSUPPORTED_MEDIA_TYPE]
     M -->|예| F{file 필드 1개?}
     F -->|아니오| R422[422 VALIDATION_ERROR]
+    M -.->|multipart 해석 실패| R400[400 BAD_REQUEST]
     F -->|예| Size{2 MiB 이하?}
     Size -->|아니오| R413[413 PAYLOAD_TOO_LARGE]
     Size -->|예| Magic{"파일 앞부분 바이트가 PNG 또는 JPEG 서명? (확장자·Content-Type은 믿지 않음)"}
     Magic -->|아니오| R415
-    Magic -->|예| Dim{"이미지 치수 상한 이내? (DEC-05 미정, 제안 1024×1024)"}
-    Dim -->|아니오| R422
-    Dim -->|예| Write["새 이름(/media/avatars/{userId}-{난수}.{png,jpg})으로 임시 파일 저장 후 rename"]
-    Write --> Up["users.avatar_url UPDATE"]
+    Magic -->|예| Dim{"가로·세로 1024px 이하?"}
+    Dim -->|아니오| R422b[422 IMAGE_TOO_BIG]
+    Dim -->|예| Write["새 이름({userId}-{난수}.{png,jpg})으로 임시 파일 저장 후 rename"]
+    Write --> Up["users 행 FOR UPDATE로 이전 URL 읽고 avatar_url UPDATE (한 트랜잭션)"]
     Up -->|성공| Old[이전 파일 삭제] --> R200[200 갱신된 내 정보]
     Up -->|실패| Clean[새 파일 삭제, 이전 avatar_url 유지] --> R5xx[500 / 503]
-    S2([DELETE, requireAuth 통과]) --> Null["avatar_url = NULL (UI는 기본 이미지)"] --> Del[이전 파일 삭제] --> R204[204]
+    Up -->|사용자 행 없음| R401[401]
+    S2([DELETE, requireAuth 통과]) --> Null["avatar_url = NULL (UI는 기본 이미지)"] --> Del[이전 파일 삭제] --> R204["204 (아바타가 없어도)"]
 ```
 
-- 저장 위치: api 컨테이너의 volume(`avatar_data`)을 Nginx가 `/media/`로 읽기 전용 제공(E와 PR #10 후속 협의). DB에는 경로만 저장한다.
+- 저장 위치: `AVATAR_DIR`(기본 `data/avatars`). 컨테이너에서는 api 컨테이너의 volume으로 둔다(E, PR #10). DB에는 URL만 저장한다.
+- 제공: API가 `GET /api/media/avatars/{name}`으로 직접 제공한다. 기존 `/api/` 프록시만으로 개발 서버와 Nginx 모두에서 동작해 Nginx 설정과 volume 공유가 필요 없다. 인증 없이 `<img>`로 읽고, 이름이 매번 새로 만들어지므로 1년 immutable 캐시와 `nosniff`를 붙인다.
+- 서비스가 만든 이름(`{userId}-{16진수 16자}.{png,jpg}`)만 읽고 지운다. 요청 경로나 DB 값으로 디렉터리 밖을 가리킬 수 없다.
 - 교체 실패 시 기존 파일과 URL을 유지한다. 탈퇴 시 파일을 삭제한다(2.10.27).
 
 #### 2.10.26 전적 공개 설정 (B, `계획`)
