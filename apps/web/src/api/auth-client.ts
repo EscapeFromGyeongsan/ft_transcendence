@@ -539,6 +539,8 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
 
   /**
    * 42 OAuth 리다이렉트 콜백(`code`, `state`, `flowToken`)을 서버로 전달하여 로그인·2FA 챌린지·계정 연결을 완료합니다 (`POST /api/auth/oauth/42/callback`).
+   * @throws ApiError flowToken이 없거나 서버가 콜백을 거절한 경우
+   * @throws TypeError 네트워크 요청에 실패한 경우
    */
   async function completeOAuth42Callback(
     input: { code: string; state: string; flowToken?: string | null },
