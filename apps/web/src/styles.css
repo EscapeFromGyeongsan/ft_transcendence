@@ -74,6 +74,8 @@ input {
 /* App Shell */
 .cbc-shell {
   min-height: 100vh;
+  /* Decorative glows must not enlarge the mobile page's scrollable width. */
+  overflow-x: clip;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

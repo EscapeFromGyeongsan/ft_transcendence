@@ -230,6 +230,8 @@ export function App() {
 
   const avatarTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
   const lastLogoutTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // 사용자 이동은 기록을 추가하고, 초기 복구·실시간 갱신·popstate는 현재 기록만 보정합니다.
+  const navigationModeRef = useRef<"push" | "replace">("replace");
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -282,6 +284,7 @@ export function App() {
   }
 
   function switchView(next: ScreenView) {
+    if (next !== view) navigationModeRef.current = "push";
     resetMessages();
     setAccountMenuOpen(false);
     setLogoutModalOpen(false);
@@ -298,6 +301,7 @@ export function App() {
   }
 
   function openLegalDoc(doc: LegalDocKind) {
+    if (doc !== view) navigationModeRef.current = "push";
     resetMessages();
     setAccountMenuOpen(false);
     setLogoutModalOpen(false);
@@ -314,6 +318,7 @@ export function App() {
   }
 
   function handleBackFromLegal() {
+    navigationModeRef.current = "push";
     resetMessages();
     if (
       previousViewBeforeLegal &&
@@ -374,14 +379,20 @@ export function App() {
       profileUserId,
       currentUserId: currentUser?.id ?? null,
     });
+    const navigationMode = navigationModeRef.current;
+    navigationModeRef.current = "replace";
     if (
       targetPath !== null &&
       globalThis.window.location?.pathname !== targetPath
     ) {
       try {
-        globalThis.window.history.replaceState(null, "", targetPath);
+        if (navigationMode === "push") {
+          globalThis.window.history.pushState(null, "", targetPath);
+        } else {
+          globalThis.window.history.replaceState(null, "", targetPath);
+        }
       } catch {
-        // 테스트·제한 환경에서 history.replaceState 예외 무시
+        // 테스트·제한 환경에서 history 변경 예외 무시
       }
     }
   }, [
@@ -401,6 +412,7 @@ export function App() {
       return;
     }
     function handlePopState() {
+      navigationModeRef.current = "replace";
       const route = parseInitialAppRoute();
       switch (route.kind) {
         case "terms":
@@ -678,6 +690,7 @@ export function App() {
   }, [currentUserId]);
 
   function openProfile(userId: number) {
+    if (userId !== profileUserId) navigationModeRef.current = "push";
     setProfileUserId(userId);
     switchView("profile");
   }
