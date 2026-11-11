@@ -6,7 +6,7 @@
 
 A Korean-language, two-player board game platform for freestyle Gomoku (Omok, 15 × 15) and standard Othello (8 × 8). Accounts, matchmaking, real-time transport and persistence are separated from each game's rules and board UI.
 
-This submission README draft was updated on **2026-11-09 (KST)**. Feature-branch implementation, runtime integration and evaluation readiness are tracked separately in the [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md).
+This submission README draft was updated on **2026-11-12 (KST)**. Feature-branch implementation, runtime integration and evaluation readiness are tracked separately in the [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md).
 
 ## Features and integration status
 
@@ -14,16 +14,17 @@ This submission README draft was updated on **2026-11-09 (KST)**. Feature-branch
 |---|---|---|
 | Accounts | Registration, email/password login, rotating refresh tokens and session revocation | Full browser acceptance coverage |
 | OAuth and 2FA | 42 login/link API and UI; TOTP setup, verification, recovery codes and disable flow | Real 42 provider verification; UI PR #72 is open |
-| Profiles | Public profiles, nickname changes, PNG/JPEG avatar upload/delete and default avatars | Browser persistence/error-path E2E |
+| Profiles | Public profiles, nickname changes, PNG/JPEG avatar upload/delete and default avatars | UI #57 and browser E2E #77 are implemented on open PRs; integration and acceptance remain |
 | Records | Per-game statistics, history, first-win achievement, ten-game progress and leaderboard | Full real-game acceptance data and independent reproduction |
 | Matchmaking | Game selection, queue join/cancel/matched flow and waiting UI | UI PR #63 is open; requires D's real-time server |
 | Gomoku | Rules engine, board UI and WS client | Two-session reconnect/result/history E2E is on the separate #27 integration branch |
-| Othello | Engine merged in PR #58; board UI, legal moves, disc counts, automatic pass and results in PR #73 | UI PR #73 is open; running-server registration and browser E2E |
-| Legal pages | `/terms`, `/privacy`, footer/signup links, history/404 routing and modal Escape handling | PR #71 is open; final policy review and browser E2E |
-| Friends and invitations | SDS REST/WS contract proposals | API, presence/invitation transport and UI remain planned (#38, #69) |
-| Privacy and deletion | SDS designs for `recordsPublic` updates and `DELETE /api/users/me` | API and UI remain planned |
+| Othello | Engine merged in #58; UI in #73; server registration and two-session browser E2E in #77 | #73 and #77 are open; final integrated acceptance remains |
+| Legal pages | `/terms`, `/privacy`, links and modal Escape handling in #71 (`011b5a8`), including #99/#100 and selected #77 history/mobile fixes | #71 remains open against the web stack; policy needs final comparison with a release containing #89/#85 |
+| Friends and invitations | Friend UI #90, REST #95 and presence/relationship notification transport #98 are implemented on open PRs | Wire the REST service to the authenticated connection registry and UI events; invitations remain planned |
+| Privacy and deletion | Privacy API/DB/UI/E2E in open #79; deletion API/DB in open #89 | Integrate migrations in order (#96); deletion UI #85 and social/WS cleanup remain |
+| Deployment | Full application containers, HTTPS and persistent DB/avatar volumes from merged #10 | Pinned historical WSS evidence is separate from current-master and two-PC acceptance |
 
-Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. The web implementation reference is `feat/web-othello` at `3d06126`. This documentation branch contains the server APIs, both game engines and a placeholder web page; it does not include those frontend feature PRs. Its API startup does **not** register `/api/ws` or game engines. Use a checkout containing the web feature branch for signup/profile screens and the real-time integration for matches. The feature table describes the referenced branches, not features all available in this checkout.
+Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. The web implementation reference is `feat/web-othello` at `3d06126`. This documentation branch incorporates `master` at `6965b9c`: server APIs, both game engines, authenticated `/api/ws`, full application containers and a placeholder web page. It does not include those frontend feature PRs. The current startup does **not** register game engines, match subscriptions, game commands, matchmaking or reconnection; those remain in the open #42/#43/#49/#50 stack. Use a checkout containing the web feature branch for signup/profile screens and the real-time integration for matches. The feature table describes the referenced branches, not features all available in this checkout.
 
 ## Game rules
 
@@ -46,9 +47,13 @@ The [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md) contain curren
 
 The browser calls `/api/*` through Vite's development/preview proxy. Fastify routes call services and repositories backed by PostgreSQL. `@cafe/game-contracts` holds shared messages/types; `@cafe/game-engine` implements rules independently of transport. The integrated runtime adds authenticated WebSocket matchmaking, subscriptions and commands. It validates and persists commands before publishing authoritative state; `commandId` and `stateVersion` support deduplication and stale-state detection.
 
-Committed migrations `0000`–`0003` include `users`, `sessions`, `refresh_tokens`, OAuth/2FA tables, `games`, `game_players`, `moves`, `game_commands` and the connection probe. Statistics are queried from stored results. `friendships`, privacy updates and account-deletion changes remain planned. Relationships and constraints are documented in the [SDS](Document/SDS.md).
+Committed migrations `0000`–`0003` include `users`, `sessions`, `refresh_tokens`, OAuth/2FA tables, `games`, `game_players`, `moves`, `game_commands` and the connection probe. Statistics are queried from stored results. `friendships`, privacy and account-deletion migrations exist in open #95, #79 and #89. Each currently starts at `0004`; regenerate the later unmerged migration against the agreed integration order (#96), without rewriting shared/applied migrations. Relationships and constraints are documented in the [SDS](Document/SDS.md).
 
 ## Instructions
+
+Choose local development below or the [full application HTTPS workflow](Document/runtime.md). Deployment was merged in #10; its recorded checks and remaining limitations are separate from new validation of this documentation change.
+
+### Local development
 
 Run commands from the repository root. Install Node.js/npm and start Docker Desktop or a compatible Docker engine. Copy `.env.example` to `.env` **only if `.env` does not already exist**:
 
@@ -76,9 +81,9 @@ npm run dev
 | Liveness | http://127.0.0.1:3001/api/health |
 | Database readiness | http://127.0.0.1:3001/api/health/db |
 
-The API checks the database before listening and marks unfinished matches void on startup. Both development servers bind to `127.0.0.1`. Vite proxies `/api` HTTP and WS traffic; Swagger UI is available on the API port. Restart `npm run dev` after server changes.
+The API checks the database before listening and marks unfinished matches void on startup. Development servers default to `127.0.0.1`; `API_HOST` overrides the API address. Vite proxies `/api` HTTP and WS traffic; Swagger UI is available on the API port. Restart `npm run dev` after server changes.
 
-`infra/compose.yaml` starts **only PostgreSQL**, bound to `127.0.0.1:5432` by default. A named volume preserves data; `npm run db:stop` stops the database without deleting it. Initialization credentials apply to a new volume; editing `.env` does not change existing database credentials. Full application containers and HTTPS/WSS are tracked in separate deployment branches (#10, #28, #40).
+`infra/compose.yaml` starts **only PostgreSQL**, bound to `127.0.0.1:5432` by default. A named volume preserves data; `npm run db:stop` stops the database without deleting it. Initialization credentials apply to a new volume; editing `.env` does not change existing database credentials. Full application containers use the separate `infra/compose.full.yaml` workflow below; the database-only development workflow does not enable HTTPS.
 
 In a checkout containing `feat/web-othello` (`3d06126`), sign up through the web page, then sign in and open your profile or leaderboard. This documentation checkout has only the placeholder page; its APIs can be explored through Swagger UI. To prepare test accounts through the real API, set a private `QA_PASSWORD` and run `npm run qa:accounts` while the API is running. It creates `qa-p1`–`qa-p4` and `qa-outsider` with `@qa.example.com` addresses; it does not reset existing passwords.
 
@@ -88,13 +93,32 @@ npm run dev:server  # API only
 npm run preview     # Production web build; run the API separately
 ```
 
+### Full application containers
+
+Prepare `.env.full` from `.env.full.example`, the password file, and certificates as described in [the full execution guide](Document/runtime.md). Then:
+
+Set a private `JWT_SECRET` of at least 32 characters in `.env.full`. Compose passes
+authentication settings explicitly and mounts a separate `avatars` volume at
+`/data/avatars`, writable by the API's `node` user. The current checkout includes the
+authentication and avatar routes; frontend screens remain on open feature PRs. An empty `TWO_FACTOR_KEY` disables the optional 2FA key.
+
+```sh
+docker compose --env-file .env.full --project-directory . \
+  -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
+```
+
+Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
+
+The full app has a separate project/DB volume from local development. The [runtime validation record](Document/runtime-validation.md) reports startup, explicit-CA HTTPS, migration failure, DB recovery and persistence checks; this documentation update did not rerun them. The [WSS record](Document/runtime-wss-validation.md) uses a pinned historical integration source and reports an approximately 30-second heartbeat detection against a 20-second target. It does not prove current-master gameplay, Windows browser trust, two-PC play or independent reproduction.
+
 ## Environment variables
 
 The API, Vite configuration, migration configuration and DB check load the root `.env`. Existing shell environment values take precedence. Keep secrets outside Git.
 
 | Variable | Purpose |
 |---|---|
-| `PORT` | API port, default `3001`; Vite uses the same proxy target |
+| `API_HOST` | API listen address, default `127.0.0.1`; full-app Compose sets `0.0.0.0` |
+| `PORT` | API port, integer `1..65535`, default `3001`; Vite uses the same proxy target |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Local database initialization |
 | `POSTGRES_PORT` | Host database port, default `5432` |
 | `DATABASE_URL` | API/migration PostgreSQL URL; percent-encode special characters in credentials |
@@ -122,7 +146,7 @@ npm run test:e2e
 
 `npm run test:e2e` starts the API and Vite unless an existing server is reused. Prepare the development DB using `db:up` and `db:migrate`. This checkout's `tests/app.spec.ts` checks the home page only.
 
-The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomoku-integration` at `b24ea10` (#27). That branch supports `E2E_BASE_URL` for a deployed target; this checkout's configuration does not. Use a checkout containing that integration to run it. Othello, legal-page and profile browser E2E extensions remain planned. Record commands, commit, environment, skips and results using the [test plan](Document/TEST_PLAN.md).
+The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomoku-integration` at `b24ea10` (#27). That branch supports `E2E_BASE_URL` for a deployed target; this checkout's configuration does not. Use a checkout containing that integration to run it. Othello, legal-page and profile browser E2E are implemented in open #77 (`05eaede`); privacy coverage is in #79 (`8b93fb5`). Those tests require their integrated checkout and are not present here. #90 friend UI tests replace API/WS responses and therefore do not demonstrate real friend CRUD or presence integration. The published #55 (`b431f05`) authentication suite also verifies refresh-only storage and multi-tab restoration against the real API/DB. The #71 (`011b5a8`) legal/history suite replaces HTTP/WS responses, including its different-match Back/Forward regression, so it does not prove actual game-server integration. These files are on their feature branches. Record commands, commit, environment, skips and results using the [test plan](Document/TEST_PLAN.md).
 
 ## Team, modules and project management
 
@@ -136,7 +160,7 @@ The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomok
 
 Commits and PRs record individual contributions. The [roadmap](Document/roadmap.md) preserves the original role/schedule plan; the SDS records implementation references. Work uses issues, feature branches and reviewed PRs under [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The [module matrix](Document/evaluation/module-matrix.md) describes the original 14-point candidate: frameworks, real-time functionality, user interaction, standard user management, a complete web game, remote play, ORM and statistics. The SDS includes the later two-game scope. These are candidate modules, not an awarded score; social functionality, remote-play evidence and independent acceptance remain incomplete.
+The [module matrix](Document/evaluation/module-matrix.md) describes the original 14-point candidate: frameworks, real-time functionality, user interaction, standard user management, a complete web game, remote play, ORM and statistics. That historical matrix includes chat; the later SRS two-game scope reserves chat for future work and does not claim the User Interaction major. Use the pinned SRS and SDS for current acceptance scope. These are candidate modules, not an awarded score; social functionality, remote-play evidence and independent acceptance remain incomplete.
 
 ## Structure
 
@@ -162,7 +186,7 @@ packages/
   game-contracts/   Shared game and transport types
   game-engine/      Gomoku and Othello rules
 config/             Drizzle, Vitest and Playwright configuration
-infra/              Local PostgreSQL Compose configuration
+infra/              Local DB and full-app Compose, Dockerfile and HTTPS proxy
 tests/              Playwright browser scenarios
 scripts/            Development, DB checks and QA accounts
 Document/           Design, contracts and evaluation plans
@@ -170,6 +194,7 @@ Document/           Design, contracts and evaluation plans
 
 ## Documentation and resources
 
+- [Full application execution](Document/runtime.md), [runtime validation](Document/runtime-validation.md) and [pinned WSS validation](Document/runtime-wss-validation.md).
 - [SDS](Document/SDS.md): architecture, data model, contracts and requirement traceability.
 - [Test plan](Document/TEST_PLAN.md): T00–T10 scenarios, coordinates, ranking and automation scope.
 - [Contracts](Document/contracts.md), [game engine documentation](packages/game-engine/README.md) and [shared contract types](packages/game-contracts/src/).
@@ -183,8 +208,8 @@ Codex has assisted with implementation, tests, code review and documentation. Th
 
 ## Known limitations
 
-- The web branch is ahead of `master`; open frontend PRs and runtime/deployment branches still need integration.
-- This checkout has a placeholder web page and no registered WS runtime; the referenced feature branch's game cards do not establish running-server support.
-- Friends, presence, invitations, privacy updates and deletion are unfinished. Friend request identity/concurrency and presence-ordering proposals await agreement in #38/PR #68.
-- HTTPS/WSS deployment, performance targets and real two-PC play require the integrated environment and evidence.
-- Expanded browser E2E, final legal policy review, asset attribution and independent README reproduction remain required before submission.
+- Frontend and game-runtime PRs remain open; full-app deployment #10 is already merged.
+- This checkout has a placeholder page and WS authentication only. Referenced game cards do not establish running-server game support.
+- Friends, presence, privacy and deletion have open implementation PRs. Their migrations, service wiring and UI acceptance remain separate; invitations are still planned. The IF-02 memory-only access-token correction is published in #55 (`b431f05`) and propagated through #56/#57/#63/#71. The #72/#73 and other feature branches still need that update before final integration.
+- Current integrated HTTPS/WSS gameplay, performance targets and real two-PC play still require fresh evidence.
+- Existing #77/#79 E2E must be integrated and rerun; final policy review, asset attribution and independent README reproduction remain required before submission.

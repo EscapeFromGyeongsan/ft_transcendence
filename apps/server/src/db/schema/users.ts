@@ -23,8 +23,12 @@ export const users = pgTable("users", {
     .notNull(),
 });
 
-// Stable server session. Access tokens carry its id; logout revokes it, which
-// rejects every later request that still holds an unexpired access token.
+/**
+ * 서버 세션입니다. access token이 이 ID(`sid`)를 담습니다.
+ *
+ * @remarks
+ * 로그아웃이나 refresh token 재사용 감지로 `revoked_at`이 채워지면, 만료 전 access token으로 온 요청도 모두 거절됩니다.
+ */
 export const sessions = pgTable(
   "sessions",
   {
@@ -41,8 +45,12 @@ export const sessions = pgTable(
   (table) => [index("sessions_user_id_idx").on(table.userId)],
 );
 
-// Refresh token rotation history. Only the hash is stored. A token that was
-// already rotated (used_at set) and shows up again revokes its session.
+/**
+ * refresh token 회전 기록입니다. 토큰 해시만 저장합니다.
+ *
+ * @remarks
+ * 이미 회전된 토큰(`used_at` 있음)이 다시 쓰이면 탈취로 보고 그 세션을 폐기합니다.
+ */
 export const refreshTokens = pgTable(
   "refresh_tokens",
   {

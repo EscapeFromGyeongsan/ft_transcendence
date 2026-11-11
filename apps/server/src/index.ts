@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { buildApp } from "./app.ts";
 import { createDatabase } from "./db/client.ts";
+import { readListenOptions } from "./listen-options.ts";
 import { voidUnfinishedGames } from "./services/game-command-service.ts";
 
 if (existsSync(".env")) loadEnvFile(".env");
@@ -35,10 +36,9 @@ const oauth42 =
   clientId && clientSecret && redirectUri
     ? { clientId, clientSecret, redirectUri }
     : undefined;
-const port = Number(process.env.PORT ?? 3001);
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new Error("Set PORT in .env to an integer between 1 and 65535.");
-}
+// PORT validation and the listen address live together. Containers set
+// API_HOST=0.0.0.0; local development keeps the 127.0.0.1 default.
+const listenOptions = readListenOptions();
 // Client IP for rate limiting comes from X-Forwarded-For only when the direct
 // peer is a trusted proxy. Default: loopback (local dev proxy). Behind the
 // Docker Nginx set TRUST_PROXY=uniquelocal (private network addresses).
@@ -68,10 +68,7 @@ try {
   } finally {
     await startup.close();
   }
-  const address = await app.listen({
-    port,
-    host: "127.0.0.1",
-  });
+  const address = await app.listen(listenOptions);
   console.log(`Fastify API listening on ${address}`);
 } catch (error) {
   await app.close();

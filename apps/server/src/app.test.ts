@@ -56,3 +56,21 @@ test("DB connection failure does not expose connection details", async () => {
   const health = await app.inject({ method: "GET", url: "/api/health" });
   expect(health.statusCode).toBe(200);
 });
+
+test("statement timeout (57014) maps to 503", async () => {
+  app = await buildApp();
+  app.get("/probe/statement-timeout", async () => {
+    throw new Error("Failed query", {
+      cause: Object.assign(
+        new Error("canceling statement due to statement timeout"),
+        { code: "57014" },
+      ),
+    });
+  });
+  const response = await app.inject({
+    method: "GET",
+    url: "/probe/statement-timeout",
+  });
+  expect(response.statusCode).toBe(503);
+  expect(response.json().error.code).toBe("SERVICE_UNAVAILABLE");
+});

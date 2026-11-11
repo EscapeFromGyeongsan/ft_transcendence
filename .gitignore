@@ -10,3 +10,13 @@ test-results/
 data/
 .DS_Store
 CLAUDE.md
+
+# Full-app examples are public; generated material is local only.
+!.env.full.example
+infra/certs/
+infra/secrets/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
