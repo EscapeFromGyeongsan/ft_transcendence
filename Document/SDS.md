@@ -280,7 +280,7 @@ flowchart TD
 - route는 검증·응답 형식만 담당하고, 처리 규칙은 service, SQL은 repository에 둔다.
 - 하나의 처리에 참여하는 repository 호출은 같은 `Executor`(트랜잭션)를 받는다. 일부만 저장되는 일이 없다.
 - 서비스는 `buildApp`에서 한 번 만든다. DB나 설정이 없으면 해당 route는 503을 반환한다(`ServiceUnavailableError`).
-- 공통 오류 처리: 검증 422, JSON 오류 400, Content-Type 415, rate limit 429, 42 장애 502, DB 연결 장애 503, 그 외 500. 응답 형식은 `{ "error": { "code", "message", "details?" } }`.
+- 공통 오류 처리: 검증 422, JSON 오류 400, Content-Type 415, rate limit 429, 42 장애 502, DB 연결 장애·statement timeout 503, 그 외 500. 응답 형식은 `{ "error": { "code", "message", "details?" } }`.
 
 #### 4. Domain boundary (플랫폼 경계, 명세 12장)
 
@@ -327,7 +327,7 @@ flowchart LR
 
 경계 규칙 (CON-04):
 
-- 게임 규칙(C)은 `GameRules` 함수 하나와 규칙 버전(`{ version, rules }`)으로 플랫폼에 연결한다. 입력은 지금까지의 착수 목록·두는 사람·행동, 출력은 거절 코드 또는 다음 차례·종료 결과다.
+- 게임 규칙(C)은 규칙 버전, `GameRules` 함수, 보드 복원 함수(`{ version, rules, board }`)로 플랫폼에 연결한다. `rules`의 입력은 지금까지의 착수 목록·두는 사람·행동, 출력은 거절 코드(`INVALID_ACTION`, `GAME_FINISHED`) 또는 다음 차례·종료 결과다. `board`는 저장된 착수 목록으로 현재 보드를 만든다(오델로의 뒤집기는 규칙이 필요하므로 엔진이 맡는다).
 - 잠금·버전·중복·저장(B)과 전송(D)은 게임 종류와 무관하다. 금수 같은 규칙을 추가해도 인증·방·전송·저장 코드는 바뀌지 않는다.
 - 게임 추가 시 `gameType` 값, `GameRules` 구현, 계약 타입(PR #6 절차)만 추가한다. DB의 `games_game_type_check`에 값을 더하는 migration이 함께 필요하다.
 
@@ -1023,7 +1023,7 @@ stateDiagram-v2
 - 같은 `commandId`를 다른 사용자가 쓰면 `COMMAND_ID_CONFLICT`로 거절하고 기록하지 않는다.
 - 현재 한계: 저장하는 것은 적용 버전 또는 거절 코드뿐이다. 같은 사용자가 같은 `commandId`에 **다른 payload**를 보내도 최초 결과를 돌려주며 payload를 비교하지 않는다. 최초 이벤트의 전체 payload나 오류 `details`도 복원하지 않는다(D는 `getMatch()`로 현재 상태를 다시 만들어 보낸다). payload 해시 저장 여부는 C·D와 결정(5장).
 - `VERSION_CONFLICT`의 최신 상태: 서비스는 코드만 반환하고, D가 `getMatch()` + 엔진 재생으로 snapshot을 만들어 `ERROR.details`에 담는다.
-- 거절 코드: `NOT_FOUND`, `NOT_PARTICIPANT`, `COMMAND_ID_CONFLICT`(기록 안 함), `GAME_FINISHED`, `GAME_NOT_ACTIVE`, `VERSION_CONFLICT`, `NOT_YOUR_TURN`, 엔진 코드(예: `CELL_OCCUPIED`)(기록함).
+- 거절 코드: `NOT_FOUND`, `NOT_PARTICIPANT`, `COMMAND_ID_CONFLICT`(기록 안 함), `GAME_FINISHED`, `GAME_NOT_ACTIVE`, `VERSION_CONFLICT`, `NOT_YOUR_TURN`, 엔진 코드 `INVALID_ACTION`(기록함). 세부 사유는 엔진의 `message`에만 둔다(IF-01).
 
 ```mermaid
 flowchart TD
@@ -1145,7 +1145,7 @@ flowchart TD
 | db | PostgreSQL | 5432 | 없음 | data (internal) | postgres_data | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD_FILE` | `pg_isready` | - |
 
 - DB 포트는 외부에 공개하지 않는다. 호스트에서 포트를 여는 컨테이너는 web 하나다.
-- DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면 오류가 나고 공통 처리기가 503(연결 계열) 또는 500으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
+- DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면(잠금 대기 포함) 오류가 나고 공통 처리기가 503으로 응답한다. 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
 - **PR #10 병합 시 합칠 것**: 현재 `index.ts`는 `127.0.0.1`에 고정 listen한다. PR #10은 `API_HOST`로 listen 주소를 받는다. 병합할 때 `API_HOST`와 위 인증·프록시 환경 변수를 함께 반영한다.
 - 비밀번호는 Compose secret 파일로 전달한다. B 구현으로 추가된 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`도 secret 또는 env 파일로 전달해야 한다(PR #10 병합 후 반영 필요).
 - 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
@@ -1501,7 +1501,7 @@ flowchart TD
 
 매칭·준비 단계는 D 범위라, 지금은 두 참가자가 정해지면 바로 `playing`으로 만든다.
 
-`rulesVersion`은 호출자가 넘기지 않는다. 서버가 등록된 엔진의 버전(`{ version, rules }`)으로 채워, 지원하지 않는 버전이 저장되지 않는다. `apply()`는 저장된 버전과 등록된 버전이 다르면 규칙을 적용하지 않고 예외로 끝낸다(트랜잭션 롤백). 재시작 때 미완료 경기가 모두 무효가 되므로 정상 운영에서는 일어나지 않는다.
+`rulesVersion`은 호출자가 넘기지 않는다. 서버가 등록된 엔진의 버전(`{ version, rules, board }`의 `version`)으로 채워, 지원하지 않는 버전이 저장되지 않는다. `apply()`는 저장된 버전과 등록된 버전이 다르면 규칙을 적용하지 않고 예외로 끝낸다(트랜잭션 롤백). 재시작 때 미완료 경기가 모두 무효가 되므로 정상 운영에서는 일어나지 않는다.
 
 #### 2.10.20 경기 명령 `GameCommandService.apply()` (D가 호출)
 
@@ -1523,8 +1523,10 @@ flowchart TD
     S([matchId]) --> T["BEGIN REPEATABLE READ, READ ONLY"] --> G[games 조회]
     G -->|없음| U[undefined]
     G -->|있음| P["같은 스냅샷에서 game_players, moves(turn 순) 조회"]
-    P --> R["game, players, moves 반환 (stateVersion과 moves가 항상 같은 시점) → D가 엔진으로 재생해 snapshot 생성"]
+    P --> R["game, players, moves 반환 (stateVersion과 moves가 항상 같은 시점)"]
 ```
+
+`getSnapshot(matchId)`는 같은 조회 결과를 계약의 `GameSnapshot`으로 바꿔 돌려준다(`구현됨`). 보드는 등록된 엔진의 `board(moves)`로 만들고, `players`는 좌석별 사용자 ID, `currentPlayerId`는 `currentTurn` 좌석의 사용자, `result`는 저장된 `outcome`·`resultReason`·`winnerUserId`다. 종료 결과를 엔진이 다시 계산하지 않는다. D는 `match.snapshot`, 재접속, `VERSION_CONFLICT` 상세에 이것을 쓴다. 없는 경기는 `undefined`.
 
 #### 2.10.22 Health `GET /api/health`, `GET /api/health/db`
 
@@ -1648,7 +1650,7 @@ flowchart TD
 - 전적 표시: `nickname_snapshot` + "(탈퇴한 사용자)". 현재 프로필 링크는 만들지 않는다. 같은 닉네임을 새 계정이 써도 과거 기록과 연결되지 않는다(불변 user id 기준).
 - 보존 기간·백업 반영·탈퇴자 리더보드 처리는 DEC-09 결정 전이라 미정(5장).
 
-#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 `계획`, 서버 재시작 `구현됨`)
+#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 저장 `구현됨`·시계 `계획`(D), 서버 재시작 `구현됨`)
 
 현재 `apply()`는 사용자 명령(`place`, `resign`)만 받는다. 이탈 만료와 재시작 무효는 사용자가 아닌 서버가 일으키므로 별도 진입점을 둔다.
 
@@ -1658,7 +1660,7 @@ flowchart TD
         T0(["finishBySystem(matchId, reason='disconnect_timeout', absentUserIds, expectedVersion)"]) --> T1[BEGIN, games FOR UPDATE]
         T1 --> T2{status가 playing 또는 paused?}
         T2 -->|아니오 이미 종료| T9["아무것도 안 함 (중복 종료 방지)"]
-        T2 -->|예| T3{"stateVersion = expectedVersion? (그 사이 복귀·착수 없음)"}
+        T2 -->|예| T3{"stateVersion = expectedVersion? (그 사이 착수·기권 없음)"}
         T3 -->|아니오| T9
         T3 -->|예| T4{부재자 수}
         T4 -->|1명| T5["outcome=win, winner=상대, reason=disconnect_timeout"]
@@ -1675,8 +1677,11 @@ flowchart TD
 ```
 
 - 서버 재시작 무효는 `index.ts`가 DB 확인 뒤 listen 전에 `voidUnfinishedGames()`로 처리한다. 진행 중 경기의 시계·연결은 재시작 후 남지 않기 때문이다. API 인스턴스가 하나라는 전제다. 여러 개를 띄우면 다른 인스턴스의 진행 중 경기까지 무효가 된다. 대기 상태 정리(D)는 `계획`이다.
-- 복귀와 만료가 겹치면 경기 행 잠금이 순서를 정한다. 먼저 commit한 쪽이 이기고, 나중 쪽은 버전 불일치나 종료 상태로 아무것도 하지 않는다.
-- `Finish` 타입에 `void`를 추가하고, 결과 사유에 `disconnect_timeout`, `server_restart`를 허용한다(계약 PR #6의 `TwoPlayerResult`와 같음).
+- 착수·기권과 만료가 겹치면 경기 행 잠금이 순서를 정한다. 먼저 commit한 쪽이 이기고, 나중 쪽은 버전 불일치나 종료 상태로 아무것도 하지 않는다.
+- 일시정지·복귀는 `stateVersion`을 올리지 않는다(#34 합의). 그래서 복귀만으로 이탈 종료 요청이 무시되지 않는다. 만료 전에 복귀하면 D가 이탈 타이머를 취소하고, 만료된 뒤에는 그 순간의 부재자로 결과를 확정한다(DEC-03). 만료 후 복귀는 종료를 취소하지 않는다.
+- `Finish` 타입에 `void`를 추가했다. 결과 사유 `disconnect_timeout`, `server_restart`는 계약 PR #6의 `TwoPlayerResult`와 같다.
+- `finishBySystem()`은 `{ status: "finished", stateVersion }` 또는 `{ status: "skipped" }`를 돌려준다. `finished`일 때만 D가 `GAME_FINISHED`를 보낸다. 없는 경기, 이미 종료, 버전 불일치는 `skipped`다.
+- `absentUserIds`가 비었거나 참가자가 아닌 사용자가 있으면 예외를 던진다. D의 호출 오류이므로 사용자에게 보낼 오류 코드가 아니다.
 
 ---
 

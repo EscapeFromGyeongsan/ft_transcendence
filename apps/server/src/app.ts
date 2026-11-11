@@ -3,6 +3,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
+import websocket from "@fastify/websocket";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
@@ -40,10 +41,17 @@ import {
   createAvatarService,
   type AvatarService,
 } from "./services/avatar-service.ts";
+import { createConnectionRegistry } from "./services/connection-registry.ts";
+import {
+  closeCodes,
+  registerRealtimeRoutes,
+  type RealtimeConfig,
+} from "./api/ws-routes.ts";
 
 const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
 
-// Connection-level failures (DB down, pool timeout) map to 503, not 500.
+// Connection-level failures (DB down, pool timeout) and statement timeouts
+// (57014, includes lock waits) map to 503, not 500.
 function isDatabaseUnavailable(error: unknown) {
   if (error instanceof ServiceUnavailableError) return true;
   for (
@@ -57,6 +65,7 @@ function isDatabaseUnavailable(error: unknown) {
     if (
       unavailableCodes.has(code) ||
       code.startsWith("08") ||
+      code === "57014" ||
       code.startsWith("57P") ||
       message.includes("timeout exceeded when trying to connect") ||
       message.includes("Connection terminated")
@@ -67,12 +76,24 @@ function isDatabaseUnavailable(error: unknown) {
   return false;
 }
 
+/**
+ * Fastify 앱을 만들고 서비스·공통 오류 처리·Swagger·route를 등록합니다.
+ *
+ * @param databaseUrl - 없으면 DB가 필요한 route는 503으로 답합니다.
+ * @param authConfig - 없으면 인증이 필요한 route는 503으로 답합니다. 2FA 키·42 OAuth 설정이 빠지면 그 기능만 503입니다.
+ *
+ * @remarks
+ * 서비스는 설정이 있을 때만 만들고 route에는 getter로 넘깁니다. 설정이 없으면 getter가 {@link ServiceUnavailableError}를 던집니다.
+ * 공통 오류 처리는 검증 실패·본문 오류·요청 과다·42 장애·DB 연결 장애를 정해진 오류 본문으로 바꾸고, 나머지는 500으로 답합니다.
+ * 앱을 닫으면 DB 풀도 닫습니다.
+ */
 export async function buildApp(
   options: FastifyServerOptions = {},
   databaseUrl?: string,
   authConfig?: AuthConfig,
   // Directory for uploaded avatars. Without it the avatar endpoints answer 503.
   avatarDir?: string,
+  realtimeConfig?: RealtimeConfig,
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -98,6 +119,23 @@ export async function buildApp(
   const getAuth = (): AuthService => {
     if (!auth) throw new ServiceUnavailableError();
     return auth;
+  };
+  const connections = createConnectionRegistry();
+  // Logout also closes the WebSocket connections opened with that session.
+  const routeAuth: AuthService | undefined = auth && {
+    ...auth,
+    async logout(sessionId: string) {
+      await auth.logout(sessionId);
+      connections.closeSession(
+        sessionId,
+        closeCodes.unauthenticated,
+        "Session ended.",
+      );
+    },
+  };
+  const getRouteAuth = (): AuthService => {
+    if (!routeAuth) throw new ServiceUnavailableError();
+    return routeAuth;
   };
   const oauth =
     auth && authConfig?.oauth42
@@ -190,6 +228,7 @@ export async function buildApp(
   await app.register(multipart, {
     limits: { fileSize: avatarMaxBytes, files: 1 },
   });
+  await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
   await app.register(swagger, {
     openapi: {
       info: { title: "Cyber Board Cafe API", version: "0.1.0" },
@@ -270,11 +309,12 @@ export async function buildApp(
       }
     },
   );
-  registerAuthRoutes(app, getAuth);
+  registerAuthRoutes(app, getRouteAuth);
   registerTwoFactorRoutes(app, getAuth, getTwoFactor);
   registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers);
   registerStatsRoutes(app, getAuth, getStats);
   registerAvatarRoutes(app, getAuth, getAvatars);
+  registerRealtimeRoutes(app, getAuth, connections, realtimeConfig);
   return app;
 }

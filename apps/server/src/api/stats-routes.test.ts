@@ -71,8 +71,8 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
   beforeAll(async () => {
     database = await openTestDatabase();
     games = createGameCommandService(database.db, {
-      gomoku: { version: "test", rules: winAtCorner },
-      othello: { version: "test", rules: winAtCorner },
+      gomoku: { version: "test", rules: winAtCorner, board: () => [] },
+      othello: { version: "test", rules: winAtCorner, board: () => [] },
     });
   });
   afterAll(async () => {

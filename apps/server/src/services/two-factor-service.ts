@@ -39,9 +39,21 @@ export type EnableResult =
         | "INVALID_TWO_FACTOR_CODE";
     };
 
+/**
+ * TOTP 2FA 설정·활성화·해제와 코드 검증 서비스를 만듭니다.
+ *
+ * @param box - TOTP secret 암호화에 쓰는 {@link SecretBox}
+ */
 export function createTwoFactorService(db: Database, box: SecretBox) {
-  // Checks a TOTP code or consumes a recovery code. The secret row is locked
-  // so two requests cannot both accept the same code.
+  /**
+   * 6자리 TOTP 코드를 확인하거나, 그 밖의 입력은 복구 코드로 보고 사용 처리합니다.
+   *
+   * @param tx - 호출자의 트랜잭션. secret 행 잠금과 사용 기록이 그 트랜잭션에 묶입니다.
+   * @returns 통과하면 `true`. 2FA가 켜져 있지 않으면 `false`
+   *
+   * @remarks
+   * secret 행을 잠그므로 두 요청이 같은 코드를 둘 다 통과시키지 못합니다. 통과한 TOTP step은 저장되어 다시 쓸 수 없습니다.
+   */
   async function verifyCode(tx: Executor, userId: number, code: string) {
     const secret = await repo.findSecret(tx, userId, true);
     if (!secret?.enabledAt) return false;
@@ -65,6 +77,14 @@ export function createTwoFactorService(db: Database, box: SecretBox) {
       return repo.isEnabled(db, userId);
     },
 
+    /**
+     * 확인 전의 새 TOTP secret을 만들고 인증 앱 등록 정보를 돌려줍니다.
+     *
+     * @param accountName - 인증 앱에 표시할 계정 이름
+     * @returns 이미 켜져 있으면 `TWO_FACTOR_ALREADY_ENABLED`
+     *
+     * @remarks 다시 호출하면 확인 전 secret을 새 값으로 바꿉니다. 켜진 secret은 바꾸지 않습니다.
+     */
     async setup(userId: number, accountName: string) {
       return db.transaction(async (tx) => {
         const current = await repo.findSecret(tx, userId, true);
@@ -89,8 +109,13 @@ export function createTwoFactorService(db: Database, box: SecretBox) {
       });
     },
 
-    // Activation requires a valid code from the new secret, so a wrong scan
-    // never locks the user out.
+    /**
+     * 새 secret의 코드로 확인한 뒤 2FA를 켜고 복구 코드 10개를 발급합니다.
+     *
+     * @returns 성공하면 복구 코드 원문. 원문은 이때만 돌려주고 DB에는 해시만 남습니다.
+     *
+     * @remarks 유효한 코드가 있어야 켜지므로 잘못 스캔해도 계정이 잠기지 않습니다.
+     */
     async enable(userId: number, code: string): Promise<EnableResult> {
       return db.transaction(async (tx) => {
         const current = await repo.findSecret(tx, userId, true);
@@ -112,6 +137,11 @@ export function createTwoFactorService(db: Database, box: SecretBox) {
       });
     },
 
+    /**
+     * TOTP 코드 또는 복구 코드를 확인한 뒤 2FA를 끄고 secret·복구 코드를 지웁니다.
+     *
+     * @remarks 기존 세션은 그대로 유지합니다.
+     */
     async disable(userId: number, code: string) {
       return db.transaction(async (tx) => {
         if (!(await repo.isEnabled(tx, userId))) {

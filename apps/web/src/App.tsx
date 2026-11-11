@@ -180,7 +180,7 @@ function EyeIcon({ visible }: { visible: boolean }) {
 }
 
 /**
- * 사이버 보드게임 카페의 인증(회원가입·로그인·2FA·토큰 갱신·로그아웃) 및 로비 진입 화면을 관리하는 최상위 컴포넌트입니다.
+ * 사이버 보드게임 카페의 인증·화면 전환과 실시간 대국 상태를 관리하는 최상위 컴포넌트입니다.
  */
 export function App() {
   const [view, setView] = useState<ScreenView>("login");
