@@ -232,6 +232,7 @@ export function generateCommandId(): CommandId {
 
 /**
  * 0부터 시작하는(0..14) 행·열 좌표로 오목 착수(place) 명령 페이로드를 생성합니다.
+ * @throws RangeError 좌표가 보드 범위의 정수가 아닌 경우
  */
 export function buildPlaceCommand(
   matchId: MatchId,
@@ -449,7 +450,7 @@ export function createInitialGomokuClientState(
 
 /**
  * 서버로부터 수신한 snapshot(match.snapshot 또는 game.updated)을 상태에 반영합니다.
- * stateVersion이 기준보다 낮은 갱신은 무시하고 ignoredUpdateCount만 증가시킵니다.
+ * `game.updated`는 현재 버전 이하를, `match.snapshot`은 더 낮은 버전만 무시하고 ignoredUpdateCount를 증가시킵니다.
  */
 export function applyIncomingSnapshot(
   state: GomokuClientState,
@@ -896,7 +897,7 @@ export function describeGomokuResult(
 }
 
 /**
- * 남은 재접속 유예 시간(밀리초)을 `MM:SS` 및 초 단위 문자열로 변환합니다.
+ * 남은 재접속 유예 시간을 밀리초·초·`MM:SS` 문자열·진행률을 담은 객체로 변환합니다.
  */
 export function formatRemainingGraceTime(remainingMs: number): {
   clampedMs: number;
