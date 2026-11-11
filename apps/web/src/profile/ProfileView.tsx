@@ -29,6 +29,7 @@ import { Avatar } from "./Avatar.tsx";
 const GAME_TYPES: GameType[] = ["gomoku", "othello"];
 const MATCH_PAGE_SIZE = 10;
 
+/** 조회 대상·로그인 사용자와 편집 결과 반영·화면 이동 동작을 받는 프로필 화면 속성입니다. */
 interface ProfileViewProps {
   /** 조회할 사용자 ID. 로그인한 본인의 ID이면 편집 가능한 "내 프로필"로 표시합니다. */
   userId: number;

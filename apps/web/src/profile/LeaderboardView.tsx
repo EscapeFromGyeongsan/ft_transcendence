@@ -11,6 +11,7 @@ import { Avatar } from "./Avatar.tsx";
 
 const LEADERBOARD_LIMIT = 50;
 
+/** 로그인 사용자와 프로필 이동 동작·조회 API를 받는 순위 화면 속성입니다. */
 interface LeaderboardViewProps {
   currentUserId: number;
   onOpenProfile: (userId: number) => void;
