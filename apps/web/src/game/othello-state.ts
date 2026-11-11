@@ -245,6 +245,7 @@ export function computeOthelloLegalMoves(
 
 /**
  * 0부터 시작하는(0..7) 행·열 좌표로 오델로 착수(place) 명령 페이로드를 생성합니다.
+ * @throws RangeError 좌표가 보드 범위의 정수가 아닌 경우
  */
 export function buildOthelloPlaceCommand(
   matchId: MatchId,
