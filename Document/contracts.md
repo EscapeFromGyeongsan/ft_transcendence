@@ -434,6 +434,10 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 아래 표는 2026-10-28 Swagger 출력에서 옮겼다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
 
+IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두고 브라우저 저장소에 기록하지 않는다. refresh token은 `cbc.auth.refreshToken` 키에 보관하며, 로그인 상태 유지를 선택하면 `localStorage`, 해제하면 `sessionStorage`를 쓴다. 새로고침 뒤 보호 API를 호출하기 전에 refresh로 access token을 복원한다. 동시 갱신은 같은 Promise를 공유하고, 이전 access token의 401이 늦게 도착하면 이미 교체된 토큰으로 한 번 재시도한다. 갱신 실패·갱신 후 401·로그아웃 시 보관 토큰을 지운다. 기존 `cyber_board_cafe.auth.tokens` 값은 refresh token만 이전한 뒤 삭제하고 access token은 복원하지 않는다. 저장소 접근·쓰기가 차단되면 현재 페이지 메모리만 사용하므로 다음 페이지 로드의 로그인 유지가 보장되지 않는다.
+
+`localStorage`를 공유하는 여러 탭의 갱신은 [Web Locks](https://w3c.github.io/web-locks/)의 origin 단위 배타 잠금(`cbc.auth.refresh`)으로 직렬화한다. 잠금 획득 후 최신 refresh token을 다시 읽고, 새 토큰 저장까지 잠금을 유지한다. 비밀이 아닌 로그인 표식 `cbc.auth.sessionId`를 같은 저장소에 두어 토큰 회전과 다른 로그인·로그아웃을 구별한다. 표식이 바뀐 이전 요청·갱신 응답은 폐기하며 새 로그인을 덮어쓰거나 지우지 않는다. 로그인 유지 해제 시 토큰과 표식은 탭별 `sessionStorage`에만 있다. Web Locks를 제공하는 Chrome의 HTTPS·localhost 환경에서 탭 간 갱신을 지원한다. Web Locks 미지원 환경은 같은 탭의 중복 요청만 합치므로 공유 토큰의 여러 탭 동시 갱신은 지원하지 않는다.
+
 ### 11.1 오류 응답 형식
 
 ```json

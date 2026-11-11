@@ -1,5 +1,6 @@
 import { avatarInitial } from "../api/profile-format.ts";
 
+/** 아바타 이미지·대체 닉네임과 표시 크기·스타일을 지정하는 속성입니다. */
 interface AvatarProps {
   nickname: string | null | undefined;
   /** `null`이면 닉네임 첫 글자를 담은 기본 이미지를 표시합니다. */
