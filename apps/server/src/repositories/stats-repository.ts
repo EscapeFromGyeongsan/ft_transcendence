@@ -103,7 +103,7 @@ export function findLeaderboard(db: Executor, gameType: string, limit: number) {
     .limit(limit);
 }
 
-/** Read access policy inside a transaction and hold it until the records are read. */
+/** 트랜잭션에서 전적 공개 설정을 읽고 전적 조회가 끝날 때까지 공유 잠금을 유지합니다. */
 export async function findRecordsAccess(db: Executor, userId: number) {
   const [row] = await db
     .select({ recordsPublic: users.recordsPublic })

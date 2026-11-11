@@ -3,7 +3,7 @@ import type { Executor } from "../db/client.ts";
 import { users } from "../db/schema/users.ts";
 import { publicUserColumns, type PublicUser } from "./auth-repository.ts";
 
-/** Fields a signed-in user may change on their own profile. */
+/** 로그인한 사용자가 자신의 프로필에서 변경할 수 있는 필드입니다. */
 export interface ProfileUpdate {
   nickname?: string;
   recordsPublic?: boolean;
