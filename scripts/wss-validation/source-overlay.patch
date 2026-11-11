@@ -1,0 +1,3571 @@
+diff --git a/.github/ISSUE_TEMPLATE/task.md b/.github/ISSUE_TEMPLATE/task.md
+new file mode 100644
+--- /dev/null
++++ b/.github/ISSUE_TEMPLATE/task.md
+@@ -0,0 +1,19 @@
++---
++name: 작업 요청
++about: 작게 나눈 개발·문서·협업 작업을 요청합니다.
++title: "[영역] "
++labels: []
++assignees: []
++---
++
++## 배경
++<!-- 왜 필요한 작업인지 간단히 설명합니다. -->
++
++## 작업 내용
++- [ ] <!-- 완료 여부를 확인할 수 있는 작업 -->
++
++## 선행 이슈
++<!-- 선행 작업이 없다면 '없음'으로 적습니다. -->
++
++## 담당자
++<!-- 다른 팀원에게 요청하는 작업이라면 GitHub Assignee를 지정합니다. -->
+diff --git a/.github/pull_request_template.md b/.github/pull_request_template.md
+new file mode 100644
+--- /dev/null
++++ b/.github/pull_request_template.md
+@@ -0,0 +1,21 @@
++## Related Issue
++<!-- 연결 이슈를 작성합니다. 병합으로 종료할 이슈라면 Closes #번호를 사용합니다. -->
++Closes #
++
++## Implementation Summary
++<!-- 주요 변경사항을 요약합니다. -->
++
++## Affected Requirements
++<!-- 관련 요구사항 또는 '없음' -->
++
++## Affected Contracts
++<!-- API/DB/공통 계약 변경 또는 '없음' -->
++
++## Test Result
++<!-- 실제 실행한 명령, 검증 커밋·환경, 통과/실패를 기록합니다. 미실행 시 이유를 적습니다. -->
++
++## Documentation Change
++<!-- 갱신한 문서 또는 '없음' -->
++
++## Reviewer
++<!-- 작성자 외 리뷰어 1명. 인증·스키마·공통 계약 변경은 B도 리뷰합니다. -->
+diff --git a/.gitignore b/.gitignore
+--- a/.gitignore
++++ b/.gitignore
+@@ -13,10 +12,0 @@
+-
+-# Full-app examples are public; generated material is local only.
+-!.env.full.example
+-infra/certs/
+-infra/secrets/
+-*.key
+-*.pem
+-*.crt
+-*.p12
+-*.pfx
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+--- a/CONTRIBUTING.md
++++ b/CONTRIBUTING.md
+@@ -23 +23,3 @@
+-포함 항목 (`Document/cyber_boardgame_documentation_spec.md` 26장):
++작은 단위의 작업은 [작업 이슈 템플릿](.github/ISSUE_TEMPLATE/task.md)을 사용한다. **작업 하나당 이슈 하나**를 원칙으로 하며, 제목은 `[영역] 할 일` 형식으로 작성한다. 본문에는 배경, 체크리스트 형태의 작업 내용, 선행 이슈를 적는다. 해당 항목이 없으면 `없음`으로 표시한다.
++
++큰 작업이나 마일스톤·요구사항 추적이 필요한 이슈에는 `Document/cyber_boardgame_documentation_spec.md` 26장의 상세 항목을 사용한다.
+@@ -36,0 +39 @@
++- 큰 작업은 상위 이슈로 두고, 실제 실행할 작업을 작은 하위 이슈로 연결한다.
+@@ -50 +53 @@
+-포함 항목 (문서화 명세서 26장):
++PR 작성 시 [PR 템플릿](.github/pull_request_template.md)을 사용한다. 포함 항목 (문서화 명세서 26장):
+@@ -81,0 +85,4 @@
++
++## TypeScript/React 코드 문서화 주석
++
++공개 함수·타입·컴포넌트 및 복잡한 로직에는 [TSDoc 작성 규칙](Document/code-conventions.md)을 적용한다. 모든 내부 함수에 주석을 강제하지 않으며, 실제 코드의 책임·제약·오류 조건을 중심으로 설명한다. 기존 Swagger/OpenAPI와 게임 계약 문서의 역할을 유지한다.
+diff --git a/Document/SDS.md b/Document/SDS.md
+--- a/Document/SDS.md
++++ b/Document/SDS.md
+@@ -330 +330 @@
+-- 게임 규칙(C)은 `GameRules` 함수 하나와 규칙 버전(`{ version, rules }`)으로 플랫폼에 연결한다. 입력은 지금까지의 착수 목록·두는 사람·행동, 출력은 거절 코드 또는 다음 차례·종료 결과다.
++- 게임 규칙(C)은 규칙 버전, `GameRules` 함수, 보드 복원 함수(`{ version, rules, board }`)로 플랫폼에 연결한다. `rules`의 입력은 지금까지의 착수 목록·두는 사람·행동, 출력은 거절 코드(`INVALID_ACTION`, `GAME_FINISHED`) 또는 다음 차례·종료 결과다. `board`는 저장된 착수 목록으로 현재 보드를 만든다(오델로의 뒤집기는 규칙이 필요하므로 엔진이 맡는다).
+@@ -1026 +1026 @@
+-- 거절 코드: `NOT_FOUND`, `NOT_PARTICIPANT`, `COMMAND_ID_CONFLICT`(기록 안 함), `GAME_FINISHED`, `GAME_NOT_ACTIVE`, `VERSION_CONFLICT`, `NOT_YOUR_TURN`, 엔진 코드(예: `CELL_OCCUPIED`)(기록함).
++- 거절 코드: `NOT_FOUND`, `NOT_PARTICIPANT`, `COMMAND_ID_CONFLICT`(기록 안 함), `GAME_FINISHED`, `GAME_NOT_ACTIVE`, `VERSION_CONFLICT`, `NOT_YOUR_TURN`, 엔진 코드 `INVALID_ACTION`(기록함). 세부 사유는 엔진의 `message`에만 둔다(IF-01).
+@@ -1504 +1504 @@
+-`rulesVersion`은 호출자가 넘기지 않는다. 서버가 등록된 엔진의 버전(`{ version, rules }`)으로 채워, 지원하지 않는 버전이 저장되지 않는다. `apply()`는 저장된 버전과 등록된 버전이 다르면 규칙을 적용하지 않고 예외로 끝낸다(트랜잭션 롤백). 재시작 때 미완료 경기가 모두 무효가 되므로 정상 운영에서는 일어나지 않는다.
++`rulesVersion`은 호출자가 넘기지 않는다. 서버가 등록된 엔진의 버전(`{ version, rules, board }`의 `version`)으로 채워, 지원하지 않는 버전이 저장되지 않는다. `apply()`는 저장된 버전과 등록된 버전이 다르면 규칙을 적용하지 않고 예외로 끝낸다(트랜잭션 롤백). 재시작 때 미완료 경기가 모두 무효가 되므로 정상 운영에서는 일어나지 않는다.
+@@ -1526,2 +1526,4 @@
+-    P --> R["game, players, moves 반환 (stateVersion과 moves가 항상 같은 시점) → D가 엔진으로 재생해 snapshot 생성"]
+-```
++    P --> R["game, players, moves 반환 (stateVersion과 moves가 항상 같은 시점)"]
++```
++
++`getSnapshot(matchId)`는 같은 조회 결과를 계약의 `GameSnapshot`으로 바꿔 돌려준다(`구현됨`). 보드는 등록된 엔진의 `board(moves)`로 만들고, `players`는 좌석별 사용자 ID, `currentPlayerId`는 `currentTurn` 좌석의 사용자, `result`는 저장된 `outcome`·`resultReason`·`winnerUserId`다. 종료 결과를 엔진이 다시 계산하지 않는다. D는 `match.snapshot`, 재접속, `VERSION_CONFLICT` 상세에 이것을 쓴다. 없는 경기는 `undefined`.
+@@ -1651 +1653 @@
+-#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 `계획`, 서버 재시작 `구현됨`)
++#### 2.10.28 시스템 종료: 이탈 만료·서버 재시작 무효 (B 저장 + D 호출, 이탈 만료 저장 `구현됨`·시계 `계획`(D), 서버 재시작 `구현됨`)
+@@ -1679 +1681,3 @@
+-- `Finish` 타입에 `void`를 추가하고, 결과 사유에 `disconnect_timeout`, `server_restart`를 허용한다(계약 PR #6의 `TwoPlayerResult`와 같음).
++- `Finish` 타입에 `void`를 추가했다. 결과 사유 `disconnect_timeout`, `server_restart`는 계약 PR #6의 `TwoPlayerResult`와 같다.
++- `finishBySystem()`은 `{ status: "finished", stateVersion }` 또는 `{ status: "skipped" }`를 돌려준다. `finished`일 때만 D가 `GAME_FINISHED`를 보낸다. 없는 경기, 이미 종료, 버전 불일치는 `skipped`다.
++- `absentUserIds`가 비었거나 참가자가 아닌 사용자가 있으면 예외를 던진다. D의 호출 오류이므로 사용자에게 보낼 오류 코드가 아니다.
+diff --git a/Document/code-conventions.md b/Document/code-conventions.md
+new file mode 100644
+--- /dev/null
++++ b/Document/code-conventions.md
+@@ -0,0 +1,66 @@
++# TSDoc 코드 주석 작성 규칙
++
++이 문서는 TypeScript/React 코드에 적용하는 **문서화 주석 코딩 컨벤션**을 정의한다. C의 Doxygen `@brief`에 해당하는 요약은 `/** ... */`의 **첫 문장**으로 작성한다. 이 규칙은 코드를 설명하는 기준이며, 기존 구현 전체에 즉시 주석을 추가하도록 요구하지 않는다.
++
++## 적용 대상
++
++- `apps/server/src/`: 공개 서비스 함수·클래스·메서드, 인증·게임·DB 관련 복잡한 계약
++- `apps/web/src/`: 재사용 React 컴포넌트, Props 타입, 커스텀 훅, 복잡한 상태 전이
++- `packages/game-contracts/src/`: 공개 인터페이스·타입·명령·이벤트·상태 데이터
++
++다른 모듈에도 같은 원칙을 적용한다. 단순한 private 함수, 타입만으로 의미가 충분히 드러나는 선언, 자명한 getter에는 주석을 강제하지 않는다.
++
++## 기본 형식
++
++```ts
++/**
++ * 플레이어의 착수 요청을 검증하고 서버에서 확정된 상태를 반환합니다.
++ *
++ * @param command - 경기 식별자와 착수 정보를 담은 명령
++ * @returns 서버에서 확정된 경기 상태
++ * @throws GameError 참가자 권한 또는 착수 규칙 검증에 실패한 경우
++ *
++ * @remarks
++ * 좌표 및 상태 버전 규칙은 실제 공통 계약을 따른다.
++ */
++```
++
++- 첫 문장: **무엇을 하는지** 짧고 명확하게 작성한다. `@brief` 태그는 사용하지 않는다.
++- `@param 이름 - 설명`: 타입만으로 드러나지 않는 매개변수 의미·단위·제약을 설명한다.
++- `@returns`: 반환값의 의미나 특별한 반환 조건이 있을 때 사용한다. 반환값이 없는 함수에 기계적으로 붙이지 않는다.
++- `@throws`: 호출자가 처리해야 하는 오류 조건을 명시한다. 실제 코드의 예외 동작과 일치해야 한다.
++- `@remarks`: 보안, 부작용, 동시성, 불변식, 트랜잭션, 게임 규칙 등 추가 설명에 사용한다.
++- `@example`: 사용법이 자명하지 않은 공개 API에 한해 추가한다.
++- TypeScript의 타입 선언을 주석에 그대로 반복하지 않는다.
++
++## 대상별 기준
++
++### 서비스·Repository
++
++공개 메서드의 책임, 권한 검증, 실패 조건, DB 트랜잭션 경계, 멱등성, 재시도와 동시성 보장 수준을 필요한 범위에서 설명한다. 구현하지 않은 보장 사항을 단정하지 않는다.
++
++### React 컴포넌트·훅
++
++컴포넌트의 역할, 주요 Props 제약, 상태의 소유 주체, 이벤트 콜백의 의미를 설명한다. 단순 렌더링 함수의 반환 타입을 반복 설명하지 않는다.
++
++### 공통 게임 계약
++
++공개 명령·이벤트·스냅샷 타입의 의미, 좌표 기준, 상태 버전, 서버 확정 여부, 게임별 제약을 실제 `Document/contracts.md`와 일치시킨다.
++
++### 인증·보안
++
++토큰·OAuth state·TOTP·복구 코드의 만료, 검증, 저장·노출 제약 중 코드에서 보장하는 사항을 기록한다. 주석과 예제에 실제 비밀값이나 자격 증명을 넣지 않는다.
++
++## API 문서와의 역할 분리
++
++REST API의 경로, 요청·응답 스키마, HTTP 상태 코드는 기존 **Fastify Swagger/OpenAPI** 및 `Document/contracts.md`를 기준으로 관리한다. TSDoc은 함수의 내부 책임과 비자명한 호출 계약을 보완하며 API 명세를 중복 작성하지 않는다.
++
++## 유지보수·검토
++
++1. 새 공개 API 또는 복잡한 로직을 작성할 때 필요한 TSDoc을 함께 추가한다.
++2. 동작·계약을 변경할 때 해당 주석도 같은 PR에서 갱신한다.
++3. 리뷰 시 실제 구현, SRS/SDS, `Document/contracts.md`와 모순되는 설명이 없는지 확인한다.
++4. 문서화 주석만 추가하는 작업은 기능 변경과 분리한다.
++5. TypeDoc 자동 생성 도입은 별도 합의 사항이며, 이 규칙만으로 새 의존성·CI 작업을 강제하지 않는다.
++
++관련 이슈: [#44](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/44).
+diff --git a/Document/contracts.md b/Document/contracts.md
+--- a/Document/contracts.md
++++ b/Document/contracts.md
+@@ -3 +3 @@
+-- 문서 버전: 0.3.1 / 작성일: 2026-10-08 / 수정일: 2026-10-28 (KST)
++- 문서 버전: 0.4.0 / 작성일: 2026-10-08 / 수정일: 2026-10-28 (KST)
+@@ -105 +105 @@
+-현재 서버(PR #11)는 게임별 엔진을 `{ version, rules }`로 등록한다. `createMatch()`는 호출자에게 규칙 버전을 받지 않고 등록 버전으로 저장한다. 착수 시 저장 버전과 등록 버전이 다르면 적용하지 않고 트랜잭션을 롤백한다. 오목 예제는 PR #12 엔진의 `gomoku-freestyle-v1`을 사용한다. 현재 서버는 게임별 한 버전을 지원하며, 공통 `rulesVersion: string` 타입은 향후 다른 게임이나 버전 등록을 허용한다. 여러 규칙 버전의 동시 운영은 이번 범위에 포함하지 않는다.
++현재 서버(PR #11)는 게임별 엔진을 `{ version, rules, board }`로 등록한다. `board(moves)`는 저장된 착수로 현재 보드를 만들어 `getSnapshot()`에 쓴다. `createMatch()`는 호출자에게 규칙 버전을 받지 않고 등록 버전으로 저장한다. 착수 시 저장 버전과 등록 버전이 다르면 적용하지 않고 트랜잭션을 롤백한다. 오목 예제는 PR #12 엔진의 `gomoku-freestyle-v1`을 사용한다. 현재 서버는 게임별 한 버전을 지원하며, 공통 `rulesVersion: string` 타입은 향후 다른 게임이나 버전 등록을 허용한다. 여러 규칙 버전의 동시 운영은 이번 범위에 포함하지 않는다.
+@@ -109 +109 @@
+-  gomoku: { version: "gomoku-freestyle-v1", rules: gomoku.rules },
++  gomoku: { version: "gomoku-freestyle-v1", rules: gomoku.rules, board: gomoku.board },
+@@ -371 +371 @@
+-현재 오류 객체에는 `matchId`, `commandId`나 최신 snapshot이 없다. 요청 연결·재동기화·전송 envelope는 후속 검토 대상이며, 현재 서버 서비스의 검사 우선순위는 9.1절을 따른다. 서버는 차례 위반을 엔진 호출 전에 `NOT_YOUR_TURN`으로 거절한다. 현재 오목 엔진은 공개 코드 중 `INVALID_ACTION`, `GAME_FINISHED`만 반환한다. B는 엔진 오류를 공개 코드의 부분집합으로 제한하고 미등록 코드는 서버 오류로 처리하도록 제안했다. 현재 서버의 `RuleDecision.code`는 아직 `string`이며 타입 제한과 미등록 코드 방어는 B의 #6 병합 후 작업이다. #29·#31에서 소비자 확인을 추적한다.
++현재 오류 객체에는 `matchId`, `commandId`나 최신 snapshot이 없다. 요청 연결·재동기화·전송 envelope는 후속 검토 대상이며, 현재 서버 서비스의 검사 우선순위는 9.1절을 따른다. 서버는 차례 위반을 엔진 호출 전에 `NOT_YOUR_TURN`으로 거절한다. 현재 오목 엔진은 공개 코드 중 `INVALID_ACTION`, `GAME_FINISHED`만 반환한다. B는 엔진 오류를 공개 코드의 부분집합으로 제한하고 미등록 코드는 서버 오류로 처리하도록 제안했다. 서버의 `RuleDecision.code`는 `INVALID_ACTION | GAME_FINISHED`로 제한했고, 실행 중 엔진이 다른 코드를 돌려주면 거절 기록 없이 서버 오류로 롤백한다. #29·#31에서 소비자 확인을 추적한다.
+@@ -379 +379 @@
+-이 문서는 공통 데이터 객체를 정의하는 초안이다. REST endpoint·HTTP 상태 코드, WebSocket 이벤트 이름·메시지 포장 형식·요청 응답 연결 방식은 해당 구현과 함께 추가한다. `GameError.code`만으로 HTTP 상태 코드나 WebSocket 이벤트를 확정하지 않는다.
++이 문서는 공통 데이터 객체를 정의하는 초안이다. REST endpoint별 HTTP 상태 코드는 11절에 기록한다. WebSocket 이벤트 이름·메시지 포장 형식·요청 응답 연결 방식은 해당 구현과 함께 추가한다. `GameError.code`만으로 HTTP 상태 코드나 WebSocket 이벤트를 확정하지 않는다.
+@@ -406 +406,2 @@
+-- [ ] #29·#31: 공개 코드 부분집합 정책을 소비자가 확인하고 B가 서버 타입·미등록 코드 방어를 구현한다.
++- [x] B가 서버 타입을 공개 코드 부분집합으로 제한하고 미등록 코드를 서버 오류로 처리했다(2026-10-28).
++- [ ] #29·#31: 공개 코드 부분집합 정책을 소비자가 확인한다.
+@@ -411,0 +413,62 @@
++
++## 11. REST API 상태 코드
++
++서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 아래 표는 2026-10-28 Swagger 출력에서 옮겼다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
++
++### 11.1 오류 응답 형식
++
++```json
++{ "error": { "code": "VALIDATION_ERROR", "message": "...", "details": {} } }
++```
++
++- 화면·클라이언트는 `code`로 분기한다. `message`는 표시·디버깅용이다.
++- `details`는 선택 필드다.
++- 8절의 `GameError`는 게임 명령 결과이며, REST 오류 응답과 같은 객체가 아니다.
++
++### 11.2 공통 코드
++
++| 상태 | `code` | 언제 |
++|---|---|---|
++| 400 | `BAD_REQUEST` | 본문을 해석할 수 없음 (깨진 JSON, multipart) |
++| 401 | `UNAUTHENTICATED` | token 없음·만료·위조, 폐기·만료된 세션 |
++| 413 | `PAYLOAD_TOO_LARGE` | 본문 크기 제한 초과 (JSON 1 MiB, 아바타 2 MiB) |
++| 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type |
++| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패 |
++| 429 | `RATE_LIMITED` | 요청 횟수 제한 초과 |
++| 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
++| 503 | `SERVICE_UNAVAILABLE` | DB 미설정·연결 실패 등 의존 서비스 장애 |
++
++본문을 받는 POST·PATCH는 본문이 없어도 보내면 해석하므로 400·413·415가 붙는다.
++
++### 11.3 엔드포인트별 상태 코드
++
++괄호 안은 그 상태에서 나오는 `code`다. 11.2의 공통 의미와 같은 코드는 상태만 적는다.
++
++| 메서드·경로 | 성공 | 오류 |
++|---|---|---|
++| `GET /api/health` | 200 | 없음 |
++| `GET /api/health/db` | 200 | 503 |
++| `POST /api/auth/register` | 201 | 400, 409 (`EMAIL_TAKEN`, `NICKNAME_TAKEN`), 413, 415, 422, 429, 500, 503 |
++| `POST /api/auth/login` | 200 (2FA 계정은 `challengeToken`) | 400, 401 (`INVALID_CREDENTIALS`), 413, 415, 422, 429, 500, 503 |
++| `POST /api/auth/refresh` | 200 | 400, 401, 413, 415, 422, 429, 500, 503 |
++| `POST /api/auth/logout` | 204 | 400, 401, 413, 415, 500, 503 |
++| `POST /api/auth/2fa/verify` | 200 | 400, 401 (`UNAUTHENTICATED`, `INVALID_TWO_FACTOR_CODE`), 413, 415, 422, 429, 500, 503 |
++| `GET /api/auth/2fa` | 200 | 401, 500, 503 |
++| `POST /api/auth/2fa/setup` | 200 | 400, 401, 409 (`TWO_FACTOR_ALREADY_ENABLED`), 413, 415, 500, 503 |
++| `POST /api/auth/2fa/enable` | 200 | 400 (`BAD_REQUEST`, `INVALID_TWO_FACTOR_CODE`), 401, 409 (`TWO_FACTOR_NOT_SET_UP`, `TWO_FACTOR_ALREADY_ENABLED`), 413, 415, 422, 429, 500, 503 |
++| `POST /api/auth/2fa/disable` | 204 | 400 (`BAD_REQUEST`, `INVALID_TWO_FACTOR_CODE`), 401, 409 (`TWO_FACTOR_NOT_ENABLED`), 413, 415, 422, 429, 500, 503 |
++| `POST /api/auth/oauth/42/login` | 200 | 400, 413, 415, 429, 500, 503 |
++| `POST /api/auth/oauth/42/link` | 200 | 400, 401, 413, 415, 500, 503 |
++| `POST /api/auth/oauth/42/callback` | 200 | 400, 401 (`OAUTH_STATE_INVALID`, `OAUTH_FAILED`, `UNAUTHENTICATED`), 409 (`EMAIL_TAKEN`, `OAUTH_ACCOUNT_LINKED`, `OAUTH_ALREADY_LINKED`), 413, 415, 422 (`VALIDATION_ERROR`, `OAUTH_EMAIL_MISSING`), 429, 500, 502 (`OAUTH_PROVIDER_ERROR`), 503 |
++| `GET /api/users/me` | 200 | 401, 500, 503 |
++| `PATCH /api/users/me` | 200 | 400, 401, 409 (`NICKNAME_TAKEN`), 413, 415, 422, 500, 503 |
++| `GET /api/users/{userId}` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
++| `GET /api/users/{userId}/stats` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
++| `GET /api/users/{userId}/matches` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
++| `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |
++| `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
++| `DELETE /api/users/me/avatar` (PR #15) | 204 | 401, 500, 503 |
++| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
++
++- 403은 아직 쓰지 않는다. 다른 사용자의 자원을 바꾸는 API가 없고, `me` 경로는 인증된 사용자 자신만 다루기 때문이다.
++- 경기 조회·명령 API는 REST에 없다. 경기는 WebSocket(IF-03, D)으로 다루고, 그 오류는 8절 `GameError`를 쓴다.
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -18,4 +17,0 @@
+-
+-Choose the local development workflow below, or the separate [full application HTTPS workflow](Document/runtime.md). Full-app startup, failure handling and persistence have been locally validated; see the remaining checks in the validation record.
+-
+-### Local development
+@@ -46 +42 @@
+-By default the local development servers listen on `127.0.0.1`. The API listen address can be overridden with `API_HOST`. Vite forwards `/api` requests to the API server. Swagger UI is served by the API server only and is not reachable through the web port. The API server does not watch source changes; restart `npm run dev` after changing server code.
++Both servers listen on `127.0.0.1` only. Vite forwards `/api` requests to the API server. Swagger UI is served by the API server only and is not reachable through the web port. The API server does not watch source changes; restart `npm run dev` after changing server code.
+@@ -60,19 +55,0 @@
+-### Full application containers
+-
+-Prepare `.env.full` from `.env.full.example`, the password file, and certificates as described in [the full execution guide](Document/runtime.md). Then:
+-
+-Set a private `JWT_SECRET` of at least 32 characters in `.env.full`. Compose passes
+-authentication settings explicitly and mounts a separate `avatars` volume at
+-`/data/avatars`, writable by the API's `node` user. These settings prepare the
+-server/avatar integration; the corresponding server routes must be included in
+-the checkout to use them. An empty `TWO_FACTOR_KEY` disables the optional 2FA key.
+-
+-```sh
+-docker compose --env-file .env.full --project-directory . \
+-  -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
+-```
+-
+-Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
+-
+-The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. WebSocket upgrade forwarding is prepared under `/api/`; actual WSS validation requires the real endpoint. See [the validation record](Document/runtime-validation.md).
+-
+@@ -83 +59,0 @@
+-- `API_HOST`: API listen address (default `127.0.0.1`; full-app Compose explicitly sets `0.0.0.0`).
+@@ -111,4 +87 @@
+-  compose.yaml          Local PostgreSQL container
+-  compose.full.yaml     Separate full-app execution
+-  Dockerfile            Workspace/server/web image targets
+-  nginx/                HTTPS/API/WebSocket proxy configuration
++  compose.yaml     Local PostgreSQL container
+@@ -132,2 +104,0 @@
+-- [Full application execution](Document/runtime.md): HTTPS preparation, startup, lifecycle and isolated verification
+-- [Runtime validation record](Document/runtime-validation.md): actual checks and pending evidence
+@@ -134,0 +106 @@
++- [TSDoc coding conventions](Document/code-conventions.md): TypeScript/React documentation comment rules
+diff --git a/apps/server/src/api/stats-routes.test.ts b/apps/server/src/api/stats-routes.test.ts
+--- a/apps/server/src/api/stats-routes.test.ts
++++ b/apps/server/src/api/stats-routes.test.ts
+@@ -74,2 +74,2 @@
+-      gomoku: { version: "test", rules: winAtCorner },
+-      othello: { version: "test", rules: winAtCorner },
++      gomoku: { version: "test", rules: winAtCorner, board: () => [] },
++      othello: { version: "test", rules: winAtCorner, board: () => [] },
+diff --git a/apps/server/src/api/ws-routes.test.ts b/apps/server/src/api/ws-routes.test.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/api/ws-routes.test.ts
+@@ -0,0 +1,757 @@
++import { randomUUID } from "node:crypto";
++import {
++  afterAll,
++  afterEach,
++  beforeAll,
++  beforeEach,
++  describe,
++  expect,
++  test,
++  vi,
++} from "vitest";
++import type { FastifyInstance } from "fastify";
++import type { WebSocket } from "ws";
++import type { Cell } from "@cafe/game-contracts";
++import { buildApp } from "../app.ts";
++import {
++  createGameCommandService,
++  type RegisteredRules,
++} from "../services/game-command-service.ts";
++import {
++  parseCommand,
++  parseEnvelope,
++  type RealtimeConfig,
++} from "./ws-routes.ts";
++import {
++  openTestDatabase,
++  resetTestDatabase,
++  testDatabaseUrl,
++} from "../test-support/database.ts";
++
++const jwtSecret = "test-secret-test-secret-test-secret";
++const password = "password-123";
++
++// Stand-in for the real engine (C): only the board is needed to show a match.
++const stubGomoku: RegisteredRules = {
++  version: "stub-1",
++  rules: ({ seat }) => ({
++    ok: true,
++    nextTurn: seat === "black" ? "white" : "black",
++  }),
++  board: (history) => {
++    const board: Cell[][] = Array.from({ length: 15 }, () =>
++      Array<Cell>(15).fill(null),
++    );
++    for (const m of history) board[m.row][m.col] = m.stone as Cell;
++    return board;
++  },
++};
++
++// Listeners must be attached before the message that triggers the reply.
++function nextMessage(socket: WebSocket) {
++  return new Promise<unknown>((resolve) =>
++    socket.once("message", (data) => resolve(JSON.parse(data.toString()))),
++  );
++}
++
++function closed(socket: WebSocket) {
++  return new Promise<{ code: number; reason: string }>((resolve) =>
++    socket.once("close", (code, reason) =>
++      resolve({ code, reason: reason.toString() }),
++    ),
++  );
++}
++
++function sendJson(socket: WebSocket, message: unknown) {
++  socket.send(JSON.stringify(message));
++}
++
++// Buffers every message so several replies in a row are not missed.
++function inbox(socket: WebSocket) {
++  const queue: unknown[] = [];
++  const waiting: ((message: unknown) => void)[] = [];
++  socket.on("message", (data) => {
++    const message = JSON.parse(data.toString());
++    const resolve = waiting.shift();
++    if (resolve) resolve(message);
++    else queue.push(message);
++  });
++  return () =>
++    queue.length > 0
++      ? Promise.resolve(queue.shift())
++      : new Promise<unknown>((resolve) => waiting.push(resolve));
++}
++
++test("parseEnvelope accepts only { type, requestId?, payload } objects", () => {
++  expect(parseEnvelope('{"type":"ping","payload":{}}')).toEqual({
++    type: "ping",
++    requestId: undefined,
++    payload: {},
++  });
++  expect(
++    parseEnvelope('{"type":"ping","requestId":"r1","payload":{}}'),
++  ).toMatchObject({ requestId: "r1" });
++  for (const bad of [
++    "not json",
++    "[]",
++    "null",
++    '{"payload":{}}',
++    '{"type":1,"payload":{}}',
++    '{"type":"ping"}',
++    '{"type":"ping","payload":[]}',
++    '{"type":"ping","requestId":"","payload":{}}',
++    `{"type":"ping","requestId":"${"r".repeat(65)}","payload":{}}`,
++  ]) {
++    expect(parseEnvelope(bad)).toBeNull();
++  }
++});
++
++// injectWS needs a ready app; route tests below without app.inject() call it.
++async function connect(app: FastifyInstance) {
++  await app.ready();
++  return app.injectWS("/api/ws");
++}
++
++test("parseCommand checks the shared GameCommand shape", () => {
++  const valid = {
++    matchId: 1,
++    gameType: "gomoku",
++    commandId: "8f14e45f-ceea-4e7a-9d3c-2f6b1a0c9b11",
++    expectedVersion: 0,
++    action: { type: "place", row: 7, col: 7, extra: true },
++  };
++  expect(parseCommand(valid)).toEqual({
++    matchId: 1,
++    commandId: valid.commandId,
++    expectedVersion: 0,
++    action: { type: "place", row: 7, col: 7 },
++  });
++  expect(parseCommand({ ...valid, action: { type: "resign" } })).toMatchObject({
++    action: { type: "resign" },
++  });
++  for (const change of [
++    { matchId: "1" },
++    { gameType: "chess" },
++    { gameType: undefined },
++    { commandId: "c1" },
++    { expectedVersion: -1 },
++    { expectedVersion: 1.5 },
++    { action: { type: "place", row: "7", col: 7 } },
++    { action: { type: "place", row: 7 } },
++    { action: { type: "undo" } },
++    { action: undefined },
++  ]) {
++    expect(parseCommand({ ...valid, ...change })).toBeNull();
++  }
++});
++
++describe("/api/ws without a database", () => {
++  let app: FastifyInstance;
++  afterEach(async () => {
++    await app?.close();
++  });
++
++  test("closes 4401 when no auth message arrives in time", async () => {
++    app = await buildApp({}, undefined, { jwtSecret }, undefined, {
++      authTimeoutMs: 50,
++    });
++    const socket = await connect(app);
++    expect(await closed(socket)).toEqual({
++      code: 4401,
++      reason: "Authentication timed out.",
++    });
++  });
++
++  test("closes 4400 on a malformed message", async () => {
++    app = await buildApp({}, undefined, { jwtSecret });
++    const socket = await connect(app);
++    const close = closed(socket);
++    socket.send("not json");
++    expect((await close).code).toBe(4400);
++  });
++
++  test("closes 4401 when the first message is not auth", async () => {
++    app = await buildApp({}, undefined, { jwtSecret });
++    const socket = await connect(app);
++    const close = closed(socket);
++    sendJson(socket, { type: "ping", payload: {} });
++    expect((await close).code).toBe(4401);
++  });
++
++  test("closes 1011 when authentication is unavailable", async () => {
++    app = await buildApp({}, undefined, { jwtSecret });
++    const socket = await connect(app);
++    const close = closed(socket);
++    sendJson(socket, { type: "auth", payload: { accessToken: "x" } });
++    expect((await close).code).toBe(1011);
++  });
++});
++
++describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
++  let database: Awaited<ReturnType<typeof openTestDatabase>>;
++  let app: FastifyInstance;
++
++  beforeAll(async () => {
++    database = await openTestDatabase();
++  });
++  beforeEach(async () => {
++    await resetTestDatabase(database);
++    await app?.close();
++    app = await buildApp(
++      {},
++      testDatabaseUrl,
++      { jwtSecret },
++      undefined,
++      {},
++      { gomoku: stubGomoku },
++    );
++  });
++  afterAll(async () => {
++    await app?.close();
++    await database?.close();
++  });
++
++  // Registers and logs in user p<n>; ids follow registration order.
++  async function loginToken(n = 1) {
++    const email = `p${n}@example.com`;
++    await app.inject({
++      method: "POST",
++      url: "/api/auth/register",
++      payload: { email, password, nickname: `p${n}` },
++    });
++    const response = await app.inject({
++      method: "POST",
++      url: "/api/auth/login",
++      payload: { email, password },
++    });
++    return response.json().accessToken as string;
++  }
++
++  async function authenticated(accessToken: string) {
++    const socket = await connect(app);
++    const reply = nextMessage(socket);
++    sendJson(socket, {
++      type: "auth",
++      requestId: "a1",
++      payload: { accessToken },
++    });
++    return { socket, reply: await reply };
++  }
++
++  test("auth with a valid token answers auth.ok, then ping gets pong", async () => {
++    const { socket, reply } = await authenticated(await loginToken());
++    expect(reply).toEqual({
++      type: "auth.ok",
++      requestId: "a1",
++      payload: { userId: 1, activeMatchId: null },
++    });
++
++    const pong = nextMessage(socket);
++    sendJson(socket, { type: "ping", requestId: "p1", payload: {} });
++    expect(await pong).toEqual({ type: "pong", requestId: "p1", payload: {} });
++
++    const error = nextMessage(socket);
++    sendJson(socket, { type: "unknown.event", requestId: "u1", payload: {} });
++    expect(await error).toMatchObject({
++      type: "error",
++      requestId: "u1",
++      payload: { code: "UNSUPPORTED_MESSAGE" },
++    });
++    socket.terminate();
++  });
++
++  test("an invalid or tampered token is closed with 4401", async () => {
++    const token = await loginToken();
++    for (const accessToken of ["not-a-jwt", `${token}x`]) {
++      const socket = await connect(app);
++      const close = closed(socket);
++      sendJson(socket, { type: "auth", payload: { accessToken } });
++      expect((await close).code).toBe(4401);
++    }
++  });
++
++  test("logout closes open connections of that session and rejects the token", async () => {
++    const token = await loginToken();
++    const { socket } = await authenticated(token);
++    const close = closed(socket);
++
++    const logout = await app.inject({
++      method: "POST",
++      url: "/api/auth/logout",
++      headers: { authorization: `Bearer ${token}` },
++    });
++    expect(logout.statusCode).toBe(204);
++    expect(await close).toEqual({ code: 4401, reason: "Session ended." });
++
++    const retry = await connect(app);
++    const retryClose = closed(retry);
++    sendJson(retry, { type: "auth", payload: { accessToken: token } });
++    expect((await retryClose).code).toBe(4401);
++  });
++
++  describe("match subscription", () => {
++    let sockets: WebSocket[];
++    let matchA: number;
++    let matchB: number;
++
++    // p1 (black) vs p2 in match A, p3 (black) vs p4 in match B.
++    beforeEach(async () => {
++      const tokens = [];
++      for (const n of [1, 2, 3, 4]) tokens.push(await loginToken(n));
++      const games = createGameCommandService(database.db, {
++        gomoku: stubGomoku,
++      });
++      matchA = await games.createMatch({
++        gameType: "gomoku",
++        blackUserId: 1,
++        whiteUserId: 2,
++      });
++      matchB = await games.createMatch({
++        gameType: "gomoku",
++        blackUserId: 3,
++        whiteUserId: 4,
++      });
++      sockets = [];
++      for (const token of tokens) {
++        sockets.push((await authenticated(token)).socket);
++      }
++    });
++    afterEach(() => {
++      for (const socket of sockets) socket.terminate();
++    });
++
++    function request(socket: WebSocket, type: string, payload: object) {
++      const reply = nextMessage(socket);
++      sendJson(socket, { type, requestId: "r1", payload });
++      return reply;
++    }
++
++    test("a participant receives the match snapshot", async () => {
++      expect(
++        await request(sockets[0], "match.subscribe", { matchId: matchA }),
++      ).toEqual({
++        type: "match.snapshot",
++        requestId: "r1",
++        payload: expect.objectContaining({
++          matchId: matchA,
++          gameType: "gomoku",
++          rulesVersion: "stub-1",
++          stateVersion: 0,
++          status: "playing",
++          players: { black: 1, white: 2 },
++          currentPlayerId: 1,
++          result: null,
++        }),
++      });
++    });
++
++    test("players of two matches each get only their own snapshot", async () => {
++      const replies = await Promise.all(
++        sockets.map((socket, i) =>
++          request(socket, "match.subscribe", {
++            matchId: i < 2 ? matchA : matchB,
++          }),
++        ),
++      );
++      expect(
++        replies.map(
++          (r) => (r as { payload: { matchId: number } }).payload.matchId,
++        ),
++      ).toEqual([matchA, matchA, matchB, matchB]);
++    });
++
++    test("a non-participant, unknown or invalid match is refused", async () => {
++      expect(
++        await request(sockets[2], "match.subscribe", { matchId: matchA }),
++      ).toMatchObject({
++        type: "error",
++        requestId: "r1",
++        payload: { code: "NOT_PARTICIPANT", matchId: matchA },
++      });
++      expect(
++        await request(sockets[0], "match.subscribe", { matchId: 9999 }),
++      ).toMatchObject({ payload: { code: "NOT_FOUND", matchId: 9999 } });
++      for (const matchId of [String(matchA), 0, -1, 1.5, null]) {
++        expect(
++          await request(sockets[0], "match.subscribe", { matchId }),
++        ).toMatchObject({ payload: { code: "INVALID_MESSAGE" } });
++      }
++    });
++
++    test("unsubscribe is acknowledged", async () => {
++      await request(sockets[0], "match.subscribe", { matchId: matchA });
++      expect(
++        await request(sockets[0], "match.unsubscribe", { matchId: matchA }),
++      ).toEqual({
++        type: "match.unsubscribed",
++        requestId: "r1",
++        payload: { matchId: matchA },
++      });
++    });
++
++    describe("game commands", () => {
++      let next: (() => Promise<unknown>)[];
++
++      // p1·p2 watch match A, p3·p4 watch match B.
++      beforeEach(async () => {
++        next = sockets.map(inbox);
++        for (const [i, socket] of sockets.entries()) {
++          sendJson(socket, {
++            type: "match.subscribe",
++            payload: { matchId: i < 2 ? matchA : matchB },
++          });
++          await next[i]();
++        }
++      });
++
++      function play(i: number, change: object = {}, commandId = randomUUID()) {
++        sendJson(sockets[i], {
++          type: "game.command",
++          requestId: "c1",
++          payload: {
++            matchId: matchA,
++            gameType: "gomoku",
++            commandId,
++            expectedVersion: 0,
++            action: { type: "place", row: 7, col: 7 },
++            ...change,
++          },
++        });
++        return commandId;
++      }
++
++      // The next message after a ping proves nothing else was queued.
++      async function expectNothingPending(i: number) {
++        sendJson(sockets[i], { type: "ping", payload: {} });
++        expect(await next[i]()).toMatchObject({ type: "pong" });
++      }
++
++      test("an applied move is acked to the sender and broadcast to the match only", async () => {
++        const commandId = play(0);
++        expect(await next[0]()).toEqual({
++          type: "game.ack",
++          requestId: "c1",
++          payload: {
++            matchId: matchA,
++            commandId,
++            stateVersion: 1,
++            duplicate: false,
++          },
++        });
++        for (const i of [0, 1]) {
++          const update = (await next[i]()) as {
++            type: string;
++            payload: { board: unknown[][] };
++          };
++          expect(update).toMatchObject({
++            type: "game.updated",
++            payload: { matchId: matchA, stateVersion: 1, currentPlayerId: 2 },
++          });
++          expect(update.payload.board[7][7]).toBe("black");
++        }
++        for (const i of [0, 1, 2, 3]) await expectNothingPending(i);
++      });
++
++      test("a resent commandId is acked as duplicate and not broadcast again", async () => {
++        const commandId = play(0);
++        await next[0]();
++        await next[0]();
++        play(0, {}, commandId);
++        expect(await next[0]()).toMatchObject({
++          type: "game.ack",
++          payload: { stateVersion: 1, duplicate: true },
++        });
++        expect(await next[1]()).toMatchObject({ type: "game.updated" });
++        await expectNothingPending(0);
++        await expectNothingPending(1);
++      });
++
++      test("a stale expectedVersion gets game.error and the latest snapshot", async () => {
++        play(0);
++        await next[1]();
++        play(1, { action: { type: "place", row: 0, col: 0 } });
++        expect(await next[1]()).toMatchObject({
++          type: "game.error",
++          requestId: "c1",
++          payload: {
++            code: "VERSION_CONFLICT",
++            matchId: matchA,
++            duplicate: false,
++          },
++        });
++        expect(await next[1]()).toMatchObject({
++          type: "match.snapshot",
++          payload: { stateVersion: 1 },
++        });
++      });
++
++      test("a rejected move is reported to the sender only", async () => {
++        play(1);
++        expect(await next[1]()).toMatchObject({
++          type: "game.error",
++          payload: { code: "NOT_YOUR_TURN" },
++        });
++        await expectNothingPending(0);
++        await expectNothingPending(1);
++      });
++
++      test("resign finishes the match for both players", async () => {
++        play(1, { action: { type: "resign" } });
++        await next[1]();
++        for (const i of [0, 1]) {
++          expect(await next[i]()).toMatchObject({
++            type: "game.updated",
++            payload: {
++              status: "finished",
++              result: { outcome: "win", winnerId: 1, reason: "resign" },
++            },
++          });
++        }
++      });
++
++      test("an invalid command payload is refused before apply", async () => {
++        play(0, { commandId: "not-a-uuid" });
++        expect(await next[0]()).toMatchObject({
++          type: "error",
++          payload: { code: "INVALID_MESSAGE" },
++        });
++        await expectNothingPending(1);
++      });
++
++      test("commands need a subscription", async () => {
++        sendJson(sockets[0], {
++          type: "match.unsubscribe",
++          payload: { matchId: matchA },
++        });
++        await next[0]();
++        play(0);
++        expect(await next[0]()).toMatchObject({
++          type: "game.error",
++          payload: { code: "NOT_SUBSCRIBED" },
++        });
++      });
++
++      test("a newer subscription of the same user takes control", async () => {
++        const { socket: tab2 } = await authenticated(await loginToken(1));
++        sockets.push(tab2);
++        next.push(inbox(tab2));
++        sendJson(tab2, {
++          type: "match.subscribe",
++          payload: { matchId: matchA },
++        });
++        expect(await next[4]()).toMatchObject({ type: "match.snapshot" });
++        expect(await next[0]()).toEqual({
++          type: "session.replaced",
++          payload: { matchId: matchA },
++        });
++
++        play(0);
++        expect(await next[0]()).toMatchObject({
++          type: "game.error",
++          payload: { code: "SESSION_REPLACED" },
++        });
++        play(4);
++        expect(await next[4]()).toMatchObject({ type: "game.ack" });
++        // The replaced tab still watches the match.
++        expect(await next[0]()).toMatchObject({ type: "game.updated" });
++      });
++    });
++  });
++
++  describe("matchmaking", () => {
++    test("two queued players get the same new match and can subscribe", async () => {
++      const players = [];
++      for (const n of [1, 2]) {
++        const { socket } = await authenticated(await loginToken(n));
++        players.push({ socket, next: inbox(socket) });
++      }
++      const matched = [];
++      for (const { socket, next } of players) {
++        sendJson(socket, {
++          type: "queue.join",
++          requestId: "q1",
++          payload: { gameType: "gomoku" },
++        });
++        expect(await next()).toEqual({
++          type: "queue.joined",
++          requestId: "q1",
++          payload: { gameType: "gomoku" },
++        });
++      }
++      for (const { next } of players) matched.push(await next());
++      expect(matched[0]).toMatchObject({
++        type: "queue.matched",
++        payload: { gameType: "gomoku" },
++      });
++      expect(matched[1]).toEqual(matched[0]);
++      const { matchId } = (matched[0] as { payload: { matchId: number } })
++        .payload;
++
++      const [p1] = players;
++      sendJson(p1.socket, { type: "match.subscribe", payload: { matchId } });
++      const snapshot = (await p1.next()) as {
++        payload: { players: { black: number; white: number } };
++      };
++      expect(
++        [snapshot.payload.players.black, snapshot.payload.players.white].sort(),
++      ).toEqual([1, 2]);
++
++      // Playing a match counts as active (DB check).
++      sendJson(p1.socket, {
++        type: "queue.join",
++        payload: { gameType: "othello" },
++      });
++      expect(await p1.next()).toMatchObject({
++        type: "error",
++        payload: { code: "ALREADY_ACTIVE" },
++      });
++      for (const { socket } of players) socket.terminate();
++    });
++
++    test("invalid gameType is refused and leave is acknowledged", async () => {
++      const { socket } = await authenticated(await loginToken());
++      const next = inbox(socket);
++      sendJson(socket, { type: "queue.join", payload: { gameType: "chess" } });
++      expect(await next()).toMatchObject({
++        type: "error",
++        payload: { code: "INVALID_MESSAGE" },
++      });
++      sendJson(socket, { type: "queue.join", payload: { gameType: "gomoku" } });
++      await next();
++      sendJson(socket, { type: "queue.leave", requestId: "l1", payload: {} });
++      expect(await next()).toEqual({
++        type: "queue.left",
++        requestId: "l1",
++        payload: {},
++      });
++      socket.terminate();
++    });
++  });
++
++  describe("disconnects and reconnects", () => {
++    let matchId: number;
++    let tokens: string[];
++
++    // Rebuilds the app with short timings; p1 (black) vs p2.
++    async function start(config: RealtimeConfig) {
++      await app.close();
++      app = await buildApp(
++        {},
++        testDatabaseUrl,
++        { jwtSecret },
++        undefined,
++        config,
++        { gomoku: stubGomoku },
++      );
++      tokens = [await loginToken(1), await loginToken(2)];
++      matchId = await createGameCommandService(database.db, {
++        gomoku: stubGomoku,
++      }).createMatch({ gameType: "gomoku", blackUserId: 1, whiteUserId: 2 });
++    }
++
++    async function player(token: string) {
++      const { socket, reply } = await authenticated(token);
++      const next = inbox(socket);
++      sendJson(socket, { type: "match.subscribe", payload: { matchId } });
++      expect(await next()).toMatchObject({ type: "match.snapshot" });
++      return { socket, next, reply };
++    }
++
++    test("auth.ok points a returning player to the unfinished match", async () => {
++      await start({});
++      const { reply } = await authenticated(tokens[0]);
++      expect(reply).toMatchObject({
++        type: "auth.ok",
++        payload: { userId: 1, activeMatchId: matchId },
++      });
++    });
++
++    test("the opponent hears about a leave and a return", async () => {
++      await start({});
++      const p1 = await player(tokens[0]);
++      const p2 = await player(tokens[1]);
++
++      p1.socket.terminate();
++      expect(await p2.next()).toEqual({
++        type: "player.disconnected",
++        payload: { matchId, userId: 1, remainingMs: expect.any(Number) },
++      });
++
++      const back = await player(tokens[0]);
++      expect(await p2.next()).toMatchObject({
++        type: "player.reconnected",
++        payload: { matchId, userId: 1 },
++      });
++      back.socket.terminate();
++      p2.socket.terminate();
++    });
++
++    test("running out of absence time hands the win to the opponent", async () => {
++      await start({ absenceBudgetMs: 300 });
++      const p1 = await player(tokens[0]);
++      const p2 = await player(tokens[1]);
++
++      p1.socket.terminate();
++      expect(await p2.next()).toMatchObject({ type: "player.disconnected" });
++      expect(await p2.next()).toMatchObject({
++        type: "game.updated",
++        payload: {
++          status: "finished",
++          stateVersion: 1,
++          result: { outcome: "win", winnerId: 2, reason: "disconnect_timeout" },
++        },
++      });
++      p2.socket.terminate();
++    });
++
++    test("a silent connection is cut by the heartbeat", async () => {
++      await start({ heartbeatIntervalMs: 50, heartbeatTimeoutMs: 150 });
++      const p1 = await player(tokens[0]);
++      const p2 = await player(tokens[1]);
++      // Stop answering ping frames, like a dropped network.
++      p1.socket.pong = () => {};
++      const close = closed(p1.socket);
++
++      expect(await p2.next()).toMatchObject({
++        type: "player.disconnected",
++        payload: { userId: 1 },
++      });
++      expect((await close).code).toBe(1006);
++      p2.socket.terminate();
++    });
++
++    test("matched players who never show up void the match", async () => {
++      // p3·p4 are matched through the queue and never subscribe.
++      await start({ absenceBudgetMs: 300 });
++      const games = createGameCommandService(database.db, {
++        gomoku: stubGomoku,
++      });
++      const pair = [];
++      for (const n of [3, 4]) {
++        const { socket } = await authenticated(await loginToken(n));
++        const next = inbox(socket);
++        sendJson(socket, {
++          type: "queue.join",
++          payload: { gameType: "gomoku" },
++        });
++        await next();
++        pair.push({ socket, next });
++      }
++      const matched = (await pair[0].next()) as {
++        payload: { matchId: number };
++      };
++      for (const { socket } of pair) socket.terminate();
++
++      await vi.waitFor(
++        async () =>
++          expect(
++            await games.getSnapshot(matched.payload.matchId),
++          ).toMatchObject({
++            status: "finished",
++            result: { outcome: "void", reason: "disconnect_timeout" },
++          }),
++        { timeout: 3000, interval: 100 },
++      );
++    });
++  });
++});
+diff --git a/apps/server/src/api/ws-routes.ts b/apps/server/src/api/ws-routes.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/api/ws-routes.ts
+@@ -0,0 +1,608 @@
++import type { FastifyInstance } from "fastify";
++import type { GameSnapshot, GameType } from "@cafe/game-contracts";
++import type { WebSocket } from "ws";
++import type { AccessTokenClaims } from "../core/tokens.ts";
++import type { AuthService } from "../services/auth-service.ts";
++import type { ConnectionRegistry } from "../services/connection-registry.ts";
++import { createMatchmaking } from "../services/matchmaking.ts";
++import { createAbsenceTracker } from "../services/absence-tracker.ts";
++import type {
++  ErrorCode,
++  GameAction,
++  GameCommand,
++  GameCommandService,
++} from "../services/game-command-service.ts";
++
++/**
++ * WebSocket으로 주고받는 모든 메시지의 공통 형식(IF-03, SDS 2.5의 9번)입니다.
++ *
++ * @remarks
++ * 클라이언트 요청에 `requestId`가 있으면 서버는 그 요청에 대한 응답·오류에
++ * 같은 값을 돌려줍니다. broadcast처럼 요청과 무관한 메시지에는 없습니다.
++ */
++export type Envelope = {
++  type: string;
++  requestId?: string;
++  payload: Record<string, unknown>;
++};
++
++/**
++ * 서버가 연결을 닫을 때 쓰는 WebSocket close code입니다.
++ *
++ * @remarks
++ * - `unauthenticated`(4401): 인증 시간 초과, 토큰 무효·만료, 인증 전 다른
++ *   메시지, 로그아웃으로 인한 세션 폐기
++ * - `malformedMessage`(4400): JSON이 아니거나 envelope 형식이 틀린 메시지,
++ *   binary 메시지
++ * - `internalError`(1011): 인증 서비스 장애 등 서버 내부 오류
++ */
++export const closeCodes = {
++  internalError: 1011,
++  malformedMessage: 4400,
++  unauthenticated: 4401,
++} as const;
++
++/** `/api/ws` 동작 설정입니다. 테스트에서 시간 값을 줄일 때 씁니다. */
++export type RealtimeConfig = {
++  /** 연결 후 첫 `auth` 메시지를 기다리는 시간(ms). 기본값 5000. */
++  authTimeoutMs?: number;
++  /** 서버가 ping frame을 보내는 간격(ms). 기본값 10000. */
++  heartbeatIntervalMs?: number;
++  /** 이 시간(ms) 동안 메시지·pong이 없으면 끊긴 연결로 봅니다. 기본값 20000. */
++  heartbeatTimeoutMs?: number;
++  /** 사용자별 경기 내 누적 이탈 허용 시간(ms). 기본값 60000 (DEC-03). */
++  absenceBudgetMs?: number;
++};
++
++const MAX_REQUEST_ID_LENGTH = 64;
++
++function isObject(value: unknown): value is Record<string, unknown> {
++  return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++
++/**
++ * 받은 텍스트 메시지를 {@link Envelope}로 해석합니다.
++ *
++ * @param data - WebSocket에서 받은 텍스트 프레임
++ * @returns 형식이 맞으면 envelope, JSON이 아니거나 `type`·`payload`·`requestId`
++ *   형식이 틀리면 `null`
++ *
++ * @remarks
++ * `payload`는 객체여야 하고, `requestId`는 1~64자 문자열일 때만 받습니다.
++ * payload 내부 필드는 메시지 종류별 처리에서 따로 검증합니다.
++ */
++export function parseEnvelope(data: string): Envelope | null {
++  let value: unknown;
++  try {
++    value = JSON.parse(data);
++  } catch {
++    return null;
++  }
++  if (!isObject(value)) return null;
++  const { type, requestId, payload } = value;
++  if (typeof type !== "string" || !isObject(payload)) return null;
++  if (
++    requestId !== undefined &&
++    (typeof requestId !== "string" ||
++      requestId.length === 0 ||
++      requestId.length > MAX_REQUEST_ID_LENGTH)
++  ) {
++    return null;
++  }
++  return { type, requestId, payload };
++}
++
++function send(
++  socket: WebSocket,
++  type: string,
++  payload: object,
++  requestId?: string,
++) {
++  socket.send(JSON.stringify({ type, requestId, payload }));
++}
++
++function sendError(
++  socket: WebSocket,
++  requestId: string | undefined,
++  code: string,
++  message: string,
++  details: object = {},
++) {
++  send(socket, "error", { code, message, ...details }, requestId);
++}
++
++// Same bound as the REST API: BIGINT ids travel as safe JSON integers.
++function isMatchId(value: unknown): value is number {
++  return Number.isSafeInteger(value) && (value as number) > 0;
++}
++
++const gameTypes: readonly unknown[] = ["gomoku", "othello"];
++
++function isGameType(value: unknown): value is GameType {
++  return gameTypes.includes(value);
++}
++// game_commands.command_id is a uuid column.
++const uuidPattern =
++  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++function parseAction(value: unknown): GameAction | null {
++  if (!isObject(value)) return null;
++  if (value.type === "resign") return { type: "resign" };
++  const { row, col } = value;
++  if (
++    value.type === "place" &&
++    Number.isSafeInteger(row) &&
++    Number.isSafeInteger(col)
++  ) {
++    return { type: "place", row: row as number, col: col as number };
++  }
++  return null;
++}
++
++/**
++ * `game.command`의 payload를 공통 계약 `GameCommand` 형식으로 검증합니다(IF-01).
++ *
++ * @returns 형식이 맞으면 `userId`를 뺀 명령, 아니면 `null`
++ *
++ * @remarks
++ * - `matchId`는 1 이상 safe integer, `gameType`은 알려진 게임, `commandId`는
++ *   UUID(`game_commands.command_id`가 uuid 컬럼), `expectedVersion`은 0 이상 정수
++ * - `action`은 `place`(정수 `row`/`col`) 또는 `resign`만 받고, 다른 필드는 버립니다.
++ * - 좌표 범위·합법 여부는 엔진이 판단합니다.
++ * - 행동하는 사용자는 payload가 아니라 인증된 연결에서 정합니다(IF-02).
++ */
++export function parseCommand(
++  payload: Record<string, unknown>,
++): Omit<GameCommand, "userId"> | null {
++  const { matchId, gameType, commandId, expectedVersion } = payload;
++  const action = parseAction(payload.action);
++  if (
++    !isMatchId(matchId) ||
++    !isGameType(gameType) ||
++    typeof commandId !== "string" ||
++    !uuidPattern.test(commandId) ||
++    !Number.isSafeInteger(expectedVersion) ||
++    (expectedVersion as number) < 0 ||
++    !action
++  ) {
++    return null;
++  }
++  return {
++    matchId,
++    commandId,
++    expectedVersion: expectedVersion as number,
++    action,
++  };
++}
++
++const rejectMessages: Record<ErrorCode, string> = {
++  NOT_FOUND: "Match not found.",
++  NOT_PARTICIPANT: "Only players of this match can play.",
++  COMMAND_ID_CONFLICT: "commandId was already used by another player.",
++  GAME_FINISHED: "The match is finished.",
++  GAME_NOT_ACTIVE: "The match is not in progress.",
++  VERSION_CONFLICT: "The match changed. Use the latest snapshot.",
++  NOT_YOUR_TURN: "It is not your turn.",
++  INVALID_ACTION: "The move is not allowed.",
++};
++
++/**
++ * WebSocket endpoint `/api/ws`를 등록합니다.
++ *
++ * @param getAuth - 연결 인증에 쓰는 인증 서비스. DB가 없으면 예외를 던지며,
++ *   이때 연결은 1011로 닫힙니다.
++ * @param getGames - 경기 조회·snapshot에 쓰는 경기 서비스(B)
++ * @param connections - 인증된 연결을 세션별·경기별로 보관하는 목록. 로그아웃 시
++ *   연결을 닫을 때 같은 인스턴스를 씁니다.
++ *
++ * @remarks
++ * 보안: access token은 URL이 아니라 연결 후 첫 `auth` 메시지로만 받아 로그에
++ * 남지 않게 합니다. `AuthService.authenticate()`로 JWT와 서버 세션을 함께
++ * 확인하며, 인증은 연결 시점에만 합니다. 연결 중 access token이 만료돼도
++ * 연결은 유지되고, 세션 폐기(로그아웃)만 연결을 닫습니다.
++ *
++ * 클라이언트는 `auth.ok`를 받기 전에 다른 메시지를 보내면 안 됩니다.
++ * 인증 처리 중 들어온 메시지는 4401로 닫습니다.
++ *
++ * `match.subscribe`는 그 경기의 참가자만 할 수 있습니다. 구독 목록에 먼저
++ * 등록한 뒤 snapshot을 읽으므로, 그 사이에 commit된 갱신도 놓치지 않습니다.
++ * 클라이언트는 snapshot의 `stateVersion` 이하인 갱신을 버립니다. 같은 사용자가
++ * 다른 연결로 구독하면 그 연결이 입력 권한을 가져가고, 이전 연결은
++ * `session.replaced`를 받습니다.
++ *
++ * `game.command`는 입력 권한이 있는 연결만 보낼 수 있습니다. `apply()`가
++ * commit하고 돌아온 뒤에만 전송합니다. 적용되면 요청자에게 `game.ack`, 구독자
++ * 전체에 `game.updated`를 보내고, 거절되면 요청자에게만 `game.error`를
++ * 보냅니다. 같은 `commandId` 재전송은 요청자에게만 응답합니다.
++ *
++ * `queue.join`/`queue.leave`는 자동 매칭 대기열({@link createMatchmaking})로
++ * 넘기고, 연결이 닫히면 그 연결의 대기 항목을 뺍니다.
++ *
++ * 끊김 감지·재접속(#19): 서버가 ping frame을 주기적으로 보내고, 정해진 시간
++ * 동안 메시지·pong이 없으면 연결을 끊습니다. 경기 구독 연결이 0개가 된
++ * 사용자는 이탈로 보고 상대에게 `player.disconnected`를 보냅니다. 다시
++ * 구독하면 최신 snapshot과 함께 `player.reconnected`를 알립니다. 누적 이탈
++ * 시간이 다 차면 `finishBySystem()`으로 경기를 끝내고 `game.updated`를
++ * 보냅니다. `auth.ok`의 `activeMatchId`로 클라이언트가 진행 중 경기를 찾습니다.
++ */
++export function registerRealtimeRoutes(
++  app: FastifyInstance,
++  getAuth: () => AuthService,
++  getGames: () => GameCommandService,
++  connections: ConnectionRegistry,
++  config: RealtimeConfig = {},
++) {
++  const authTimeoutMs = config.authTimeoutMs ?? 5000;
++  const heartbeatIntervalMs = config.heartbeatIntervalMs ?? 10_000;
++  const heartbeatTimeoutMs = config.heartbeatTimeoutMs ?? 20_000;
++  const absences = createAbsenceTracker({
++    budgetMs: config.absenceBudgetMs,
++    notify: (matchId, type, payload) =>
++      connections.broadcastEvent(matchId, { type, payload }),
++    onExpire: (matchId, absentUserIds) =>
++      void finishByTimeout(matchId, absentUserIds),
++  });
++  app.addHook("onClose", async () => absences.clear());
++  const matchmaking = createMatchmaking({
++    getGames,
++    send: (socket, type, payload) => send(socket, type, payload),
++    onError: (error) => app.log.error({ err: error }, "Matchmaking failed."),
++    onMatched: (matchId, userIds) => absences.track(matchId, userIds),
++  });
++
++  // A move or resign may commit between reading the version and finishing;
++  // finishBySystem() then skips, so read again (bounded) while still active.
++  async function finishByTimeout(matchId: number, absentUserIds: number[]) {
++    const games = getGames();
++    try {
++      for (let attempt = 0; attempt < 3; attempt++) {
++        const snapshot = await games.getSnapshot(matchId);
++        if (!snapshot || snapshot.status === "finished") return;
++        const result = await games.finishBySystem({
++          matchId,
++          reason: "disconnect_timeout",
++          absentUserIds,
++          expectedVersion: snapshot.stateVersion,
++        });
++        if (result.status === "finished") {
++          broadcastSnapshot(matchId, (await games.getSnapshot(matchId))!);
++          return;
++        }
++      }
++    } catch (error) {
++      app.log.error({ err: error }, "Disconnect timeout finish failed.");
++    } finally {
++      absences.finish(matchId);
++    }
++  }
++
++  function broadcastSnapshot(matchId: number, snapshot: GameSnapshot) {
++    connections.broadcastUpdate(matchId, snapshot.stateVersion, {
++      type: "game.updated",
++      payload: snapshot,
++    });
++    if (snapshot.status === "finished") absences.finish(matchId);
++  }
++
++  async function joinQueue(
++    socket: WebSocket,
++    userId: number,
++    { requestId, payload }: Envelope,
++  ) {
++    const { gameType } = payload;
++    if (!isGameType(gameType)) {
++      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid gameType.");
++      return;
++    }
++    const result = await matchmaking.join(userId, socket, gameType);
++    if (result === "joined") {
++      send(socket, "queue.joined", { gameType }, requestId);
++    } else if (result === "ALREADY_ACTIVE") {
++      sendError(
++        socket,
++        requestId,
++        "ALREADY_ACTIVE",
++        "Already queued or playing a match.",
++      );
++    }
++  }
++
++  function leaveQueue(
++    socket: WebSocket,
++    userId: number,
++    { requestId }: Envelope,
++  ) {
++    if (matchmaking.leave(userId) === "ALREADY_MATCHED") {
++      sendError(
++        socket,
++        requestId,
++        "ALREADY_MATCHED",
++        "A match is being created for you.",
++      );
++      return;
++    }
++    send(socket, "queue.left", {}, requestId);
++  }
++
++  // Only participants may subscribe. The socket joins the match before the
++  // snapshot is read, so an update committed in between is still delivered;
++  // clients drop updates whose stateVersion is not newer than their snapshot.
++  async function subscribe(
++    socket: WebSocket,
++    userId: number,
++    { requestId, payload }: Envelope,
++  ) {
++    const { matchId } = payload;
++    if (!isMatchId(matchId)) {
++      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid matchId.");
++      return;
++    }
++    const games = getGames();
++    const match = await games.getMatch(matchId);
++    if (!match) {
++      sendError(socket, requestId, "NOT_FOUND", "Match not found.", {
++        matchId,
++      });
++      return;
++    }
++    if (!match.players.some((player) => player.userId === userId)) {
++      sendError(
++        socket,
++        requestId,
++        "NOT_PARTICIPANT",
++        "Only players of this match can subscribe.",
++        { matchId },
++      );
++      return;
++    }
++    // Closed while the match was read: the close handler already ran.
++    if (socket.readyState !== socket.OPEN) return;
++    const wasSubscribed = connections.isSubscribed(matchId, socket);
++    const replaced = connections.subscribe(matchId, userId, socket);
++    if (replaced && replaced.readyState === replaced.OPEN) {
++      send(replaced, "session.replaced", { matchId });
++    }
++    let snapshot: GameSnapshot;
++    try {
++      snapshot = (await games.getSnapshot(matchId))!;
++    } catch (error) {
++      connections.unsubscribe(matchId, socket);
++      throw error;
++    }
++    send(socket, "match.snapshot", snapshot, requestId);
++    // Count the connection for the absence clock only while the match runs.
++    if (
++      !wasSubscribed &&
++      socket.readyState === socket.OPEN &&
++      snapshot.status !== "finished"
++    ) {
++      absences.track(matchId, [snapshot.players.black, snapshot.players.white]);
++      absences.connect(matchId, userId);
++    }
++  }
++
++  function unsubscribe(
++    socket: WebSocket,
++    userId: number,
++    { requestId, payload }: Envelope,
++  ) {
++    const { matchId } = payload;
++    if (!isMatchId(matchId)) {
++      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid matchId.");
++      return;
++    }
++    // Unsubscribe first so the leave notice goes to the others only.
++    const wasSubscribed = connections.isSubscribed(matchId, socket);
++    connections.unsubscribe(matchId, socket);
++    if (wasSubscribed) absences.disconnect(matchId, userId);
++    send(socket, "match.unsubscribed", { matchId }, requestId);
++  }
++
++  // Only the user's control connection for the match may send commands.
++  // Replies go to the sender; the new state goes to every subscriber, and
++  // only after apply() has committed.
++  async function command(
++    socket: WebSocket,
++    userId: number,
++    { requestId, payload }: Envelope,
++  ) {
++    const parsed = parseCommand(payload);
++    if (!parsed) {
++      sendError(
++        socket,
++        requestId,
++        "INVALID_MESSAGE",
++        "Invalid game.command payload.",
++      );
++      return;
++    }
++    const { matchId, commandId } = parsed;
++    const gameError = (code: string, message: string, duplicate = false) =>
++      send(
++        socket,
++        "game.error",
++        { code, message, matchId, commandId, duplicate },
++        requestId,
++      );
++    if (!connections.isSubscribed(matchId, socket)) {
++      gameError("NOT_SUBSCRIBED", "Subscribe to the match first.");
++      return;
++    }
++    if (!connections.isController(matchId, userId, socket)) {
++      gameError("SESSION_REPLACED", "Another connection controls this match.");
++      return;
++    }
++
++    const games = getGames();
++    const result = await games.apply({ ...parsed, userId });
++    if (result.status === "rejected") {
++      gameError(result.code, rejectMessages[result.code], result.duplicate);
++      if (result.code === "VERSION_CONFLICT") {
++        send(socket, "match.snapshot", (await games.getSnapshot(matchId))!);
++      }
++      return;
++    }
++    send(
++      socket,
++      "game.ack",
++      {
++        matchId,
++        commandId,
++        stateVersion: result.stateVersion,
++        duplicate: result.duplicate,
++      },
++      requestId,
++    );
++    // A resent command was already broadcast the first time.
++    if (result.duplicate) return;
++    // The snapshot may already include later commits; broadcastUpdate skips
++    // it when an equal or newer state already went out (SDS 12번 순서).
++    broadcastSnapshot(matchId, (await games.getSnapshot(matchId))!);
++  }
++
++  // The access token arrives in the first message, never in the URL, so it
++  // does not end up in proxy or access logs.
++  app.get(
++    "/api/ws",
++    { websocket: true, schema: { hide: true } },
++    (socket, request) => {
++      let claims: AccessTokenClaims | undefined;
++      let authenticating = false;
++      const authTimer = setTimeout(
++        () =>
++          socket.close(closeCodes.unauthenticated, "Authentication timed out."),
++        authTimeoutMs,
++      );
++      // Browsers answer ping frames automatically, so any pong or message
++      // proves the peer is alive. A silent peer is cut after the timeout.
++      let lastSeen = Date.now();
++      let silent = false;
++      const heartbeat = setInterval(() => {
++        if (Date.now() - lastSeen > heartbeatTimeoutMs) {
++          silent = true;
++          socket.terminate();
++          return;
++        }
++        socket.ping();
++      }, heartbeatIntervalMs);
++      socket.on("pong", () => {
++        lastSeen = Date.now();
++      });
++
++      socket.on("close", () => {
++        clearTimeout(authTimer);
++        clearInterval(heartbeat);
++        matchmaking.removeSocket(socket);
++        if (!claims) return;
++        // A silent peer has been gone since it last answered (SDS 13번).
++        const leftAt = silent ? lastSeen : Date.now();
++        const matchIds = connections.matchesOf(socket);
++        connections.remove(claims.sessionId, socket);
++        for (const matchId of matchIds) {
++          absences.disconnect(matchId, claims.userId, leftAt);
++        }
++      });
++
++      socket.on("message", async (data, isBinary) => {
++        lastSeen = Date.now();
++        const message = isBinary ? null : parseEnvelope(data.toString());
++        if (!message) {
++          socket.close(closeCodes.malformedMessage, "Malformed message.");
++          return;
++        }
++
++        if (!claims) {
++          const token = message.payload.accessToken;
++          // Clients wait for auth.ok before sending anything else.
++          if (
++            authenticating ||
++            message.type !== "auth" ||
++            typeof token !== "string"
++          ) {
++            socket.close(closeCodes.unauthenticated, "Authenticate first.");
++            return;
++          }
++          authenticating = true;
++          let result: AccessTokenClaims | null;
++          try {
++            result = await getAuth().authenticate(token);
++          } catch (error) {
++            request.log.error(
++              { err: error },
++              "WebSocket authentication failed.",
++            );
++            socket.close(closeCodes.internalError, "Service unavailable.");
++            return;
++          }
++          authenticating = false;
++          if (!result) {
++            socket.close(
++              closeCodes.unauthenticated,
++              "Invalid or expired token.",
++            );
++            return;
++          }
++          let activeMatchId: number | null;
++          try {
++            activeMatchId =
++              (await getGames().findActiveMatchId(result.userId)) ?? null;
++          } catch (error) {
++            request.log.error({ err: error }, "Active match lookup failed.");
++            socket.close(closeCodes.internalError, "Service unavailable.");
++            return;
++          }
++          // Timed out or closed by the client while the session was checked.
++          if (socket.readyState !== socket.OPEN) return;
++          clearTimeout(authTimer);
++          claims = result;
++          connections.add(claims.sessionId, socket);
++          send(
++            socket,
++            "auth.ok",
++            { userId: claims.userId, activeMatchId },
++            message.requestId,
++          );
++          return;
++        }
++
++        try {
++          switch (message.type) {
++            case "ping":
++              send(socket, "pong", {}, message.requestId);
++              return;
++            case "match.subscribe":
++              await subscribe(socket, claims.userId, message);
++              return;
++            case "match.unsubscribe":
++              unsubscribe(socket, claims.userId, message);
++              return;
++            case "game.command":
++              await command(socket, claims.userId, message);
++              return;
++            case "queue.join":
++              await joinQueue(socket, claims.userId, message);
++              return;
++            case "queue.leave":
++              leaveQueue(socket, claims.userId, message);
++              return;
++            default:
++              sendError(
++                socket,
++                message.requestId,
++                "UNSUPPORTED_MESSAGE",
++                `Unsupported message type: ${message.type.slice(0, 64)}`,
++              );
++          }
++        } catch (error) {
++          request.log.error({ err: error }, "WebSocket message failed.");
++          sendError(
++            socket,
++            message.requestId,
++            "INTERNAL_ERROR",
++            "Internal server error.",
++          );
++        }
++      });
++    },
++  );
++}
+diff --git a/apps/server/src/app.ts b/apps/server/src/app.ts
+--- a/apps/server/src/app.ts
++++ b/apps/server/src/app.ts
+@@ -5,0 +6,2 @@
++import websocket from "@fastify/websocket";
++import type { GameType } from "@cafe/game-contracts";
+@@ -42,0 +45,11 @@
++import { createConnectionRegistry } from "./services/connection-registry.ts";
++import {
++  createGameCommandService,
++  type GameCommandService,
++  type RegisteredRules,
++} from "./services/game-command-service.ts";
++import {
++  closeCodes,
++  registerRealtimeRoutes,
++  type RealtimeConfig,
++} from "./api/ws-routes.ts";
+@@ -75,0 +89,4 @@
++  realtimeConfig?: RealtimeConfig,
++  // Game engines (C) by game type; a match of an unregistered type cannot be
++  // created or shown.
++  rulesByGameType: Partial<Record<GameType, RegisteredRules>> = {},
+@@ -101,0 +119,17 @@
++  const connections = createConnectionRegistry();
++  // Logout also closes the WebSocket connections opened with that session.
++  const routeAuth: AuthService | undefined = auth && {
++    ...auth,
++    async logout(sessionId: string) {
++      await auth.logout(sessionId);
++      connections.closeSession(
++        sessionId,
++        closeCodes.unauthenticated,
++        "Session ended.",
++      );
++    },
++  };
++  const getRouteAuth = (): AuthService => {
++    if (!routeAuth) throw new ServiceUnavailableError();
++    return routeAuth;
++  };
+@@ -130,0 +165,7 @@
++  };
++  const games = database
++    ? createGameCommandService(database.db, rulesByGameType)
++    : undefined;
++  const getGames = (): GameCommandService => {
++    if (!games) throw new ServiceUnavailableError();
++    return games;
+@@ -192,0 +234 @@
++  await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
+@@ -273 +315 @@
+-  registerAuthRoutes(app, getAuth);
++  registerAuthRoutes(app, getRouteAuth);
+@@ -278,0 +321 @@
++  registerRealtimeRoutes(app, getAuth, getGames, connections, realtimeConfig);
+diff --git a/apps/server/src/index.ts b/apps/server/src/index.ts
+--- a/apps/server/src/index.ts
++++ b/apps/server/src/index.ts
+@@ -6,0 +7 @@
++import { gomoku } from "@cafe/game-engine";
+@@ -48,0 +50,8 @@
++  undefined,
++  {
++    gomoku: {
++      version: gomoku.GOMOKU_RULES_VERSION,
++      rules: gomoku.rules,
++      board: gomoku.board,
++    },
++  },
+diff --git a/apps/server/src/repositories/game-repository.ts b/apps/server/src/repositories/game-repository.ts
+--- a/apps/server/src/repositories/game-repository.ts
++++ b/apps/server/src/repositories/game-repository.ts
+@@ -0,0 +1 @@
++import type { PlayerColor } from "@cafe/game-contracts";
+@@ -5 +6 @@
+-export type Seat = "black" | "white";
++export type Seat = PlayerColor;
+@@ -55,0 +57,20 @@
++}
++
++/**
++ * 사용자가 참가한 끝나지 않은 경기 하나의 ID를 찾습니다. 없으면 `undefined`입니다.
++ *
++ * @remarks FR-MATCH-02에 따라 사용자당 진행 중 경기는 하나입니다.
++ */
++export async function findActiveGameIdForUser(db: Executor, userId: number) {
++  const [row] = await db
++    .select({ id: games.id })
++    .from(gamePlayers)
++    .innerJoin(games, eq(games.id, gamePlayers.gameId))
++    .where(
++      and(
++        eq(gamePlayers.userId, userId),
++        inArray(games.status, ["waiting", "playing", "paused"]),
++      ),
++    )
++    .limit(1);
++  return row?.id;
+diff --git a/apps/server/src/schemas/errors.ts b/apps/server/src/schemas/errors.ts
+--- a/apps/server/src/schemas/errors.ts
++++ b/apps/server/src/schemas/errors.ts
+@@ -1 +1 @@
+-// Shared error body: { error: { code, message, details? } } (contracts.md 3장).
++// Shared error body: { error: { code, message, details? } } (contracts.md 11장).
+diff --git a/apps/server/src/services/absence-tracker.test.ts b/apps/server/src/services/absence-tracker.test.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/services/absence-tracker.test.ts
+@@ -0,0 +1,134 @@
++import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
++import { createAbsenceTracker } from "./absence-tracker.ts";
++
++function setup() {
++  const notify = vi.fn();
++  const onExpire = vi.fn();
++  const tracker = createAbsenceTracker({ budgetMs: 60_000, notify, onExpire });
++  return { tracker, notify, onExpire };
++}
++
++describe("absence tracker", () => {
++  beforeEach(() => {
++    vi.useFakeTimers();
++    vi.setSystemTime(0);
++  });
++  afterEach(() => {
++    vi.useRealTimers();
++  });
++
++  test("a player who never connects expires after the budget", () => {
++    const { tracker, onExpire } = setup();
++    tracker.track(1, [10, 20]);
++    tracker.connect(1, 20);
++
++    vi.advanceTimersByTime(59_999);
++    expect(onExpire).not.toHaveBeenCalled();
++    vi.advanceTimersByTime(1);
++    expect(onExpire).toHaveBeenCalledExactlyOnceWith(1, [10]);
++  });
++
++  test("connected players never expire", () => {
++    const { tracker, onExpire, notify } = setup();
++    tracker.track(1, [10, 20]);
++    tracker.connect(1, 10);
++    tracker.connect(1, 20);
++    vi.advanceTimersByTime(600_000);
++    expect(onExpire).not.toHaveBeenCalled();
++    // The first connection is not a reconnect.
++    expect(notify).not.toHaveBeenCalled();
++  });
++
++  test("absence time accumulates across disconnects", () => {
++    const { tracker, notify, onExpire } = setup();
++    tracker.track(1, [10, 20]);
++    tracker.connect(1, 10);
++    tracker.connect(1, 20);
++
++    tracker.disconnect(1, 10);
++    expect(notify).toHaveBeenLastCalledWith(1, "player.disconnected", {
++      matchId: 1,
++      userId: 10,
++      remainingMs: 60_000,
++    });
++    vi.advanceTimersByTime(30_000);
++    tracker.connect(1, 10);
++    expect(notify).toHaveBeenLastCalledWith(1, "player.reconnected", {
++      matchId: 1,
++      userId: 10,
++      remainingMs: 30_000,
++    });
++
++    tracker.disconnect(1, 10);
++    vi.advanceTimersByTime(29_999);
++    expect(onExpire).not.toHaveBeenCalled();
++    vi.advanceTimersByTime(1);
++    expect(onExpire).toHaveBeenCalledExactlyOnceWith(1, [10]);
++  });
++
++  test("time before a heartbeat noticed the loss counts as absence", () => {
++    const { tracker, notify, onExpire } = setup();
++    tracker.track(1, [10, 20]);
++    tracker.connect(1, 10);
++    tracker.connect(1, 20);
++
++    vi.advanceTimersByTime(20_000);
++    tracker.disconnect(1, 10, 5_000);
++    expect(notify).toHaveBeenLastCalledWith(
++      1,
++      "player.disconnected",
++      expect.objectContaining({ remainingMs: 45_000 }),
++    );
++    vi.advanceTimersByTime(44_999);
++    expect(onExpire).not.toHaveBeenCalled();
++    vi.advanceTimersByTime(1);
++    expect(onExpire).toHaveBeenCalledOnce();
++  });
++
++  test("a user with another open connection is not absent", () => {
++    const { tracker, notify } = setup();
++    tracker.track(1, [10, 20]);
++    tracker.connect(1, 10);
++    tracker.connect(1, 10);
++    tracker.disconnect(1, 10);
++    expect(notify).not.toHaveBeenCalled();
++    expect(tracker.remainingMs(1, 10)).toBe(60_000);
++  });
++
++  test("everyone absent at expiry is reported, and timers stop", () => {
++    const { tracker, onExpire } = setup();
++    tracker.track(1, [10, 20]);
++    tracker.connect(1, 10);
++    tracker.connect(1, 20);
++    tracker.disconnect(1, 10);
++    vi.advanceTimersByTime(10_000);
++    tracker.disconnect(1, 20);
++
++    vi.advanceTimersByTime(50_000);
++    expect(onExpire).toHaveBeenCalledExactlyOnceWith(1, [10, 20]);
++    vi.advanceTimersByTime(60_000);
++    expect(onExpire).toHaveBeenCalledOnce();
++  });
++
++  test("finish stops tracking; untracked matches are ignored", () => {
++    const { tracker, notify, onExpire } = setup();
++    tracker.track(1, [10, 20]);
++    tracker.finish(1);
++    vi.advanceTimersByTime(120_000);
++    expect(onExpire).not.toHaveBeenCalled();
++
++    tracker.connect(2, 10);
++    tracker.disconnect(2, 10);
++    expect(notify).not.toHaveBeenCalled();
++    expect(tracker.remainingMs(2, 10)).toBeUndefined();
++  });
++
++  test("tracking the same match again keeps the existing clocks", () => {
++    const { tracker, onExpire } = setup();
++    tracker.track(1, [10, 20]);
++    vi.advanceTimersByTime(30_000);
++    tracker.track(1, [10, 20]);
++    vi.advanceTimersByTime(30_000);
++    expect(onExpire).toHaveBeenCalledOnce();
++  });
++});
+diff --git a/apps/server/src/services/absence-tracker.ts b/apps/server/src/services/absence-tracker.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/services/absence-tracker.ts
+@@ -0,0 +1,144 @@
++type Presence = {
++  // Subscribed sockets of this user for the match.
++  connections: number;
++  usedMs: number;
++  // Start of the current absence, or null while connected.
++  since: number | null;
++  // Connected at least once, so a return counts as a reconnect.
++  seen: boolean;
++  timer?: ReturnType<typeof setTimeout>;
++};
++
++/**
++ * 경기별 사용자 이탈 시간을 재는 시계를 만듭니다(DEC-03, SDS 2.6의 13번).
++ *
++ * @param deps.budgetMs - 사용자별 경기 내 누적 이탈 허용 시간. 기본값 60000
++ * @param deps.notify - 이탈·복귀를 경기 구독자에게 알리는 함수
++ *   (`player.disconnected`, `player.reconnected`)
++ * @param deps.onExpire - 누군가의 누적 이탈 시간이 다 찼을 때 호출됩니다.
++ *   그 순간 연결이 없는 사용자 전원이 `absentUserIds`로 넘어갑니다.
++ *
++ * @remarks
++ * 이탈 단위는 사용자입니다. 그 경기를 구독한 연결이 0개가 되면 이탈이
++ * 시작되고, 1개 이상이 되면 끝납니다. 시계는 메모리에만 있으며 API 인스턴스
++ * 1개를 전제합니다. 재시작하면 진행 중 경기는 void가 되므로 저장하지 않습니다.
++ *
++ * 만료 후에는 그 경기의 타이머를 모두 멈춥니다. 결과 저장이 끝나면 호출하는
++ * 쪽이 {@link finish}로 추적을 끝냅니다.
++ */
++export function createAbsenceTracker(deps: {
++  budgetMs?: number;
++  notify: (matchId: number, type: string, payload: object) => void;
++  onExpire: (matchId: number, absentUserIds: number[]) => void;
++}) {
++  const budgetMs = deps.budgetMs ?? 60_000;
++  const matches = new Map<number, Map<number, Presence>>();
++
++  const remaining = (p: Presence, at: number) =>
++    Math.max(0, budgetMs - p.usedMs - (p.since === null ? 0 : at - p.since));
++
++  function stopTimers(players: Map<number, Presence>) {
++    for (const p of players.values()) clearTimeout(p.timer);
++  }
++
++  function schedule(matchId: number, p: Presence, at: number) {
++    clearTimeout(p.timer);
++    p.timer = setTimeout(
++      () => {
++        const players = matches.get(matchId);
++        if (!players) return;
++        stopTimers(players);
++        const absent = [...players]
++          .filter(([, q]) => q.connections === 0)
++          .map(([userId]) => userId);
++        deps.onExpire(matchId, absent);
++      },
++      remaining(p, at),
++    );
++  }
++
++  function finish(matchId: number) {
++    const players = matches.get(matchId);
++    if (players) stopTimers(players);
++    matches.delete(matchId);
++  }
++
++  return {
++    /**
++     * 경기 추적을 시작합니다. 이미 추적 중이면 변화가 없습니다.
++     *
++     * @param at - 이탈 시작으로 볼 시각. 아직 연결하지 않은 참가자는 이때부터
++     *   시계가 흐르므로, 매칭 후 나타나지 않으면 기권과 같이 처리됩니다.
++     */
++    track(matchId: number, userIds: number[], at = Date.now()) {
++      if (matches.has(matchId)) return;
++      const players = new Map<number, Presence>();
++      for (const userId of userIds) {
++        const p: Presence = {
++          connections: 0,
++          usedMs: 0,
++          since: at,
++          seen: false,
++        };
++        players.set(userId, p);
++        schedule(matchId, p, at);
++      }
++      matches.set(matchId, players);
++    },
++
++    /** 사용자의 경기 연결 하나가 생겼음을 기록합니다. 0→1이면 이탈이 끝납니다. */
++    connect(matchId: number, userId: number, at = Date.now()) {
++      const p = matches.get(matchId)?.get(userId);
++      if (!p) return;
++      p.connections++;
++      if (p.connections > 1) return;
++      p.usedMs += p.since === null ? 0 : at - p.since;
++      p.since = null;
++      clearTimeout(p.timer);
++      if (p.seen) {
++        deps.notify(matchId, "player.reconnected", {
++          matchId,
++          userId,
++          remainingMs: remaining(p, at),
++        });
++      }
++      p.seen = true;
++    },
++
++    /**
++     * 사용자의 경기 연결 하나가 끊겼음을 기록합니다. 1→0이면 이탈이 시작됩니다.
++     *
++     * @param at - 이탈 시작 시각. heartbeat로 끊김을 감지했으면 마지막으로
++     *   응답한 시각을 넘겨, 감지까지 걸린 시간도 이탈로 셉니다.
++     */
++    disconnect(matchId: number, userId: number, at = Date.now()) {
++      const p = matches.get(matchId)?.get(userId);
++      if (!p || p.connections === 0) return;
++      p.connections--;
++      if (p.connections > 0) return;
++      p.since = at;
++      schedule(matchId, p, Date.now());
++      deps.notify(matchId, "player.disconnected", {
++        matchId,
++        userId,
++        remainingMs: remaining(p, Date.now()),
++      });
++    },
++
++    /** 남은 이탈 허용 시간(ms)입니다. 추적하지 않는 경기면 `undefined`입니다. */
++    remainingMs(matchId: number, userId: number) {
++      const p = matches.get(matchId)?.get(userId);
++      return p && remaining(p, Date.now());
++    },
++
++    /** 경기가 끝났을 때 추적과 타이머를 정리합니다. */
++    finish,
++
++    /** 서버 종료 시 모든 타이머를 정리합니다. */
++    clear() {
++      for (const matchId of [...matches.keys()]) finish(matchId);
++    },
++  };
++}
++
++export type AbsenceTracker = ReturnType<typeof createAbsenceTracker>;
+diff --git a/apps/server/src/services/connection-registry.test.ts b/apps/server/src/services/connection-registry.test.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/services/connection-registry.test.ts
+@@ -0,0 +1,104 @@
++import { describe, expect, test, vi } from "vitest";
++import type { WebSocket } from "ws";
++import { createConnectionRegistry } from "./connection-registry.ts";
++
++function fakeSocket() {
++  return { send: vi.fn(), close: vi.fn() } as unknown as WebSocket & {
++    send: ReturnType<typeof vi.fn>;
++    close: ReturnType<typeof vi.fn>;
++  };
++}
++
++describe("connection registry", () => {
++  test("a match broadcast reaches only that match's subscribers", () => {
++    const registry = createConnectionRegistry();
++    const [a1, a2, b1, idle] = [1, 2, 3, 4].map(fakeSocket);
++    registry.add("s1", a1);
++    registry.add("s2", a2);
++    registry.add("s3", b1);
++    registry.add("s4", idle);
++    registry.subscribe(10, 1, a1);
++    registry.subscribe(10, 2, a2);
++    registry.subscribe(20, 3, b1);
++
++    registry.broadcastUpdate(10, 1, { type: "game.updated" });
++
++    const sent = JSON.stringify({ type: "game.updated" });
++    expect(a1.send).toHaveBeenCalledExactlyOnceWith(sent);
++    expect(a2.send).toHaveBeenCalledExactlyOnceWith(sent);
++    expect(b1.send).not.toHaveBeenCalled();
++    expect(idle.send).not.toHaveBeenCalled();
++  });
++
++  test("updates never go backwards within a match", () => {
++    const registry = createConnectionRegistry();
++    const socket = fakeSocket();
++    registry.subscribe(10, 1, socket);
++
++    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(true);
++    expect(registry.broadcastUpdate(10, 1, { v: 1 })).toBe(false);
++    expect(registry.broadcastUpdate(10, 2, { v: 2 })).toBe(false);
++    expect(registry.broadcastUpdate(10, 3, { v: 3 })).toBe(true);
++    expect(socket.send.mock.calls).toEqual([
++      [JSON.stringify({ v: 2 })],
++      [JSON.stringify({ v: 3 })],
++    ]);
++  });
++
++  test("the last subscribing socket of a user controls the match", () => {
++    const registry = createConnectionRegistry();
++    const [tab1, tab2, opponent] = [1, 2, 3].map(fakeSocket);
++
++    expect(registry.subscribe(10, 1, tab1)).toBeUndefined();
++    expect(registry.subscribe(10, 2, opponent)).toBeUndefined();
++    expect(registry.subscribe(10, 1, tab2)).toBe(tab1);
++    expect(registry.subscribe(10, 1, tab2)).toBeUndefined();
++
++    expect(registry.isController(10, 1, tab1)).toBe(false);
++    expect(registry.isController(10, 1, tab2)).toBe(true);
++    expect(registry.isController(10, 2, opponent)).toBe(true);
++    // The replaced socket keeps watching.
++    expect(registry.isSubscribed(10, tab1)).toBe(true);
++
++    registry.unsubscribe(10, tab2);
++    expect(registry.isController(10, 1, tab2)).toBe(false);
++    expect(registry.isController(10, 2, opponent)).toBe(true);
++  });
++
++  test("unsubscribe and socket removal stop further messages", () => {
++    const registry = createConnectionRegistry();
++    const [left, closed, stays] = [1, 2, 3].map(fakeSocket);
++    for (const [i, socket] of [left, closed, stays].entries()) {
++      registry.add("s", socket);
++      registry.subscribe(10, i + 1, socket);
++    }
++    registry.subscribe(20, 2, closed);
++
++    registry.unsubscribe(10, left);
++    registry.remove("s", closed);
++    registry.broadcastUpdate(10, 1, { type: "x" });
++    registry.broadcastUpdate(20, 1, { type: "x" });
++
++    expect(left.send).not.toHaveBeenCalled();
++    expect(closed.send).not.toHaveBeenCalled();
++    expect(stays.send).toHaveBeenCalledOnce();
++    expect(registry.isSubscribed(10, left)).toBe(false);
++    expect(registry.isSubscribed(20, closed)).toBe(false);
++    expect(registry.isController(20, 2, closed)).toBe(false);
++    expect(registry.isSubscribed(10, stays)).toBe(true);
++  });
++
++  test("closeSession closes only that session's sockets", () => {
++    const registry = createConnectionRegistry();
++    const [tab1, tab2, other] = [1, 2, 3].map(fakeSocket);
++    registry.add("s1", tab1);
++    registry.add("s1", tab2);
++    registry.add("s2", other);
++
++    registry.closeSession("s1", 4401, "Session ended.");
++
++    expect(tab1.close).toHaveBeenCalledWith(4401, "Session ended.");
++    expect(tab2.close).toHaveBeenCalledWith(4401, "Session ended.");
++    expect(other.close).not.toHaveBeenCalled();
++  });
++});
+diff --git a/apps/server/src/services/connection-registry.ts b/apps/server/src/services/connection-registry.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/services/connection-registry.ts
+@@ -0,0 +1,143 @@
++import type { WebSocket } from "ws";
++
++function addTo<K, V>(map: Map<K, Set<V>>, key: K, value: V) {
++  const values = map.get(key) ?? new Set<V>();
++  values.add(value);
++  map.set(key, values);
++}
++
++function deleteFrom<K, V>(map: Map<K, Set<V>>, key: K, value: V) {
++  const values = map.get(key);
++  values?.delete(value);
++  if (values?.size === 0) map.delete(key);
++}
++
++/**
++ * 인증된 WebSocket 연결을 서버 세션별·경기별로 보관하는 목록을 만듭니다.
++ *
++ * @remarks
++ * 세션별 목록은 세션이 폐기될 때(로그아웃) 그 세션의 연결을 모두 닫는 데,
++ * 경기별 목록은 경기 메시지를 그 경기를 구독한 연결에만 보내는 데 씁니다.
++ * 경기·사용자별 입력 권한 연결과 경기별 마지막 전송 버전도 함께 관리합니다.
++ * 메모리에만 있으며 API 인스턴스 1개를 전제합니다.
++ */
++export function createConnectionRegistry() {
++  const bySession = new Map<string, Set<WebSocket>>();
++  const byMatch = new Map<number, Set<WebSocket>>();
++  const matchesOf = new Map<WebSocket, Set<number>>();
++  // FR-MATCH-02: per match and user, only the socket that subscribed last
++  // may send commands (other tabs or devices keep watching).
++  const controllers = new Map<number, Map<number, WebSocket>>();
++  // Highest stateVersion broadcast per match, so updates never go backwards.
++  const sentVersions = new Map<number, number>();
++
++  function unsubscribe(matchId: number, socket: WebSocket) {
++    deleteFrom(byMatch, matchId, socket);
++    deleteFrom(matchesOf, socket, matchId);
++    const byUser = controllers.get(matchId);
++    for (const [userId, controller] of byUser ?? []) {
++      if (controller === socket) byUser!.delete(userId);
++    }
++    if (byUser?.size === 0) controllers.delete(matchId);
++    if (!byMatch.has(matchId)) sentVersions.delete(matchId);
++  }
++
++  return {
++    /** 인증에 성공한 연결을 세션에 등록합니다. */
++    add(sessionId: string, socket: WebSocket) {
++      addTo(bySession, sessionId, socket);
++    },
++
++    /**
++     * 닫힌 연결을 목록에서 뺍니다. 연결의 `close` 이벤트에서 호출하며,
++     * 그 연결의 경기 구독과 입력 권한도 모두 해제합니다.
++     */
++    remove(sessionId: string, socket: WebSocket) {
++      deleteFrom(bySession, sessionId, socket);
++      for (const matchId of matchesOf.get(socket) ?? []) {
++        unsubscribe(matchId, socket);
++      }
++    },
++
++    /**
++     * 세션의 연결을 모두 닫고 목록에서 지웁니다.
++     *
++     * @param code - WebSocket close code (로그아웃은 4401)
++     */
++    closeSession(sessionId: string, code: number, reason: string) {
++      const sockets = bySession.get(sessionId);
++      bySession.delete(sessionId);
++      for (const socket of sockets ?? []) socket.close(code, reason);
++    },
++
++    /**
++     * 연결을 경기 구독자로 등록하고, 그 사용자의 입력 권한 연결로 정합니다.
++     *
++     * @returns 입력 권한을 잃은 이전 연결. 없거나 같은 연결이면 `undefined`
++     *
++     * @remarks
++     * FR-MATCH-02: 경기·사용자마다 마지막으로 구독한 연결 하나만 명령을 보낼 수
++     * 있습니다. 이전 연결은 구독을 유지해 갱신은 계속 받습니다. 참가자 확인은
++     * 호출하는 쪽에서 먼저 합니다.
++     */
++    subscribe(matchId: number, userId: number, socket: WebSocket) {
++      addTo(byMatch, matchId, socket);
++      addTo(matchesOf, socket, matchId);
++      const byUser = controllers.get(matchId) ?? new Map<number, WebSocket>();
++      const previous = byUser.get(userId);
++      byUser.set(userId, socket);
++      controllers.set(matchId, byUser);
++      return previous === socket ? undefined : previous;
++    },
++
++    /** 경기 구독과 그 연결의 입력 권한을 해제합니다. 구독하지 않은 연결이면 변화가 없습니다. */
++    unsubscribe,
++
++    isSubscribed(matchId: number, socket: WebSocket) {
++      return byMatch.get(matchId)?.has(socket) ?? false;
++    },
++
++    /** 연결이 구독 중인 경기 ID 목록입니다. 연결을 닫기 전에 읽습니다. */
++    matchesOf(socket: WebSocket) {
++      return [...(matchesOf.get(socket) ?? [])];
++    },
++
++    /** 이 연결이 해당 사용자의 경기 입력 권한 연결인지 확인합니다. */
++    isController(matchId: number, userId: number, socket: WebSocket) {
++      return controllers.get(matchId)?.get(userId) === socket;
++    },
++
++    /**
++     * 경기 상태 갱신을 한 번만 직렬화해 경기 구독자 전체에 보냅니다.
++     *
++     * @param stateVersion - 메시지에 담긴 snapshot의 버전
++     * @returns 보냈으면 `true`. 구독자가 없거나 같거나 높은 버전을 이미 보냈으면 `false`
++     *
++     * @remarks
++     * `apply()` 결과가 돌아오는 순서는 commit 순서와 다를 수 있습니다. 경기마다
++     * 마지막으로 보낸 버전을 기억해, 버전이 줄어드는 갱신을 보내지 않습니다
++     * (SDS 12번). 다른 경기의 구독자에게는 보내지 않습니다.
++     */
++    broadcastUpdate(matchId: number, stateVersion: number, message: object) {
++      const sockets = byMatch.get(matchId);
++      if (!sockets || stateVersion <= (sentVersions.get(matchId) ?? -1)) {
++        return false;
++      }
++      sentVersions.set(matchId, stateVersion);
++      const data = JSON.stringify(message);
++      for (const socket of sockets) socket.send(data);
++      return true;
++    },
++
++    /**
++     * 경기 상태와 무관한 이벤트(이탈·복귀 알림 등)를 경기 구독자 전체에
++     * 보냅니다. 버전 순서 검사를 하지 않습니다.
++     */
++    broadcastEvent(matchId: number, message: object) {
++      const data = JSON.stringify(message);
++      for (const socket of byMatch.get(matchId) ?? []) socket.send(data);
++    },
++  };
++}
++
++export type ConnectionRegistry = ReturnType<typeof createConnectionRegistry>;
+diff --git a/apps/server/src/services/game-command-service.test.ts b/apps/server/src/services/game-command-service.test.ts
+--- a/apps/server/src/services/game-command-service.test.ts
++++ b/apps/server/src/services/game-command-service.test.ts
+@@ -10,0 +11 @@
++import type { Cell } from "@cafe/game-contracts";
+@@ -20,0 +22 @@
++  type StoredMove,
+@@ -28 +30 @@
+-    return { ok: false, code: "CELL_OCCUPIED" };
++    return { ok: false, code: "INVALID_ACTION" };
+@@ -39,0 +42,9 @@
++// Stones stay where they were placed (no captures), like Gomoku.
++const stubBoard = (history: StoredMove[]) => {
++  const board: Cell[][] = Array.from({ length: 15 }, () =>
++    Array<Cell>(15).fill(null),
++  );
++  for (const m of history) board[m.row][m.col] = m.stone as Cell;
++  return board;
++};
++
+@@ -51 +62 @@
+-      gomoku: { version: "gomoku-test", rules: stubRules },
++      gomoku: { version: "gomoku-test", rules: stubRules, board: stubBoard },
+@@ -141 +152 @@
+-      code: "CELL_OCCUPIED",
++      code: "INVALID_ACTION",
+@@ -148 +159 @@
+-      "CELL_OCCUPIED",
++      "INVALID_ACTION",
+@@ -247 +258 @@
+-      gomoku: { version: "gomoku-test", rules: brokenRules },
++      gomoku: { version: "gomoku-test", rules: brokenRules, board: stubBoard },
+@@ -262,0 +274,20 @@
++  test("an unknown engine code is a server error and records nothing", async () => {
++    const leaky = createGameCommandService(database.db, {
++      gomoku: {
++        version: "gomoku-test",
++        rules: () => ({ ok: false, code: "CELL_OCCUPIED" }) as never,
++        board: stubBoard,
++      },
++    });
++    await expect(
++      leaky.apply({
++        matchId,
++        userId: black,
++        commandId: randomUUID(),
++        expectedVersion: 0,
++        action: { type: "place", row: 7, col: 7 },
++      }),
++    ).rejects.toThrow("returned unknown code CELL_OCCUPIED");
++    expect(await database.db.select().from(gameCommands)).toHaveLength(0);
++  });
++
+@@ -278 +309 @@
+-      gomoku: { version: "gomoku-test-v2", rules: stubRules },
++      gomoku: { version: "gomoku-test-v2", rules: stubRules, board: stubBoard },
+@@ -347,0 +379,129 @@
++
++  const timeout = (absentUserIds: number[], expectedVersion: number) =>
++    service.finishBySystem({
++      matchId,
++      reason: "disconnect_timeout",
++      absentUserIds,
++      expectedVersion,
++    });
++
++  test("disconnect timeout of one player gives the win to the other", async () => {
++    await place(black, 0, 7, 7);
++    expect(await timeout([white], 1)).toEqual({
++      status: "finished",
++      stateVersion: 2,
++    });
++    const match = await service.getMatch(matchId);
++    expect(match?.game).toMatchObject({
++      status: "finished",
++      outcome: "win",
++      resultReason: "disconnect_timeout",
++      winnerUserId: black,
++      currentTurn: null,
++      stateVersion: 2,
++    });
++    expect(
++      Object.fromEntries(match!.players.map((p) => [p.userId, p.result])),
++    ).toEqual({ [black]: "win", [white]: "loss" });
++    expect(await place(white, 2, 7, 8)).toMatchObject({
++      status: "rejected",
++      code: "GAME_FINISHED",
++    });
++  });
++
++  test("disconnect timeout of both players voids the match", async () => {
++    expect(await timeout([black, white], 0)).toMatchObject({
++      status: "finished",
++    });
++    const match = await service.getMatch(matchId);
++    expect(match?.game).toMatchObject({
++      outcome: "void",
++      resultReason: "disconnect_timeout",
++      winnerUserId: null,
++    });
++    expect(match?.players.map((p) => p.result)).toEqual(["void", "void"]);
++  });
++
++  test("disconnect timeout does nothing after a move, a finish or for a missing match", async () => {
++    await place(black, 0, 7, 7);
++    expect(await timeout([white], 0)).toEqual({ status: "skipped" });
++    expect((await service.getMatch(matchId))?.game.status).toBe("playing");
++
++    await place(white, 1, 14, 14);
++    expect(await timeout([black], 2)).toEqual({ status: "skipped" });
++    expect((await service.getMatch(matchId))?.game).toMatchObject({
++      resultReason: "five_in_row",
++      winnerUserId: white,
++    });
++
++    expect(
++      await service.finishBySystem({
++        matchId: matchId + 1000,
++        reason: "disconnect_timeout",
++        absentUserIds: [black],
++        expectedVersion: 0,
++      }),
++    ).toEqual({ status: "skipped" });
++  });
++
++  test("disconnect timeout and a move on the same version: exactly one wins", async () => {
++    const [command, finish] = await Promise.all([
++      place(black, 0, 7, 7),
++      timeout([black], 0),
++    ]);
++    const applied = command.status === "applied";
++    expect(applied).toBe(finish.status === "skipped");
++    expect((await service.getMatch(matchId))?.game.stateVersion).toBe(1);
++  });
++
++  test("disconnect timeout rejects absent users who are not participants", async () => {
++    await expect(timeout([outsider], 0)).rejects.toThrow(
++      "absentUserIds must be participants",
++    );
++    await expect(timeout([], 0)).rejects.toThrow();
++    expect((await service.getMatch(matchId))?.game.status).toBe("playing");
++  });
++
++  test("getSnapshot returns the contract shape for a playing match", async () => {
++    await place(black, 0, 7, 7);
++    const snapshot = await service.getSnapshot(matchId);
++    expect(snapshot).toMatchObject({
++      matchId,
++      gameType: "gomoku",
++      rulesVersion: "gomoku-test",
++      stateVersion: 1,
++      status: "playing",
++      players: { black, white },
++      currentPlayerId: white,
++      result: null,
++    });
++    expect(snapshot?.board[7][7]).toBe("black");
++    expect(snapshot?.board.flat().filter(Boolean)).toHaveLength(1);
++    expect(await service.getSnapshot(matchId + 1000)).toBeUndefined();
++  });
++
++  test("getSnapshot carries the stored result of finished matches", async () => {
++    await place(black, 0, 14, 14);
++    expect((await service.getSnapshot(matchId))?.result).toEqual({
++      outcome: "win",
++      winnerId: black,
++      reason: "five_in_row",
++    });
++
++    const other = await service.createMatch({
++      gameType: "gomoku",
++      blackUserId: black,
++      whiteUserId: white,
++    });
++    await service.finishBySystem({
++      matchId: other,
++      reason: "disconnect_timeout",
++      absentUserIds: [black, white],
++      expectedVersion: 0,
++    });
++    expect(await service.getSnapshot(other)).toMatchObject({
++      status: "finished",
++      currentPlayerId: null,
++      result: { outcome: "void", winnerId: null, reason: "disconnect_timeout" },
++    });
++  });
+diff --git a/apps/server/src/services/game-command-service.ts b/apps/server/src/services/game-command-service.ts
+--- a/apps/server/src/services/game-command-service.ts
++++ b/apps/server/src/services/game-command-service.ts
+@@ -0,0 +1,10 @@
++import type {
++  Cell,
++  GameCommandBase,
++  GameError,
++  GameSnapshot,
++  GameStatus,
++  GameType,
++  PlaceAction,
++  ResignAction,
++} from "@cafe/game-contracts";
+@@ -5,2 +15,7 @@
+-export type PlaceAction = { type: "place"; row: number; col: number };
+-export type GameAction = PlaceAction | { type: "resign" };
++export type GameAction = PlaceAction | ResignAction;
++export type ErrorCode = GameError["code"];
++// Engines report only rule outcomes; every other code is decided here (IF-01).
++export type EngineErrorCode = Extract<
++  ErrorCode,
++  "INVALID_ACTION" | "GAME_FINISHED"
++>;
+@@ -10 +25,2 @@
+-  | { outcome: "draw"; reason: "draw" };
++  | { outcome: "draw"; reason: "draw" }
++  | { outcome: "void"; reason: string };
+@@ -15 +31 @@
+-  | { ok: false; code: string }
++  | { ok: false; code: EngineErrorCode }
+@@ -17,0 +34,2 @@
++export type StoredMove = { row: number; col: number; stone: string };
++
+@@ -19 +37 @@
+-  moves: { row: number; col: number; stone: string }[];
++  moves: StoredMove[];
+@@ -26,4 +44,10 @@
+-export type RegisteredRules = { version: string; rules: GameRules };
+-
+-export type GameCommand = {
+-  matchId: number;
++// board() rebuilds the position from stored moves (Othello flips need rules).
++export type RegisteredRules = {
++  version: string;
++  rules: GameRules;
++  board: (moves: StoredMove[]) => Cell[][];
++};
++
++// The contract command plus the actor, which comes from authentication and
++// never from the client payload (IF-02).
++export type GameCommand = GameCommandBase & {
+@@ -31,2 +54,0 @@
+-  commandId: string;
+-  expectedVersion: number;
+@@ -38 +60,11 @@
+-  | { status: "rejected"; code: string; duplicate: boolean };
++  | { status: "rejected"; code: ErrorCode; duplicate: boolean };
++
++export type SystemFinish = {
++  matchId: number;
++  reason: "disconnect_timeout";
++  absentUserIds: number[];
++  expectedVersion: number;
++};
++
++export type SystemFinishResult =
++  { status: "finished"; stateVersion: number } | { status: "skipped" };
+@@ -40,0 +73,4 @@
++const engineErrorCodes: readonly string[] = [
++  "INVALID_ACTION",
++  "GAME_FINISHED",
++] satisfies EngineErrorCode[];
+@@ -64,2 +100,2 @@
+-      finish.outcome === "draw"
+-        ? "draw"
++      finish.outcome !== "win"
++        ? finish.outcome
+@@ -83 +119 @@
+-  rulesByGameType: Record<string, RegisteredRules>,
++  rulesByGameType: Partial<Record<GameType, RegisteredRules>>,
+@@ -84,0 +121,20 @@
++  const registeredFor = (gameType: string) => {
++    const registered = rulesByGameType[gameType as GameType];
++    if (!registered) throw new Error(`No rules registered for ${gameType}.`);
++    return registered;
++  };
++
++  // One REPEATABLE READ snapshot, so stateVersion, players and moves always
++  // describe the same moment even if a command commits in between.
++  const getMatch = (matchId: number) =>
++    db.transaction(
++      async (tx) => {
++        const game = await repo.findGame(tx, matchId);
++        if (!game) return undefined;
++        const players = await repo.findPlayers(tx, matchId);
++        const history = await repo.findMoves(tx, matchId);
++        return { game, players, moves: history };
++      },
++      { isolationLevel: "repeatable read", accessMode: "read only" },
++    );
++
+@@ -88 +144 @@
+-      gameType: string;
++      gameType: GameType;
+@@ -92,4 +148 @@
+-      const registered = rulesByGameType[input.gameType];
+-      if (!registered) {
+-        throw new Error(`No rules registered for ${input.gameType}.`);
+-      }
++      const registered = registeredFor(input.gameType);
+@@ -154 +207 @@
+-                code: previous.rejectCode!,
++                code: previous.rejectCode! as ErrorCode,
+@@ -166 +219 @@
+-        const reject = async (code: string): Promise<CommandResult> => {
++        const reject = async (code: ErrorCode): Promise<CommandResult> => {
+@@ -198,3 +251 @@
+-          const registered = rulesByGameType[game.gameType];
+-          if (!registered)
+-            throw new Error(`No rules registered for ${game.gameType}.`);
++          const registered = registeredFor(game.gameType);
+@@ -214 +265,9 @@
+-          if (!decision.ok) return reject(decision.code);
++          if (!decision.ok) {
++            // An unknown code is an engine bug, not a player error: roll back.
++            if (!engineErrorCodes.includes(decision.code)) {
++              throw new Error(
++                `Engine for ${game.gameType} returned unknown code ${decision.code}.`,
++              );
++            }
++            return reject(decision.code);
++          }
+@@ -252,15 +311,89 @@
+-    // Data the match layer (D) needs to build a GameSnapshot; board comes from
+-    // replaying moves with the engine.
+-    // One REPEATABLE READ snapshot, so stateVersion, players and moves always
+-    // describe the same moment even if a command commits in between.
+-    getMatch(matchId: number) {
+-      return db.transaction(
+-        async (tx) => {
+-          const game = await repo.findGame(tx, matchId);
+-          if (!game) return undefined;
+-          const players = await repo.findPlayers(tx, matchId);
+-          const history = await repo.findMoves(tx, matchId);
+-          return { game, players, moves: history };
+-        },
+-        { isolationLevel: "repeatable read", accessMode: "read only" },
+-      );
++    // Called by the match layer (D) when a disconnect budget runs out. Takes
++    // the same match lock as apply(), so a return or a last move that commits
++    // first wins and this call does nothing (status or version moved on).
++    finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
++      return db.transaction(async (tx) => {
++        const game = await repo.findGameForUpdate(tx, input.matchId);
++        if (!game) return { status: "skipped" };
++        const players = await repo.findPlayers(tx, game.id);
++        const absent = new Set(input.absentUserIds);
++        if (
++          absent.size === 0 ||
++          [...absent].some((id) => !players.some((p) => p.userId === id))
++        ) {
++          throw new Error(
++            `absentUserIds must be participants of match ${game.id}.`,
++          );
++        }
++        if (game.status !== "playing" && game.status !== "paused") {
++          return { status: "skipped" };
++        }
++        if (game.stateVersion !== input.expectedVersion) {
++          return { status: "skipped" };
++        }
++
++        const present = players.filter((p) => !absent.has(p.userId));
++        const finish: Finish =
++          present.length === 1
++            ? {
++                outcome: "win",
++                winner: present[0].seat as Seat,
++                reason: input.reason,
++              }
++            : { outcome: "void", reason: input.reason };
++        const nextVersion = game.stateVersion + 1;
++        await finishMatch(tx, game.id, players, finish, nextVersion);
++        return { status: "finished", stateVersion: nextVersion };
++      });
++    },
++
++    // Raw rows for checks that need them (participants, history).
++    getMatch,
++
++    /**
++     * 사용자의 끝나지 않은 경기(`waiting`/`playing`/`paused`) ID를 찾습니다.
++     *
++     * @returns 경기 ID, 없으면 `undefined`
++     *
++     * @remarks
++     * 매칭 신청 거절(FR-MATCH-02)과 재접속 시 진행 중 경기 안내(D)에 씁니다.
++     * 잠금 없이 읽으므로, 동시 신청 경합은 호출하는 쪽에서 막습니다.
++     */
++    findActiveMatchId(userId: number) {
++      return repo.findActiveGameIdForUser(db, userId);
++    },
++
++    // Server-confirmed state in the shared contract shape, for match.snapshot,
++    // reconnects and VERSION_CONFLICT details (IF-01, IF-05).
++    async getSnapshot(matchId: number): Promise<GameSnapshot | undefined> {
++      const match = await getMatch(matchId);
++      if (!match) return undefined;
++      const { game, players, moves } = match;
++      const userIdOf = (seat: string) =>
++        players.find((p) => p.seat === seat)!.userId;
++      const result =
++        game.status !== "finished"
++          ? null
++          : game.outcome === "win"
++            ? {
++                outcome: "win",
++                winnerId: game.winnerUserId,
++                reason: game.resultReason,
++              }
++            : {
++                outcome: game.outcome,
++                winnerId: null,
++                reason: game.resultReason,
++              };
++      // Values come from CHECK-constrained columns that mirror the contract.
++      return {
++        matchId: game.id,
++        gameType: game.gameType,
++        rulesVersion: game.rulesVersion,
++        stateVersion: game.stateVersion,
++        status: game.status as GameStatus,
++        players: { black: userIdOf("black"), white: userIdOf("white") },
++        board: registeredFor(game.gameType).board(moves),
++        currentPlayerId: game.currentTurn ? userIdOf(game.currentTurn) : null,
++        result,
++      } as GameSnapshot;
+diff --git a/apps/server/src/services/matchmaking.test.ts b/apps/server/src/services/matchmaking.test.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/services/matchmaking.test.ts
+@@ -0,0 +1,188 @@
++import { describe, expect, test, vi } from "vitest";
++import type { WebSocket } from "ws";
++import type { GameCommandService } from "./game-command-service.ts";
++import { createMatchmaking } from "./matchmaking.ts";
++
++function fakeSocket() {
++  return { OPEN: 1, readyState: 1 } as unknown as WebSocket;
++}
++
++const flush = () => new Promise((resolve) => setImmediate(resolve));
++
++function setup(
++  options: { active?: number[]; createMatch?: () => Promise<number> } = {},
++) {
++  let nextMatchId = 100;
++  const games = {
++    createMatch: vi.fn(options.createMatch ?? (async () => nextMatchId++)),
++    findActiveMatchId: vi.fn(async (userId: number) =>
++      options.active?.includes(userId) ? 1 : undefined,
++    ),
++  };
++  const sent: { socket: WebSocket; type: string; payload: object }[] = [];
++  const onError = vi.fn();
++  const matchmaking = createMatchmaking({
++    getGames: () => games as unknown as GameCommandService,
++    send: (socket, type, payload) => sent.push({ socket, type, payload }),
++    onError,
++    random: () => 0,
++  });
++  return { matchmaking, games, sent, onError };
++}
++
++describe("matchmaking", () => {
++  test("two players of the same game are matched and both notified", async () => {
++    const { matchmaking, games, sent } = setup();
++    const [s1, s2] = [fakeSocket(), fakeSocket()];
++
++    expect(await matchmaking.join(1, s1, "gomoku")).toBe("joined");
++    expect(games.createMatch).not.toHaveBeenCalled();
++    expect(await matchmaking.join(2, s2, "gomoku")).toBe("joined");
++    await flush();
++
++    expect(games.createMatch).toHaveBeenCalledExactlyOnceWith({
++      gameType: "gomoku",
++      blackUserId: 1,
++      whiteUserId: 2,
++    });
++    expect(sent).toEqual([
++      {
++        socket: s1,
++        type: "queue.matched",
++        payload: { matchId: 100, gameType: "gomoku" },
++      },
++      {
++        socket: s2,
++        type: "queue.matched",
++        payload: { matchId: 100, gameType: "gomoku" },
++      },
++    ]);
++    expect(matchmaking.isQueued(1)).toBe(false);
++    expect(matchmaking.isQueued(2)).toBe(false);
++  });
++
++  test("colors come from the random source", async () => {
++    let roll = 0.9;
++    const games = {
++      createMatch: vi.fn(async () => 1),
++      findActiveMatchId: vi.fn(async () => undefined),
++    };
++    const matchmaking = createMatchmaking({
++      getGames: () => games as unknown as GameCommandService,
++      send: () => {},
++      onError: () => {},
++      random: () => roll,
++    });
++    await matchmaking.join(1, fakeSocket(), "gomoku");
++    await matchmaking.join(2, fakeSocket(), "gomoku");
++    await flush();
++    roll = 0.1;
++    await matchmaking.join(3, fakeSocket(), "gomoku");
++    await matchmaking.join(4, fakeSocket(), "gomoku");
++    await flush();
++    expect(games.createMatch.mock.calls).toEqual([
++      [{ gameType: "gomoku", blackUserId: 2, whiteUserId: 1 }],
++      [{ gameType: "gomoku", blackUserId: 3, whiteUserId: 4 }],
++    ]);
++  });
++
++  test("different games use separate queues, and a third player waits", async () => {
++    const { matchmaking, games } = setup();
++    await matchmaking.join(1, fakeSocket(), "gomoku");
++    await matchmaking.join(2, fakeSocket(), "othello");
++    await flush();
++    expect(games.createMatch).not.toHaveBeenCalled();
++
++    await matchmaking.join(3, fakeSocket(), "gomoku");
++    await matchmaking.join(4, fakeSocket(), "gomoku");
++    await flush();
++    expect(games.createMatch).toHaveBeenCalledOnce();
++    expect(matchmaking.isQueued(4)).toBe(true);
++    expect(matchmaking.isQueued(2)).toBe(true);
++  });
++
++  test("a queued or playing user cannot join again", async () => {
++    const { matchmaking } = setup({ active: [9] });
++    await matchmaking.join(1, fakeSocket(), "gomoku");
++    expect(await matchmaking.join(1, fakeSocket(), "othello")).toBe(
++      "ALREADY_ACTIVE",
++    );
++    expect(await matchmaking.join(9, fakeSocket(), "gomoku")).toBe(
++      "ALREADY_ACTIVE",
++    );
++  });
++
++  test("concurrent joins of one user enqueue only one entry", async () => {
++    const { matchmaking } = setup();
++    const results = await Promise.all([
++      matchmaking.join(1, fakeSocket(), "gomoku"),
++      matchmaking.join(1, fakeSocket(), "gomoku"),
++    ]);
++    expect(results.sort()).toEqual(["ALREADY_ACTIVE", "joined"]);
++  });
++
++  test("leaving or closing the socket before a pair forms removes the entry", async () => {
++    const { matchmaking, games } = setup();
++    const closing = fakeSocket();
++    await matchmaking.join(1, fakeSocket(), "gomoku");
++    expect(matchmaking.leave(1)).toBe("left");
++    expect(matchmaking.leave(1)).toBe("left");
++    await matchmaking.join(2, closing, "gomoku");
++    matchmaking.removeSocket(closing);
++
++    await matchmaking.join(3, fakeSocket(), "gomoku");
++    await flush();
++    expect(games.createMatch).not.toHaveBeenCalled();
++    expect(matchmaking.isQueued(3)).toBe(true);
++  });
++
++  test("a socket closed during the active-match lookup is not queued", async () => {
++    const { matchmaking } = setup();
++    const socket = fakeSocket();
++    const join = matchmaking.join(1, socket, "gomoku");
++    (socket as { readyState: number }).readyState = 3;
++    expect(await join).toBe("closed");
++    expect(matchmaking.isQueued(1)).toBe(false);
++  });
++
++  test("once a pair is being created it is too late to leave or rejoin", async () => {
++    let finish!: (matchId: number) => void;
++    const { matchmaking, sent } = setup({
++      createMatch: () => new Promise<number>((resolve) => (finish = resolve)),
++    });
++    const s1 = fakeSocket();
++    await matchmaking.join(1, s1, "gomoku");
++    await matchmaking.join(2, fakeSocket(), "gomoku");
++
++    expect(matchmaking.leave(1)).toBe("ALREADY_MATCHED");
++    expect(await matchmaking.join(1, fakeSocket(), "gomoku")).toBe(
++      "ALREADY_ACTIVE",
++    );
++    // Closing does not cancel it either; the match still starts.
++    matchmaking.removeSocket(s1);
++    finish(7);
++    await flush();
++    expect(sent.map((m) => m.type)).toEqual(["queue.matched", "queue.matched"]);
++  });
++
++  test("a failed createMatch returns both players to idle", async () => {
++    const { matchmaking, sent, onError } = setup({
++      createMatch: async () => {
++        throw new Error("db down");
++      },
++    });
++    await matchmaking.join(1, fakeSocket(), "gomoku");
++    await matchmaking.join(2, fakeSocket(), "gomoku");
++    await flush();
++
++    expect(onError).toHaveBeenCalledOnce();
++    expect(
++      sent.map((m) => [m.type, (m.payload as { code: string }).code]),
++    ).toEqual([
++      ["error", "INTERNAL_ERROR"],
++      ["error", "INTERNAL_ERROR"],
++    ]);
++    expect(matchmaking.isQueued(1)).toBe(false);
++    expect(await matchmaking.join(1, fakeSocket(), "gomoku")).toBe("joined");
++  });
++});
+diff --git a/apps/server/src/services/matchmaking.ts b/apps/server/src/services/matchmaking.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/server/src/services/matchmaking.ts
+@@ -0,0 +1,162 @@
++import type { GameType } from "@cafe/game-contracts";
++import type { WebSocket } from "ws";
++import type { GameCommandService } from "./game-command-service.ts";
++
++type Entry = {
++  userId: number;
++  socket: WebSocket;
++  gameType: GameType;
++  // "matching" while createMatch() runs: too late to leave, still busy.
++  state: "waiting" | "matching";
++};
++
++/**
++ * 매칭 신청 결과입니다.
++ * - `joined`: 대기열에 들어감
++ * - `ALREADY_ACTIVE`: 이미 대기 중이거나 끝나지 않은 경기가 있음
++ * - `closed`: 진행 중 경기를 확인하는 사이에 연결이 닫혀 등록하지 않음
++ */
++export type JoinResult = "joined" | "ALREADY_ACTIVE" | "closed";
++/**
++ * 매칭 취소 결과입니다. `ALREADY_MATCHED`는 이미 경기를 만드는 중이라
++ * 취소할 수 없다는 뜻입니다.
++ */
++export type LeaveResult = "left" | "ALREADY_MATCHED";
++
++/**
++ * 자동 매칭 대기열을 만듭니다(SDS 2.7의 7.1, IF-06).
++ *
++ * @param deps.send - 매칭 결과·오류를 연결에 보내는 함수
++ * @param deps.onError - `createMatch()` 실패를 기록하는 함수
++ * @param deps.random - 흑·백 배정에 쓰는 난수. 테스트에서 고정할 때 넘깁니다.
++ * @param deps.onMatched - 경기가 만들어진 직후, 알림을 보내기 전에 호출됩니다.
++ *   이탈 시계 시작에 씁니다.
++ *
++ * @remarks
++ * 게임 종류별로 먼저 온 순서대로 두 명씩 짝을 짓고, 색은 무작위로 정해
++ * `createMatch()`를 호출합니다. 두 사람에게 `queue.matched`를 보냅니다.
++ *
++ * 대기열은 메모리에만 있습니다. API 인스턴스 1개를 전제하며, 재시작하면
++ * 대기열은 사라지고 진행 중 경기는 void가 됩니다. 대기 항목은 신청한 연결에
++ * 묶여 있어, 그 연결이 닫히면 대기열에서 빠집니다.
++ *
++ * 동시성: 짝은 한 tick 안에서 동기적으로 뽑으므로 한 사람이 두 경기에
++ * 들어가지 않습니다. `createMatch()`가 실행되는 동안 두 사람은 `matching`
++ * 상태로 남아 다시 신청하거나 취소할 수 없습니다. 실패하면 둘 다 대기 전
++ * 상태로 돌아가고 오류를 받습니다.
++ */
++export function createMatchmaking(deps: {
++  getGames: () => GameCommandService;
++  send: (socket: WebSocket, type: string, payload: object) => void;
++  onError: (error: unknown) => void;
++  random?: () => number;
++  onMatched?: (matchId: number, userIds: number[]) => void;
++}) {
++  const random = deps.random ?? Math.random;
++  const queues = new Map<GameType, Entry[]>();
++  const entries = new Map<number, Entry>();
++
++  function dequeue(entry: Entry) {
++    const queue = queues.get(entry.gameType) ?? [];
++    queue.splice(queue.indexOf(entry), 1);
++    entries.delete(entry.userId);
++  }
++
++  // Pairs are taken synchronously, so one entry never ends up in two matches.
++  function pairNext(gameType: GameType) {
++    const queue = queues.get(gameType) ?? [];
++    const waiting = queue.filter((entry) => entry.state === "waiting");
++    if (waiting.length < 2) return;
++    const pair = waiting.slice(0, 2);
++    for (const entry of pair) entry.state = "matching";
++    void createMatch(pair);
++  }
++
++  async function createMatch(pair: Entry[]) {
++    const [black, white] = random() < 0.5 ? pair : [pair[1], pair[0]];
++    try {
++      const matchId = await deps.getGames().createMatch({
++        gameType: black.gameType,
++        blackUserId: black.userId,
++        whiteUserId: white.userId,
++      });
++      deps.onMatched?.(matchId, [black.userId, white.userId]);
++      for (const entry of pair) {
++        dequeue(entry);
++        deps.send(entry.socket, "queue.matched", {
++          matchId,
++          gameType: entry.gameType,
++        });
++      }
++    } catch (error) {
++      // Both go back to idle and may join again.
++      deps.onError(error);
++      for (const entry of pair) {
++        dequeue(entry);
++        deps.send(entry.socket, "error", {
++          code: "INTERNAL_ERROR",
++          message: "Matchmaking failed. Join the queue again.",
++        });
++      }
++    }
++  }
++
++  return {
++    /**
++     * 사용자를 게임 종류의 대기열에 넣고, 두 명이 모이면 매칭을 시작합니다.
++     *
++     * @remarks
++     * 끝나지 않은 경기는 DB로 확인합니다(`findActiveMatchId`). 이 조회 전후로
++     * 대기열을 확인하므로, 같은 사용자의 동시 신청은 하나만 들어갑니다.
++     */
++    async join(
++      userId: number,
++      socket: WebSocket,
++      gameType: GameType,
++    ): Promise<JoinResult> {
++      // Checked before and after the lookup: a join that starts while the
++      // user is being matched must not see the old DB state as idle.
++      if (entries.has(userId)) return "ALREADY_ACTIVE";
++      const activeMatchId = await deps.getGames().findActiveMatchId(userId);
++      if (activeMatchId !== undefined || entries.has(userId)) {
++        return "ALREADY_ACTIVE";
++      }
++      // Closed during the lookup: removeSocket() has already run.
++      if (socket.readyState !== socket.OPEN) return "closed";
++      const entry: Entry = { userId, socket, gameType, state: "waiting" };
++      entries.set(userId, entry);
++      const queue = queues.get(gameType) ?? [];
++      queue.push(entry);
++      queues.set(gameType, queue);
++      pairNext(gameType);
++      return "joined";
++    },
++
++    /** 대기열에서 뺍니다. 대기 중이 아니어도 `left`를 돌려줍니다. */
++    leave(userId: number): LeaveResult {
++      const entry = entries.get(userId);
++      if (!entry) return "left";
++      if (entry.state === "matching") return "ALREADY_MATCHED";
++      dequeue(entry);
++      return "left";
++    },
++
++    /**
++     * 닫힌 연결이 신청한 대기 항목을 뺍니다. 이미 경기를 만드는 중인 항목은
++     * 그대로 두어 경기가 만들어집니다.
++     */
++    removeSocket(socket: WebSocket) {
++      for (const entry of entries.values()) {
++        if (entry.socket === socket && entry.state === "waiting") {
++          dequeue(entry);
++        }
++      }
++    },
++
++    isQueued(userId: number) {
++      return entries.has(userId);
++    },
++  };
++}
++
++export type Matchmaking = ReturnType<typeof createMatchmaking>;
+diff --git a/package-lock.json b/package-lock.json
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -18,0 +19 @@
++        "@fastify/websocket": "^11.3.4",
+@@ -29,0 +31 @@
++        "@types/ws": "^8.18.2",
+@@ -1234,0 +1237,21 @@
++    "node_modules/@fastify/websocket": {
++      "version": "11.3.4",
++      "resolved": "https://registry.npmjs.org/@fastify/websocket/-/websocket-11.3.4.tgz",
++      "integrity": "sha512-firnJtEOv6pfdoXIzFDMbd+omgWwFNfLtdM8JejNFr/9lT/9DHkEhjTShuRFeE4phqrevD2B3JRW0v6uyzWhHQ==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/fastify"
++        },
++        {
++          "type": "opencollective",
++          "url": "https://opencollective.com/fastify"
++        }
++      ],
++      "license": "MIT",
++      "dependencies": {
++        "duplexify": "^4.1.3",
++        "fastify-plugin": "^6.0.0",
++        "ws": "^8.16.0"
++      }
++    },
+@@ -1625,0 +1649,10 @@
++      }
++    },
++    "node_modules/@types/ws": {
++      "version": "8.18.2",
++      "resolved": "https://registry.npmjs.org/@types/ws/-/ws-8.18.2.tgz",
++      "integrity": "sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*"
+@@ -2973,0 +3007,21 @@
++    "node_modules/duplexify": {
++      "version": "4.1.3",
++      "resolved": "https://registry.npmjs.org/duplexify/-/duplexify-4.1.3.tgz",
++      "integrity": "sha512-M3BmBhwJRZsSx38lZyhE53Csddgzl5R7xGJNk7CVddZD6CcmwMCH8J+7AprIrQKH7TonKxaCjcv27Qmf+sQ+oA==",
++      "license": "MIT",
++      "dependencies": {
++        "end-of-stream": "^1.4.1",
++        "inherits": "^2.0.3",
++        "readable-stream": "^3.1.1",
++        "stream-shift": "^1.0.2"
++      }
++    },
++    "node_modules/end-of-stream": {
++      "version": "1.4.5",
++      "resolved": "https://registry.npmjs.org/end-of-stream/-/end-of-stream-1.4.5.tgz",
++      "integrity": "sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==",
++      "license": "MIT",
++      "dependencies": {
++        "once": "^1.4.0"
++      }
++    },
+@@ -3773,0 +3828,9 @@
++    "node_modules/once": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
++      "integrity": "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==",
++      "license": "ISC",
++      "dependencies": {
++        "wrappy": "1"
++      }
++    },
+@@ -4111,0 +4175,14 @@
++      }
++    },
++    "node_modules/readable-stream": {
++      "version": "3.6.2",
++      "resolved": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
++      "integrity": "sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==",
++      "license": "MIT",
++      "dependencies": {
++        "inherits": "^2.0.3",
++        "string_decoder": "^1.1.1",
++        "util-deprecate": "^1.0.1"
++      },
++      "engines": {
++        "node": ">= 6"
+@@ -4200,0 +4278,20 @@
++    "node_modules/safe-buffer": {
++      "version": "5.2.1",
++      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
++      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/feross"
++        },
++        {
++          "type": "patreon",
++          "url": "https://www.patreon.com/feross"
++        },
++        {
++          "type": "consulting",
++          "url": "https://feross.org/support"
++        }
++      ],
++      "license": "MIT"
++    },
+@@ -4376,0 +4474,15 @@
++    },
++    "node_modules/stream-shift": {
++      "version": "1.0.3",
++      "resolved": "https://registry.npmjs.org/stream-shift/-/stream-shift-1.0.3.tgz",
++      "integrity": "sha512-76ORR0DO1o1hlKwTbi/DM3EXWGf3ZJYO8cXX5RJwnul2DEg2oyoZyjLNoQM8WsvZiFKCRfC1O0J7iCvie3RZmQ==",
++      "license": "MIT"
++    },
++    "node_modules/string_decoder": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
++      "integrity": "sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==",
++      "license": "MIT",
++      "dependencies": {
++        "safe-buffer": "~5.2.0"
++      }
+@@ -4518,0 +4631,6 @@
++    "node_modules/util-deprecate": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
++      "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==",
++      "license": "MIT"
++    },
+@@ -4718,0 +4837,27 @@
++    "node_modules/wrappy": {
++      "version": "1.0.2",
++      "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
++      "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
++      "license": "ISC"
++    },
++    "node_modules/ws": {
++      "version": "8.22.0",
++      "resolved": "https://registry.npmjs.org/ws/-/ws-8.22.0.tgz",
++      "integrity": "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=10.0.0"
++      },
++      "peerDependencies": {
++        "bufferutil": "^4.0.1",
++        "utf-8-validate": ">=5.0.2"
++      },
++      "peerDependenciesMeta": {
++        "bufferutil": {
++          "optional": true
++        },
++        "utf-8-validate": {
++          "optional": true
++        }
++      }
++    },
+@@ -4747,2 +4892,6 @@
+-    "packages/games/omok": {
+-      "name": "@cafe/omok",
++    "node_modules/@cafe/game-engine": {
++      "resolved": "packages/game-engine",
++      "link": true
++    },
++    "packages/game-engine": {
++      "name": "@cafe/game-engine",
+@@ -4750 +4899,3 @@
+-      "extraneous": true
++      "dependencies": {
++        "@cafe/game-contracts": "0.1.0"
++      }
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -34,0 +35 @@
++    "@types/ws": "^8.18.2",
+@@ -45,0 +47 @@
++    "@fastify/websocket": "^11.3.4",
+diff --git a/packages/game-engine/package.json b/packages/game-engine/package.json
+new file mode 100644
+--- /dev/null
++++ b/packages/game-engine/package.json
+@@ -0,0 +1,12 @@
++{
++  "name": "@cafe/game-engine",
++  "private": true,
++  "version": "0.1.0",
++  "type": "module",
++  "exports": {
++    ".": "./src/index.ts"
++  },
++  "dependencies": {
++    "@cafe/game-contracts": "0.1.0"
++  }
++}
+diff --git a/packages/game-engine/src/gomoku/apply-move.ts b/packages/game-engine/src/gomoku/apply-move.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/game-engine/src/gomoku/apply-move.ts
+@@ -0,0 +1,110 @@
++import type { PlaceAction, PlayerColor } from "@cafe/game-contracts";
++import { GOMOKU_BOARD_SIZE } from "./initial-state.ts";
++import type { GomokuFinish, GomokuMoveResult, GomokuState } from "./types.ts";
++
++function hasFive(
++  board: GomokuState["board"],
++  row: number,
++  col: number,
++  color: PlayerColor,
++): boolean {
++  return [
++    [0, 1],
++    [1, 0],
++    [1, 1],
++    [1, -1],
++  ].some(([dr, dc]) => {
++    let count = 1;
++    for (const sign of [-1, 1]) {
++      let r = row + sign * dr;
++      let c = col + sign * dc;
++      while (
++        r >= 0 &&
++        r < GOMOKU_BOARD_SIZE &&
++        c >= 0 &&
++        c < GOMOKU_BOARD_SIZE &&
++        board[r][c] === color
++      ) {
++        count++;
++        r += sign * dr;
++        c += sign * dc;
++      }
++    }
++    return count >= 5;
++  });
++}
++
++export function applyMove(
++  state: GomokuState,
++  action: PlaceAction,
++  playerColor: PlayerColor,
++): GomokuMoveResult {
++  if (state.result !== null) {
++    return {
++      ok: false,
++      error: { code: "GAME_FINISHED", message: "이미 종료된 경기입니다." },
++    };
++  }
++
++  const { row, col } = action;
++
++  if (
++    action.type !== "place" ||
++    !Number.isInteger(row) ||
++    !Number.isInteger(col) ||
++    row < 0 ||
++    row >= GOMOKU_BOARD_SIZE ||
++    col < 0 ||
++    col >= GOMOKU_BOARD_SIZE
++  ) {
++    return {
++      ok: false,
++      error: {
++        code: "INVALID_ACTION",
++        message: "착수 좌표는 0부터 14까지의 정수여야 합니다.",
++      },
++    };
++  }
++
++  if (playerColor !== state.currentPlayerColor) {
++    return {
++      ok: false,
++      error: {
++        code: "INVALID_ACTION",
++        message: "현재 차례인 플레이어만 착수할 수 있습니다.",
++      },
++    };
++  }
++
++  if (state.board[row][col] !== null) {
++    return {
++      ok: false,
++      error: {
++        code: "INVALID_ACTION",
++        message: "이미 돌이 있는 칸에는 착수할 수 없습니다.",
++      },
++    };
++  }
++
++  // 모든 행을 복사해서 기존 상태와 결과 상태의 보드가 독립되도록 한다.
++  const board = state.board.map((boardRow) => [...boardRow]);
++  board[row][col] = playerColor;
++
++  // 마지막 빈칸에 놓아 이기는 경우에도 승리 판정을 먼저 한다.
++  const result: GomokuFinish | null = hasFive(board, row, col, playerColor)
++    ? { outcome: "win", winner: playerColor, reason: "five_in_row" }
++    : board.every((line) => line.every((cell) => cell !== null))
++      ? { outcome: "draw", reason: "draw" }
++      : null;
++
++  return {
++    ok: true,
++    state: result
++      ? { board, currentPlayerColor: null, result }
++      : {
++          board,
++          currentPlayerColor: playerColor === "black" ? "white" : "black",
++          result: null,
++        },
++  };
++}
+diff --git a/packages/game-engine/src/gomoku/index.ts b/packages/game-engine/src/gomoku/index.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/game-engine/src/gomoku/index.ts
+@@ -0,0 +1,10 @@
++export { createInitialState, GOMOKU_BOARD_SIZE } from "./initial-state.ts";
++export { applyMove } from "./apply-move.ts";
++export { board, rules, restoreState, GOMOKU_RULES_VERSION } from "./rules.ts";
++export type {
++  GomokuState,
++  GomokuMoveResult,
++  GomokuFinish,
++  GomokuRulesInput,
++  GomokuRuleDecision,
++} from "./types.ts";
+diff --git a/packages/game-engine/src/gomoku/initial-state.ts b/packages/game-engine/src/gomoku/initial-state.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/game-engine/src/gomoku/initial-state.ts
+@@ -0,0 +1,14 @@
++import type { Cell } from "@cafe/game-contracts";
++import type { GomokuState } from "./types.ts";
++
++export const GOMOKU_BOARD_SIZE = 15;
++
++export function createInitialState(): GomokuState {
++  return {
++    board: Array.from({ length: GOMOKU_BOARD_SIZE }, () =>
++      Array<Cell>(GOMOKU_BOARD_SIZE).fill(null),
++    ),
++    currentPlayerColor: "black",
++    result: null,
++  };
++}
+diff --git a/packages/game-engine/src/gomoku/rules.ts b/packages/game-engine/src/gomoku/rules.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/game-engine/src/gomoku/rules.ts
+@@ -0,0 +1,49 @@
++import type { Cell } from "@cafe/game-contracts";
++import { applyMove } from "./apply-move.ts";
++import { createInitialState } from "./initial-state.ts";
++import type {
++  GomokuRuleDecision,
++  GomokuRulesInput,
++  GomokuState,
++} from "./types.ts";
++
++export const GOMOKU_RULES_VERSION = "gomoku-freestyle-v1";
++
++// DB의 착수 순서 그대로 재생한다. 손상된 이력은 현재 명령의 불법 착수와 구분한다.
++export function restoreState(moves: GomokuRulesInput["moves"]): GomokuState {
++  let state = createInitialState();
++  for (const [index, move] of moves.entries()) {
++    if (move.stone !== "black" && move.stone !== "white") {
++      throw new Error(`Invalid gomoku history at move ${index + 1}: stone`);
++    }
++    const result = applyMove(
++      state,
++      { type: "place", row: move.row, col: move.col },
++      move.stone,
++    );
++    if (!result.ok) {
++      throw new Error(
++        `Invalid gomoku history at move ${index + 1}: ${result.error.code}`,
++      );
++    }
++    state = result.state;
++  }
++  return state;
++}
++
++// 서버 snapshot의 판. 저장된 이력을 재생하므로 손상된 이력이면
++// restoreState와 같은 예외를 던진다.
++export function board(moves: GomokuRulesInput["moves"]): Cell[][] {
++  return restoreState(moves).board;
++}
++
++// 서버에는 board와 함께 등록한다:
++// createGameCommandService(db, { gomoku: { version, rules, board } })
++export function rules(input: GomokuRulesInput): GomokuRuleDecision {
++  const result = applyMove(restoreState(input.moves), input.action, input.seat);
++  if (!result.ok) return { ok: false, code: result.error.code };
++  if (result.state.result) {
++    return { ok: true, nextTurn: null, finish: result.state.result };
++  }
++  return { ok: true, nextTurn: result.state.currentPlayerColor };
++}
+diff --git a/packages/game-engine/src/gomoku/types.ts b/packages/game-engine/src/gomoku/types.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/game-engine/src/gomoku/types.ts
+@@ -0,0 +1,34 @@
++import type {
++  Cell,
++  GameError,
++  PlaceAction,
++  PlayerColor,
++} from "@cafe/game-contracts";
++
++// 승자는 색으로 표현한다. 사용자 ID와 전송 결과는 경기 관리 계층에서 연결한다.
++export type GomokuFinish =
++  | { outcome: "win"; winner: PlayerColor; reason: "five_in_row" }
++  | { outcome: "draw"; reason: "draw" };
++
++export type GomokuState = { board: Cell[][] } & (
++  | { currentPlayerColor: PlayerColor; result: null }
++  | { currentPlayerColor: null; result: GomokuFinish }
++);
++
++export type GomokuMoveResult =
++  | { ok: true; state: GomokuState }
++  | {
++      ok: false;
++      error: GameError & { code: "INVALID_ACTION" | "GAME_FINISHED" };
++    };
++
++// 서버 GameRules(game-command-service.ts) 입력/출력과 구조적으로 호환되는 엔진 연결 지점.
++export interface GomokuRulesInput {
++  moves: readonly { row: number; col: number; stone: string }[];
++  seat: PlayerColor;
++  action: PlaceAction;
++}
++
++export type GomokuRuleDecision =
++  | { ok: false; code: "INVALID_ACTION" | "GAME_FINISHED" }
++  | { ok: true; nextTurn: PlayerColor | null; finish?: GomokuFinish };
+diff --git a/packages/game-engine/src/index.ts b/packages/game-engine/src/index.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/game-engine/src/index.ts
+@@ -0,0 +1 @@
++export * as gomoku from "./gomoku/index.ts";
