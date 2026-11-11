@@ -38,6 +38,7 @@ export function base32Decode(text: string) {
   return Buffer.from(bytes);
 }
 
+/** 20바이트 난수로 base32 TOTP secret을 만듭니다. */
 export function generateTotpSecret() {
   return base32Encode(randomBytes(20));
 }
@@ -46,6 +47,12 @@ export function currentStep(now = Date.now()) {
   return Math.floor(now / 1000 / PERIOD_SECONDS);
 }
 
+/**
+ * 한 time step의 6자리 TOTP 코드를 계산합니다(RFC 6238, HMAC-SHA1).
+ *
+ * @param secret - base32 secret
+ * @param step - 30초 단위 time step ({@link currentStep})
+ */
 export function totpCode(secret: string, step: number) {
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(step));
@@ -57,8 +64,15 @@ export function totpCode(secret: string, step: number) {
   return String(binary % 10 ** DIGITS).padStart(DIGITS, "0");
 }
 
-// Accepts one step of clock drift either way. Returns the matched step so the
-// caller can store it; steps at or before `lastUsedStep` are refused (replay).
+/**
+ * TOTP 코드를 검증하고 일치한 time step을 돌려줍니다.
+ *
+ * @param lastUsedStep - 마지막으로 성공한 step. 이 값 이하의 step은 재사용으로 보고 거절합니다.
+ * @returns 일치한 step(호출자가 저장), 실패하면 `null`
+ *
+ * @remarks
+ * 앞뒤 한 step(±30초)의 시계 오차를 허용합니다. 6자리 숫자가 아니면 바로 `null`입니다.
+ */
 export function verifyTotp(
   secret: string,
   code: string,
@@ -74,6 +88,7 @@ export function verifyTotp(
   return null;
 }
 
+/** 인증 앱 등록용 `otpauth://totp/...` URL을 만듭니다. QR 코드에 담는 값이며 secret이 포함됩니다. */
 export function otpauthUrl(
   secret: string,
   accountName: string,
