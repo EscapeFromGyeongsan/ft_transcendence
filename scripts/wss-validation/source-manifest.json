@@ -1,0 +1,289 @@
+{
+  "runtime": {
+    "pr": 40,
+    "sha": "341c851e5c41d15c5a309444230ffb6288af6501",
+    "integrationBase": "9b5e7c7113531a126c4bc626bda72b67b6712d1a"
+  },
+  "realtime": {
+    "pr": 50,
+    "sha": "3dd6be23aa5d258f67293a0b8f4e438f8680d4de"
+  },
+  "engine": {
+    "pr": 45,
+    "sha": "6538712f6f41154c77b7d77ea512f074b4a8cbba"
+  },
+  "overlayFiles": [
+    {
+      "path": ".github/ISSUE_TEMPLATE/task.md",
+      "sha": "63841c76414a77caf54007c0ac4e40bb3c56972d"
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "sha": "c8ed3b55efd603c01d46c60a8b73fd91d3c7001e"
+    },
+    {
+      "path": ".gitignore",
+      "sha": "e9b153cba62c28b5ab64f51e7497b9bcbeb0eedd"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha": "ce5b5070be9780f5ff83a848d720a962e220577d"
+    },
+    {
+      "path": "Document/SDS.md",
+      "sha": "669054a25238d3024fe5d9fb111a93ffc6263d20"
+    },
+    {
+      "path": "Document/code-conventions.md",
+      "sha": "fb79829e2839c34bb8c52c294914ed07cf10885f"
+    },
+    {
+      "path": "Document/contracts.md",
+      "sha": "2fbf87862b687de3781f65fdbf70ab3820e254a6"
+    },
+    {
+      "path": "README.md",
+      "sha": "35cafa275482e0e49c411e3c942ab7e4ff46633d"
+    },
+    {
+      "path": "apps/server/src/api/stats-routes.test.ts",
+      "sha": "e62f47a3001f99155fb377932ca66d919822932f"
+    },
+    {
+      "path": "apps/server/src/api/ws-routes.test.ts",
+      "sha": "a2a5b824295bb5a6bd2c8b2899c3be52b981506f"
+    },
+    {
+      "path": "apps/server/src/api/ws-routes.ts",
+      "sha": "86a599c1d2f320c788221ddf8896c52abcba6a8d"
+    },
+    {
+      "path": "apps/server/src/app.ts",
+      "sha": "9ae41eaeb7c032effed90568249168df3b6864ee"
+    },
+    {
+      "path": "apps/server/src/index.ts",
+      "sha": "f7904e060fe65ebce32452c710455be3bdbb046e"
+    },
+    {
+      "path": "apps/server/src/repositories/game-repository.ts",
+      "sha": "53fb3ea68934210e69611558a3babb51dae030f5"
+    },
+    {
+      "path": "apps/server/src/schemas/errors.ts",
+      "sha": "00c26a2179b49af9da3d42c73b20afc347296f12"
+    },
+    {
+      "path": "apps/server/src/services/absence-tracker.test.ts",
+      "sha": "5db8f48558904d8fc54eb521567a1375dae1e6eb"
+    },
+    {
+      "path": "apps/server/src/services/absence-tracker.ts",
+      "sha": "66f263f1dd07e7c747df0d9bc13fba138a7deedf"
+    },
+    {
+      "path": "apps/server/src/services/connection-registry.test.ts",
+      "sha": "1ef4ee8a96210d61b7f08c2c2a347f2b5ae40e21"
+    },
+    {
+      "path": "apps/server/src/services/connection-registry.ts",
+      "sha": "b4b5b0290b82ac44e9c0658c40d46ea53bf76865"
+    },
+    {
+      "path": "apps/server/src/services/game-command-service.test.ts",
+      "sha": "cff1a52d2628363c77c88d1af09f1ee60c984691"
+    },
+    {
+      "path": "apps/server/src/services/game-command-service.ts",
+      "sha": "450fd604bf34457ef2f5bfa75564960ecb39e99c"
+    },
+    {
+      "path": "apps/server/src/services/matchmaking.test.ts",
+      "sha": "777dd38859b1c099ccc7221343569fd2bf7c9c90"
+    },
+    {
+      "path": "apps/server/src/services/matchmaking.ts",
+      "sha": "1066db7b392e8e9438dd99c2139f646adce53e6e"
+    },
+    {
+      "path": "package-lock.json",
+      "sha": "e3004d0d9ee9dfa0c1c2d5a8e23a5feb885f4736"
+    },
+    {
+      "path": "package.json",
+      "sha": "d8a5df83faf61f8f5cb115d404cc2d493fa4f6d6"
+    }
+  ],
+  "engineFiles": [
+    {
+      "path": "packages/game-engine/package.json",
+      "sha": "1f3aea8716344649149458186f86ea2611164477"
+    },
+    {
+      "path": "packages/game-engine/src/index.ts",
+      "sha": "5ee52642523d2e37a80b29989faea2654d53e6cf"
+    },
+    {
+      "path": "packages/game-engine/src/gomoku/index.ts",
+      "sha": "01aa62cddb52f6fe8135400e4b3cf9b494db7776"
+    },
+    {
+      "path": "packages/game-engine/src/gomoku/types.ts",
+      "sha": "bd99a0cbd9f906beb5c64cc76c15275da285c86a"
+    },
+    {
+      "path": "packages/game-engine/src/gomoku/initial-state.ts",
+      "sha": "5c189d6cd5b48abae8df51b871ce2139af2f572c"
+    },
+    {
+      "path": "packages/game-engine/src/gomoku/apply-move.ts",
+      "sha": "97c0ce0787554804f955ba7f1e76776eeb83d05d"
+    },
+    {
+      "path": "packages/game-engine/src/gomoku/rules.ts",
+      "sha": "60b09f20f2fec949831c1d10fb1172f1587dc732"
+    }
+  ],
+  "localChanges": [
+    "apps/server/src/index.ts: preserve readListenOptions and register real gomoku engine using sixth argument",
+    "package-lock.json: add game-engine workspace links; keep realtime dependencies"
+  ],
+  "sourceOverlaySha256": "2f68150753b52f9837a8ec9137305b563b7312d4c5e98caa22268dbb1b8948aa",
+  "expectedFiles": {
+    ".dockerignore": "5133eed9dadc7a6bf64abb5d25a80928ad427f2c93feaaa2a35401aaf436d8a4",
+    ".env.example": "90ef288151771bc8421ab30f622e71f7c0a37543d3be1f02e003d5cafa3cd2c6",
+    ".env.full.example": "4f033c0e6535193952858421f9f1bed8a5c4738f1c684e388aea2fc454943c95",
+    ".github/ISSUE_TEMPLATE/task.md": "f9fcd653f8f552a9152d435d0eac7faaf91b3f3facb7fee996dc7d243d3d6029",
+    ".github/pull_request_template.md": "338366d6aee23b66b3158e11ffef1d49ee5f877440d973ee8f77e76d655767a5",
+    ".gitignore": "84dcf83d005fde2c029d53e3b58e436046220c4a4076036b57d1a256628afd66",
+    "CONTRIBUTING.md": "759b289b231dc3848167df78e8a7e8ca72abddd16d69b502e26967483c4492ce",
+    "Document/GAME_RULES.md": "5fbaaf751b74211db64f0044c5548151bfa9f0a1d73e2e8b16f3e4cce7e27062",
+    "Document/SDS.md": "9c9c6a69da583294ebfca7c5359733046d7467dfba575e5d33894c4f83c48199",
+    "Document/TEST_PLAN.md": "16eb203ace6543e9ee2dbd1b84525eaa2662ed45906e8784351a1c5bffd06e17",
+    "Document/code-conventions.md": "15a47703f27915945cc1288a8c1e618a464a3b62fb245a776e08ad1759991ded",
+    "Document/contracts.md": "b1473ebe1a498f614b0631e2233ab37112f6eedf9e99875acd39d43eb15499ec",
+    "Document/cyber_boardgame_documentation_spec.md": "ffb0b28114f527a5feace4140a4e511c46fc343ac2f9fdc1b87166f5b427454e",
+    "Document/evaluation/mandatory-checklist.md": "2b1065724279ac99759731b2832de5e9c2f66b8ccc3ebf98589ed63465968db2",
+    "Document/evaluation/module-matrix.md": "1879cdea36cc5f8b540c5403f97fe40586ffe3c23fbdf12c3b18e0e6044ba982",
+    "Document/evaluation/school-evaluation-status.md": "f6fedf9fa13aa355cb4200e0c8d0f3d055999981e5473c7f0e9ab80accb0af37",
+    "Document/roadmap.md": "02d4b8ff44ce323a2927161c3fab60b6d6c32963c0faa2f1c425f805e2746a47",
+    "Document/runtime-evidence/2026-10-12/home-desktop.png": "078f26611901eb7e11f5b51b7b9e5de1fef53692e22cda2a1a8c2135fbdc15f2",
+    "Document/runtime-evidence/2026-10-12/home-mobile.png": "28796e6766fadb277d57138fd3037aa88d5a29d08a6c285dff5a37749b916c63",
+    "Document/runtime-evidence/2026-10-12/results.json": "43ea6031ad61e3cdb7a8d1b472e28c540ddcbecc31fe89f85b52b523e727aa14",
+    "Document/runtime-evidence/2026-10-12/swagger-desktop.png": "c9e9fb76328b90c26c483086800d0adf8ee238d808f0297e41cf8369a1f2aaac",
+    "Document/runtime-evidence/2026-10-12/swagger-mobile.png": "2653df6015a27db990d2fbc778abcbe2a4129e811394717ab4cf446cfce899cf",
+    "Document/runtime-evidence/2026-10-29-issue28/results.json": "d2dc21c45d6898d9d5ee1eef29806fe7ef6ce43f49d4fe8f39675533b97e88c2",
+    "Document/runtime-issue-28-validation.md": "8252b63b01a47f868d701f1b3724edb6675a64280e3479ce0dea0d5b39b3fd41",
+    "Document/runtime-plan.md": "0e74b64feca88e0d12f1586ba3c30fe72ddf27b8f228c1407011b857e5064c39",
+    "Document/runtime-validation.md": "ebb1d59c9f5e5f9f004c48d429ea6861382b5dcbd04faf0f8cd4a0d5a39b6301",
+    "Document/runtime.md": "972b21c2fe5a9a4c07879a655bfa46164c309a97569b212aeb54a65003cf65a7",
+    "README.md": "3982b2b306609ac234f6365bde32fafbddc531853a7e891ee665de23e0de14ee",
+    "apps/server/drizzle/0000_connection_probe.sql": "e6ace048ab3b3370b090e3d9f843e7b47224e0da96b22af0a95341f5cded986d",
+    "apps/server/drizzle/0001_auth_and_games.sql": "ede0284b67fa6f91c6a28cd9385e5378904ccb5738a1c6c142f82bbedac3cc26",
+    "apps/server/drizzle/0002_oauth_and_two_factor.sql": "19e6d16c8813522cf04ee6d6f4a04942b4d9da90d02cab866f6820ddd7fe51fd",
+    "apps/server/drizzle/0003_tighten_results_and_oauth_state.sql": "11c1e384e574a54bb0d524fe8a0c85c18fcba2f822d47ba6e2cd1cb8e1a5a808",
+    "apps/server/drizzle/meta/0000_snapshot.json": "735d10e60be1580bf04b9b903886c473b150ecf5f986c1c259a77b081d671072",
+    "apps/server/drizzle/meta/0001_snapshot.json": "2dde1e558be67d8bd0a9e2b921e7f2fc073df3bf133ac0972bca4193fd0b0b9e",
+    "apps/server/drizzle/meta/0002_snapshot.json": "f86f97ab30d10063e6dbc083e28dc44f18a18f3cf26563272a03504519df3feb",
+    "apps/server/drizzle/meta/0003_snapshot.json": "a9408609b7651f133a9d53d1caa06f5ba1cb4299fa1fdff87a6ec9cf2d77bfac",
+    "apps/server/drizzle/meta/_journal.json": "eb349619a8962f7fdf6eb7cf15054215831d713560e3ae32d8ce294e9b8cd998",
+    "apps/server/src/api/auth-routes.test.ts": "654c05f24ee8497f14e8a0c058f46f6c21f58be11ee7e303813d4650f32b9c0b",
+    "apps/server/src/api/auth-routes.ts": "da4a3210c7643d187a054f4b0f69b1822e83fbd64ef01d22647ec5460f462124",
+    "apps/server/src/api/avatar-routes.test.ts": "76c306534abba2b08083617b89347a921a2212318855e2e6b47a836edd15cb01",
+    "apps/server/src/api/avatar-routes.ts": "1bed6c72ac65595ef0919afc97a7af8216fed49d112511237653a34e6deb9197",
+    "apps/server/src/api/oauth-routes.test.ts": "91e91bdfa5f836c78ec684dd5456947ea630b96f0c94b66b2bf80f33bb9e1164",
+    "apps/server/src/api/oauth-routes.ts": "010d35dfb2a7179a89b1af4871c5d732eb53fab577dbab0aeeb798adf90dd7e5",
+    "apps/server/src/api/stats-routes.test.ts": "09f977f5df0a4a182811747576c0cfe9b2ace9c553785d62459756a77b353b86",
+    "apps/server/src/api/stats-routes.ts": "45f63a97f152b6bb05bffc6d9f3502d6d04954ebde749750c78c6f77e2c7e56d",
+    "apps/server/src/api/two-factor-routes.test.ts": "587907fecb6132597515bc9c85a3305037912edc6255bc0e934755cc2555f52b",
+    "apps/server/src/api/two-factor-routes.ts": "5e3e00031e2c37bd0fd25af6fcecd6e305ca79355feb98a68f30d08463e90d39",
+    "apps/server/src/api/user-routes.test.ts": "f37678ecfb82d8c25fae6a4942ad1f31cfdc0fbb64a18fdf503133ffbe9d4b29",
+    "apps/server/src/api/user-routes.ts": "f09af492784f8d38b7ffba9426a4bafaad2666d5d30359a5121f78d2c9b3af5d",
+    "apps/server/src/api/ws-routes.test.ts": "4e0e3bc7485cd18c9759333819f436a1dc356b40739ca8fd6dbdd58ad23a5ee9",
+    "apps/server/src/api/ws-routes.ts": "4b1cef56f1e0edc2954b11e426f696686729668c535116d977cb8cbaa63441e1",
+    "apps/server/src/app.test.ts": "063a77a99c2262cc7cf04eabf4260a6283faf3d54dd34e2c6ff689e0c0358305",
+    "apps/server/src/app.ts": "5336973cffc43e67af96f09d3e018ecd3ae553c326d973c8bc4d1300bbe0b7a9",
+    "apps/server/src/core/image.test.ts": "7a4cf9d41784a02806fa0938d6fde0add4d8108ff4f808ae6673c24b7db6a939",
+    "apps/server/src/core/image.ts": "dea52ba304e04d03d20f9e45ef5f357c7638338760aba34e6755aa9c62e30c89",
+    "apps/server/src/core/oauth-42.ts": "fb4f9dbee288896b44ea4e23b1ee2726bec2fb157684d3170771604a6b97dcac",
+    "apps/server/src/core/password.ts": "4606fa0f5cc30e5c1fe43652fa04df6cc4dcadab36e41db2e392d2da92fd6a54",
+    "apps/server/src/core/secret-box.ts": "bc46860733d7356180560f492613ed356a4a141cf451411df87117cd1f3abd55",
+    "apps/server/src/core/tokens.test.ts": "9509a742e9a143a77f86d5555c45909e9bdaed4f82bc7fbb020336fc898f3a38",
+    "apps/server/src/core/tokens.ts": "fe317f8a8858d5b510f37171ce08c297a56006178e6697d0e01cb12c177d5422",
+    "apps/server/src/core/totp.test.ts": "58632e2bc6cb89b042e13327e9b0382c9cc8a11d4076ea809d3ce4caa7cc0028",
+    "apps/server/src/core/totp.ts": "354600966d8467f09c5a5f9921a57fef790f965c9a3b42373e6150814c922d05",
+    "apps/server/src/db/client.ts": "2e7191134ad1e2374f60537eba866f7507b085950b78c0f086f0aacfff2ac593",
+    "apps/server/src/db/container-url.test.ts": "9312f7d05d43fa18ecb0e344c473ec7527d044ca57606ef4c213c9892ac9b36d",
+    "apps/server/src/db/container-url.ts": "7da543f58d595821e0189a24b79f40b0e230338d7f86c12c67754b695eb8b291",
+    "apps/server/src/db/schema/connection-probe.ts": "b8fbb5a97484efd74b1a39af70781751b7f8806515f5dc582caebc7eb2b8e006",
+    "apps/server/src/db/schema/external-auth.ts": "5cd23b1bb76b98636b10beccaa459d08b883eb44dadcf3fa215c73973a5b72c1",
+    "apps/server/src/db/schema/games.ts": "094204669890f9ad79585dfa8f5b12e213edafe8afee755593518c2524b9a687",
+    "apps/server/src/db/schema/users.ts": "d4c53e71f369485176b28da36269185b11b49b243dd3aab11dbf9b3889d63de7",
+    "apps/server/src/index.ts": "6d41290bf0d3595bd5e49ff4180b89df3ef34e705ab66d7b6e60e372e751c702",
+    "apps/server/src/listen-options.test.ts": "259bb3141ac0fad5dc941bb992bbdec0d3bdd387411b3e29bbbb7348a6d5832f",
+    "apps/server/src/listen-options.ts": "f7834be612a0d824ac493d37f7b156c2cd506e032efd25df61ecbe2abd6af81f",
+    "apps/server/src/repositories/auth-repository.ts": "1326cba6917f5093fa1f0f20d1cf00b0b4a45c47dd74422df2805460efb4c2a6",
+    "apps/server/src/repositories/game-repository.ts": "e1368bee3a873f6b5cf5cff41ad08c965dd97ed125fd8b2858c56b01aefa4354",
+    "apps/server/src/repositories/oauth-repository.ts": "3dc8d7e702dd21fa593937f5aea9c647cb2280d0e4643c0ec8951679164ddb6b",
+    "apps/server/src/repositories/stats-repository.ts": "1ff24d4a6f7d32376a2b89d20d4ae67a099fd71c40f2b15fae1a48a8090738fd",
+    "apps/server/src/repositories/two-factor-repository.ts": "00338c6a631da23e5635b2b04e3358aad0f7f86ff31dc477114a7110a0c13f66",
+    "apps/server/src/repositories/user-repository.ts": "cce045d3cd74b54b5baa4c4344c7ca212f2f61e5f822388e8bab93871cddef89",
+    "apps/server/src/schemas/errors.ts": "1b5f760cae09138dcdbde49ddf3e74f5b5158b824ecbe09aa44fa49a29eda67a",
+    "apps/server/src/services/absence-tracker.test.ts": "24011132e14869267e95a2f8a218da0de698140e46db2dc2389efcae409daf10",
+    "apps/server/src/services/absence-tracker.ts": "7307b85c614512d6dfebbe1e79efed532b7bb077bf7ed07d6b7c4958248598b8",
+    "apps/server/src/services/auth-service.ts": "f3efe6106cb0e055b41696ee697f058ea60a87529c19c3ef81336bc5ffb781f9",
+    "apps/server/src/services/avatar-service.ts": "059373433b5c174a05d833dfe56c219ab34e990ada2f242f8671d32f62d9007d",
+    "apps/server/src/services/connection-registry.test.ts": "3a7f37b826af06f7606851d6a73fc9a2458b7b57f2ebebbfbcc8ffab68cae3ef",
+    "apps/server/src/services/connection-registry.ts": "48122737c34caf6515c4cd6ddf10fe0d30f8c4163e897fa7425a3ccf30362f07",
+    "apps/server/src/services/game-command-service.test.ts": "44bd2a4e0f8dd50eb9a0f423728596b53ee9027a5a376227cf282653e494fc1a",
+    "apps/server/src/services/game-command-service.ts": "48a1be107a30d43bc9eb088491bca4aa49c1a628cb011848120338a5521d0d35",
+    "apps/server/src/services/matchmaking.test.ts": "d1b451307b30da3e222c74c21815e7faa18675edc2601d8bb6d77939100a3d37",
+    "apps/server/src/services/matchmaking.ts": "bedc013cf713d626b4f764f719e5ad7d6077e1640f579872ffc0924f14f678a9",
+    "apps/server/src/services/oauth-service.ts": "2c23dc7c46e4e0610b5670e6722fc2269f3d42ee43452672ad058bc0e9769a85",
+    "apps/server/src/services/stats-service.ts": "f9aac09d2b606508f90a04dc89274d7941220ea26e61b8c68e94171cf882d7c4",
+    "apps/server/src/services/two-factor-service.ts": "b432077c522a72cd4bba9193588fffb242399675d8e67b9753f9bf93b21389cf",
+    "apps/server/src/services/user-service.ts": "7bf6b733cd6626e3ea4942d443e5c8842913117cb7834f9c33ab19b83ac28627",
+    "apps/server/src/test-support/database.ts": "1f970fbd427bbefcf73e01bf23c40cd1be189c37f5bb696535e133986504909f",
+    "apps/web/index.html": "32989b67ac1a74c5c646dfaab06bffcd0306c04a9e2122a1348c43f7600b08a6",
+    "apps/web/package.json": "79e566b86bfd8e5a16b4511271fbaec2e164be37398a0873cedf45cc3d19d322",
+    "apps/web/src/App.tsx": "74c9fd312b49e02af139f4cf2a25916cdcd7103d86c3c205df8a5f68448951a3",
+    "apps/web/src/main.tsx": "b418f728512d7a3d4c10bcc37f0b3f3d3a80be1f2a20eccd1874596aa4517ff0",
+    "apps/web/vite.config.ts": "dca113299ed9419d6aa0d57e56efa4672b00a74db3042376588a7708da6025e1",
+    "config/drizzle.config.ts": "883c1bdbc8a22802863a7aad945ffb4612519e4f11dfa6999632de0241c2fb7b",
+    "config/playwright.config.ts": "f92821525a40d7b448c8a1a735d5e9ef1cdcada738a4f6ffd3fbfcbca3d4f96b",
+    "config/vitest.config.ts": "58315bc621bad768049e37940d8ca7ee8b28102538508737d49228ef3028282d",
+    "en.subject.pdf": "79e3ff965a838a6728f4c0b412a0ed7d74d4fdddc2be392c74d7ba15ec3dc659",
+    "infra/Dockerfile": "a8bc950a07ee1ed95d05ca1aeb61b5700084dc7593ee1f02174620532c453d89",
+    "infra/compose.full.yaml": "d670a2d7b23d6ee1e9823b24603b7998794c7ed42eec5415309949f8d8d7adc0",
+    "infra/compose.yaml": "a76f732246a311419a8892671592dcc1aff1d98090802697b93dd6c98cda0e9f",
+    "infra/generate-local-cert.sh": "05729cc95d76addfa919ce3e1226b51beccbbbdc468c0eb0486678f56c5ff68f",
+    "infra/nginx/api-proxy.conf": "c627f5183a4c114012c32d00f3590bc174607b6bd8a6fbd44c5d0dddc7fc3c36",
+    "infra/nginx/default.conf.template": "9e577573d66b4ab6f6ff58ad98bb220841dbf312b762e6f2cd7b28ad673787d2",
+    "package-lock.json": "e312130a2cfce7f3191f32ba81764c0bf92d8394813f6c23bbf7fcb9e16f098d",
+    "package.json": "13c7fdd7ac249623853ed2bf3d6d219af55e62c801948cccf6192d5dd644b0ed",
+    "packages/game-contracts/package.json": "4725b5abf10afad31fd88821c4c743c37209c486c0a0321e29e84c0cb5024c8c",
+    "packages/game-contracts/src/actions/place.ts": "2e6029649af7af3c811ec421dc32c832504fcdcce7a5dcef9496c2e1d39a9f2f",
+    "packages/game-contracts/src/actions/resign.ts": "ead82b4048a4afa0db182d6804fc7ae445f054beeb521227bc944c94927902a6",
+    "packages/game-contracts/src/common.ts": "d5ce7ed309b0b3ce78d2bf8ad71763fcddb654d0205d635b6c7f4a74cb5fc0e7",
+    "packages/game-contracts/src/gomoku/examples.ts": "c78db4097427511861bf2d4f6354f408fd2590a2a5e8f66c9bdefa6f9ee446b5",
+    "packages/game-contracts/src/gomoku/types.ts": "7a5953fca8ed3c4b20de9af37a98e6544bbe0138b01f7e91a394de3e306726ed",
+    "packages/game-contracts/src/index.ts": "23ee796e04b7d19797569e59ed0e098406a31fe587b565c3cd8689229f4036de",
+    "packages/game-contracts/src/othello/types.ts": "9c90fa443548fc6f7bf7a60831b807c2f3a0092a0fe10c584e1a0c975933eba2",
+    "packages/game-contracts/src/shared/two-color-board.ts": "006c312a45ad8cf9b77260b936a7f49984aaa6ee37e4f851bae112b9f9ac210d",
+    "packages/game-contracts/src/shared/two-player-result.ts": "937532a28577642c940468d8171f5ef2dcb0558b1a954785f40d3b2a7e958720",
+    "packages/game-contracts/src/types.ts": "ad3b5b78025baaed950448d86d7b4900840a83871cc6b77b42bbba952d0c95e0",
+    "packages/game-engine/package.json": "08c0f027bb627717bd5360134e3590ad1533efb0df876839d6e2f1e1255cfb01",
+    "packages/game-engine/src/gomoku/apply-move.ts": "5bb175dd90ff517dc2ce269e47da808331ed48bcfc308d5443bf10c18732ca46",
+    "packages/game-engine/src/gomoku/index.ts": "caac11394bacfb973d026b85288c451b878d8a7b5b3123cdc7eb2780d619435b",
+    "packages/game-engine/src/gomoku/initial-state.ts": "1941804166bc58bc816e07d1a45c434eecc4e9e873168c87446e1da5e9cad43f",
+    "packages/game-engine/src/gomoku/rules.ts": "cb46660c3d675ac1837cfc698a98c15894bd65242b44f5469c684eabcce0c804",
+    "packages/game-engine/src/gomoku/types.ts": "edb14d7d5674c7142199b7b257b9f0f1f9e032e7f97d4625277006850f1eb816",
+    "packages/game-engine/src/index.ts": "4b52c6388c7ff422842917c4c10db105c4ac91b0b59234249bdac6b4504425bc",
+    "scripts/check-db.mjs": "67a09db6df4bf7b67aee14d6669fea38c18aa29459357fcebd1361ca3e96adf7",
+    "scripts/container-start.mjs": "c5d11eaa4876a33cd980e31aa063888d4baf548a990cce88a53d96066ad4601e",
+    "scripts/dev.mjs": "4fdaa8acc3de9248050528bbf115bb9b43fe97763781f222aed65e8abf70e0fe",
+    "scripts/qa-accounts.mjs": "7ed60e16e3de54ce2c1cbb61fb8251668ecd3d818160394df18d90b5179bf229",
+    "tests/app.spec.ts": "e77a03815cfcd065f059d00370c6f8aa39cd26f93acebe18ef4ea2384b023d76",
+    "tsconfig.json": "3ed0a0e29bc35379ab025d5831e344db101641324eebe08dee5b2476fd2ce43f"
+  }
+}
