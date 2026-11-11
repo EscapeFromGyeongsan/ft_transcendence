@@ -440,11 +440,7 @@ export function App() {
           break;
         case "match":
           if (currentUser) {
-            setGomokuState((prev) => ({
-              ...prev,
-              matchId: route.matchId,
-            }));
-            setView("gomoku");
+            openGomokuMatch(route.matchId);
           } else {
             setView("login");
           }
@@ -750,19 +746,31 @@ export function App() {
       return;
     }
 
-    saveActiveMatchIdToStorage(parsedId);
-    setGomokuState((prev) => ({
-      ...createInitialGomokuClientState(
-        prev.viewerUserId ?? currentUser?.id ?? null,
-        parsedId,
-      ),
-      connectionPhase: wsClientRef.current?.getPhase() ?? "connecting",
-    }));
-    setView("gomoku");
+    navigationModeRef.current = "push";
+    openGomokuMatch(parsedId);
+  }
 
+  function openGomokuMatch(matchId: number) {
     const client = wsClientRef.current;
-    if (client) {
-      if (!client.subscribeMatch(parsedId)) {
+    const subscribedMatchId = client?.getSubscribedMatchId() ?? null;
+    if (subscribedMatchId !== null && subscribedMatchId !== matchId) {
+      client?.unsubscribeMatch(subscribedMatchId);
+    }
+    saveActiveMatchIdToStorage(matchId);
+    setGomokuState((prev) =>
+      prev.matchId === matchId
+        ? prev
+        : {
+            ...createInitialGomokuClientState(
+              prev.viewerUserId ?? currentUser?.id ?? null,
+              matchId,
+            ),
+            connectionPhase: client?.getPhase() ?? "connecting",
+          },
+    );
+    setView("gomoku");
+    if (client && subscribedMatchId !== matchId) {
+      if (!client.subscribeMatch(matchId)) {
         client.reconnectNow();
       }
     }
