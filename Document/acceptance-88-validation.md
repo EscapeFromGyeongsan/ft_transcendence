@@ -132,3 +132,7 @@ E2E_BASE_URL=https://localhost:54699 E2E_TLS_SPKI=<후보_인증서_SPKI> \
 ## 추가 후속: 탈퇴와 프로필·아바타 쓰기 경합
 
 제품 `0c1892b`는 탈퇴 직전 인증된 요청이 commit 뒤 닉네임·아바타를 복원하던 경합을 차단한다. 수정 전 실제 HTTP/PG 회귀 6개 실패, 수정 후 전체 505개·정상 HTTPS 3개가 skip 없이 통과했다. [범위·재현·검증](deleted-profile-validation.md)과 [별도 JSON](deleted-profile-evidence.json)을 참고한다. 기존 인수 및 #110 시점의 증거를 대체하지 않는다.
+
+## 2026-11-13 후속: 10경기 통계 경계와 혼합 경기
+
+같은 제품 `0c1892b`에서 실제 AT-08 21경기와 AT-09 오목·오델로 동시 2경기를 실행했다. 두 배치가 실패·skip·retry 없이 통과했다. 첫 승·4/10·10/10·11경기 상한, 6승4패/60%, 동률 순위, cursor 전적, 새로고침 후 업적과 게임 종류별 격리를 확인했다. 위 AT 표의 당시 미실행 항목 중 이 범위만 보완한다. 무승부·재시작 무효 및 나머지 인수 조건은 남아 있다. [재현·범위](acceptance-88-stats-validation.md)와 [새 JSON 증거](acceptance-88-stats-evidence.json)를 참고한다. #111은 실제 문의 경로 미정으로 보류한다.

@@ -140,3 +140,7 @@ T03의 준비 단계 없는 시작은 현재 구현 검증이다. 기준 SRS의 
 ### 후속 검증: #110 탈퇴·친구 결합
 
 제품 `d591bf6`에서 B88-01을 수정했다. 전용 PostgreSQL 44파일·497개 및 실제 HTTPS 친구·탈퇴 6개가 실패·skip 없이 통과했다. 활성 사용자 잠금과 탈퇴/요청·수락·거절 경합, rollback, commit 뒤 인증 WebSocket 알림을 포함한다. [검증 기록](deleted-friends-validation.md)·[JSON 증거](deleted-friends-evidence.json)를 기준으로 하며, 위 `108a570`의 실패 기록은 당시 증거로 보존한다. #111·초대·외부 인수 조건은 미완료다.
+
+### 2026-11-13 후속: T08 통계 경계·AT-09 혼합 경기
+
+제품 `0c1892b`에서 새 실제 계정의 10경기6승4패·첫 승·4/10→10/10, 11경기 진행도 상한과 cursor 전적, 승률/ID 동률 정렬을 확인했다. 통계 21경기의 참가자 결과 42건·상대·종료 시간은 실제 DB와 일치했다. Chrome 새로고침 뒤 업적·집계 유지와 오목/오델로 동시 경기의 메시지·명령 격리도 확인했다. 두 배치 모두 실패·skip·retry 0이다. [후속 검증](acceptance-88-stats-validation.md)·[JSON 증거](acceptance-88-stats-evidence.json)를 참고한다. 무승부·재시작 무효와 최종 통합 SHA 인수는 남아 있다.
