@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import {
   oauthAccounts,
@@ -8,6 +8,7 @@ import {
   twoFactorSecrets,
 } from "../db/schema/external-auth.ts";
 import { gamePlayers, games } from "../db/schema/games.ts";
+import { friendships } from "../db/schema/friendships.ts";
 import { refreshTokens, sessions, users } from "../db/schema/users.ts";
 
 /** 탈퇴하지 않은 사용자 행을 잠그고 읽습니다. 탈퇴가 한 번만 실행되고, 그 사이 프로필 변경이 끼어들지 않습니다. */
@@ -53,9 +54,18 @@ export async function hasUnfinishedMatch(db: Executor, userId: number) {
  * `deleted:<id>`로 바꿉니다. 검증 규칙이 `:`를 허용하지 않아 실제 계정과 겹치지 않고,
  * 원래 이메일·닉네임은 새 계정이 다시 쓸 수 있습니다.
  *
- * @returns 이번에 폐기한 세션 ID. 이미 폐기된 세션은 들어가지 않습니다.
+ * 호출자는 사용자 행의 FOR UPDATE 잠금을 먼저 확보해야 합니다. 모든 상태의
+ * 친구 관계도 같은 트랜잭션에서 지워 soft delete 뒤 관계가 남지 않게 합니다.
+ *
+ * @returns 이번에 폐기한 세션 ID와 관계가 삭제된 상대 ID. commit 후 알림에 씁니다.
  */
 export async function anonymizeUser(db: Executor, userId: number, now: Date) {
+  const removed = await db
+    .delete(friendships)
+    .where(
+      or(eq(friendships.userLowId, userId), eq(friendships.userHighId, userId)),
+    )
+    .returning({ low: friendships.userLowId, high: friendships.userHighId });
   const sessionIds = db
     .select({ id: sessions.id })
     .from(sessions)
@@ -88,5 +98,8 @@ export async function anonymizeUser(db: Executor, userId: number, now: Date) {
       updatedAt: sql`now()`,
     })
     .where(eq(users.id, userId));
-  return revoked.map((session) => session.id);
+  return {
+    revokedSessionIds: revoked.map((session) => session.id),
+    friendIds: removed.map((row) => (row.low === userId ? row.high : row.low)),
+  };
 }

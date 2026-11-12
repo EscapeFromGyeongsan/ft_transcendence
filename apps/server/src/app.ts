@@ -248,15 +248,24 @@ export async function buildApp(
   };
   // Account deletion revokes every session of the user; close their sockets.
   const accounts = database
-    ? createAccountService(database.db, twoFactor, avatars, (sessionIds) => {
-        for (const sessionId of sessionIds) {
-          connections.closeSession(
-            sessionId,
-            closeCodes.unauthenticated,
-            "Session ended.",
-          );
-        }
-      })
+    ? createAccountService(
+        database.db,
+        twoFactor,
+        avatars,
+        (sessionIds) => {
+          for (const sessionId of sessionIds) {
+            connections.closeSession(
+              sessionId,
+              closeCodes.unauthenticated,
+              "Session ended.",
+            );
+          }
+        },
+        (userId, friendIds) => {
+          for (const friendId of friendIds)
+            presence?.notifyFriendsChanged(userId, friendId);
+        },
+      )
     : undefined;
   const getAccounts = (): AccountService => {
     if (!accounts) throw new ServiceUnavailableError();

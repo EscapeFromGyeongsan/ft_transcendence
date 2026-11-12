@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import {
   afterAll,
   beforeAll,
@@ -12,6 +13,7 @@ import { sql } from "drizzle-orm";
 import { buildApp } from "../app.ts";
 import { currentStep, totpCode } from "../core/totp.ts";
 import { users } from "../db/schema/users.ts";
+import { friendships } from "../db/schema/friendships.ts";
 import { createAuthService } from "../services/auth-service.ts";
 import {
   createGameCommandService,
@@ -133,6 +135,18 @@ describe.skipIf(!testDatabaseUrl)("account deletion with PostgreSQL", () => {
     });
   }
 
+  async function authenticatedSocket(bearer: string) {
+    await app.ready();
+    const socket = await app.injectWS("/api/ws");
+    const authenticated = once(socket, "message");
+    socket.send(
+      JSON.stringify({ type: "auth", payload: { accessToken: bearer } }),
+    );
+    const [message] = await authenticated;
+    expect(JSON.parse(message.toString()).type).toBe("auth.ok");
+    return socket;
+  }
+
   beforeEach(async () => {
     await resetTestDatabase(database);
     await app?.close();
@@ -241,6 +255,98 @@ describe.skipIf(!testDatabaseUrl)("account deletion with PostgreSQL", () => {
     expect(response.statusCode).toBe(409);
     expect(response.json().error.code).toBe("ACTIVE_MATCH");
     expect((await get("/api/users/me")).statusCode).toBe(200);
+  });
+
+  test("refused deletion preserves friendships without sending friends.changed", async () => {
+    const p2 = (await login("p2")).json().accessToken;
+    await database.db.insert(friendships).values({
+      userLowId: 1,
+      userHighId: 2,
+      requestedById: 1,
+      status: "accepted",
+      acceptedAt: new Date(),
+    });
+    const before = await database.db.select().from(friendships);
+    const socket = await authenticatedSocket(p2);
+    const changes: object[] = [];
+    socket.on("message", (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.type === "friends.changed") changes.push(message);
+    });
+    try {
+      expect(
+        (await deleteMe({ password: "wrong-password" })).json().error.code,
+      ).toBe("INVALID_CREDENTIALS");
+      await games.createMatch({
+        gameType: "gomoku",
+        blackUserId: 1,
+        whiteUserId: 2,
+      });
+      expect(
+        (await deleteMe({ password: "password-123" })).json().error.code,
+      ).toBe("ACTIVE_MATCH");
+      // A pong is ordered after earlier frames, so no timing-based sleep is needed.
+      const pong = once(socket, "pong");
+      socket.ping();
+      await pong;
+      expect(changes).toEqual([]);
+      expect(await database.db.select().from(friendships)).toEqual(before);
+      expect((await get("/api/friends", p2)).json().friends).toMatchObject([
+        { userId: 1 },
+      ]);
+    } finally {
+      const closed = once(socket, "close");
+      socket.close();
+      await closed;
+    }
+  });
+
+  test("deletion notifies accepted and pending peers after their lists are committed", async () => {
+    const p2 = (await login("p2")).json().accessToken;
+    const p3 = await oauthOnlyUser("p3");
+    await database.db.insert(friendships).values([
+      {
+        userLowId: 1,
+        userHighId: 2,
+        requestedById: 1,
+        status: "accepted",
+        acceptedAt: new Date(),
+      },
+      { userLowId: 1, userHighId: p3.id, requestedById: p3.id },
+    ]);
+    const peers = [
+      { bearer: p2, socket: await authenticatedSocket(p2) },
+      { bearer: p3.token, socket: await authenticatedSocket(p3.token) },
+    ];
+    try {
+      const notifications = peers.map(async ({ bearer, socket }) => {
+        const [message] = await once(socket, "message");
+        expect(JSON.parse(message.toString())).toEqual({
+          type: "friends.changed",
+          payload: {},
+        });
+        const response = await get("/api/friends", bearer);
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({
+          friends: [],
+          incoming: [],
+          outgoing: [],
+        });
+        expect(await database.db.select().from(friendships)).toEqual([]);
+      });
+      expect((await deleteMe({ password: "password-123" })).statusCode).toBe(
+        204,
+      );
+      await Promise.all(notifications);
+    } finally {
+      await Promise.all(
+        peers.map(async ({ socket }) => {
+          const closed = once(socket, "close");
+          socket.close();
+          await closed;
+        }),
+      );
+    }
   });
 
   test("OAuth-only account without 2FA needs a recent login", async () => {

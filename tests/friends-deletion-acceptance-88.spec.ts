@@ -61,7 +61,7 @@ test("AT-17: 탈퇴한 사용자는 친구 목록과 새 요청 대상에서 제
   const removed = await request.delete(`/api/friends/${departing.id}`, {
     headers: remaining.headers,
   });
-  expect(removed.status()).toBe(204);
+  expect(removed.status()).toBe(404);
   const freshRequest = await request.post("/api/friends/requests", {
     headers: remaining.headers,
     data: { userId: departing.id },
@@ -75,6 +75,7 @@ test("AT-17: 탈퇴한 사용자는 친구 목록과 새 요청 대상에서 제
       friends,
       newRequestStatus: newRequest.status(),
       newRequestCode: newRequestBody.error?.code,
+      removeFriendStatus: removed.status(),
       freshRequestStatus: freshRequest.status(),
       freshRequestCode: freshRequestBody.error?.code ?? null,
     }),

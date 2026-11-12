@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { Database, Executor } from "../db/client.ts";
 import { friendships } from "../db/schema/friendships.ts";
 import { users } from "../db/schema/users.ts";
@@ -63,16 +64,18 @@ export function createFriendService(
   db: Database,
   isUserOnline?: (userId: number) => boolean,
 ) {
-  async function findUser(executor: Executor, userId: number) {
-    const [profile] = await executor
+  async function lockActivePair(executor: Executor, a: number, b: number) {
+    // 탈퇴의 사용자 잠금보다 관계 잠금을 먼저 잡으면 수락과 탈퇴가 교착합니다.
+    return executor
       .select(profileFields)
       .from(users)
-      .where(eq(users.id, userId));
-    return profile;
+      .where(and(inArray(users.id, [a, b]), isNull(users.deletedAt)))
+      .orderBy(asc(users.id))
+      .for("share");
   }
 
   function visible(
-    profile: NonNullable<Awaited<ReturnType<typeof findUser>>>,
+    profile: Pick<typeof users.$inferSelect, "id" | "nickname" | "avatarUrl">,
   ): FriendUser {
     return {
       userId: profile.id,
@@ -93,6 +96,7 @@ export function createFriendService(
    * 친구 요청을 원자적으로 기록합니다.
    *
    * @remarks
+   * 양쪽 활성 사용자 행을 ID 순서로 공유 잠근 뒤 관계를 잠가 탈퇴와 직렬화합니다.
    * 동일 쌍 UNIQUE 충돌 후에는 같은 트랜잭션에서 새 SELECT snapshot으로
    * 상태를 재검사합니다. 삭제 경합으로 다시 0행이 될 수 있어 INSERT 시도는
    * 최대 세 번으로 제한합니다. 거절자가 재요청하면 기존 행을 삭제하고 새
@@ -103,8 +107,10 @@ export function createFriendService(
     otherId: number,
   ): Promise<FriendMutation> {
     return db.transaction(async (tx): Promise<FriendMutation> => {
-      const target = await findUser(tx, otherId);
-      if (!target) return { ok: false, code: "USER_NOT_FOUND" };
+      const profiles = await lockActivePair(tx, actorId, otherId);
+      const target = profiles.find((profile) => profile.id === otherId);
+      if (profiles.length !== 2 || !target)
+        return { ok: false, code: "USER_NOT_FOUND" };
       const { low, high } = pair(actorId, otherId);
       const condition = forPair(actorId, otherId);
 
@@ -177,32 +183,41 @@ export function createFriendService(
     });
   }
 
-  /** 수락/거절은 동일 행을 FOR UPDATE로 잠근 뒤 요청 수신자 권한을 재검증합니다. */
+  /** 수락/거절은 활성 사용자 공유 잠금 후 관계를 FOR UPDATE로 잠그고 권한·상태를 재검증합니다. */
   async function decide(
     actorId: number,
     requestId: number,
     action: "accept" | "decline",
   ): Promise<FriendDecision> {
     return db.transaction(async (tx): Promise<FriendDecision> => {
+      const condition = and(
+        eq(friendships.id, requestId),
+        or(
+          eq(friendships.userLowId, actorId),
+          eq(friendships.userHighId, actorId),
+        ),
+      );
+      const [initial] = await tx.select().from(friendships).where(condition);
+      if (!initial) return { ok: false, code: "NOT_FOUND" };
+      const profiles = await lockActivePair(
+        tx,
+        initial.userLowId,
+        initial.userHighId,
+      );
+      if (profiles.length !== 2) return { ok: false, code: "NOT_FOUND" };
       const [row] = await tx
         .select()
         .from(friendships)
-        .where(
-          and(
-            eq(friendships.id, requestId),
-            or(
-              eq(friendships.userLowId, actorId),
-              eq(friendships.userHighId, actorId),
-            ),
-          ),
-        )
+        .where(condition)
         .for("update");
       if (!row) return { ok: false, code: "NOT_FOUND" };
       if (row.requestedById === actorId)
         return { ok: false, code: "FORBIDDEN" };
       if (row.status !== "pending")
         return { ok: false, code: "REQUEST_NOT_PENDING" };
-      const sender = await findUser(tx, row.requestedById);
+      const sender = profiles.find(
+        (profile) => profile.id === row.requestedById,
+      );
       if (!sender) return { ok: false, code: "NOT_FOUND" };
 
       await tx
@@ -261,7 +276,7 @@ export function createFriendService(
       ? await db
           .select(profileFields)
           .from(users)
-          .where(inArray(users.id, otherIds))
+          .where(and(inArray(users.id, otherIds), isNull(users.deletedAt)))
       : [];
     const byId = new Map(profiles.map((profile) => [profile.id, profile]));
     const response: FriendsList = { friends: [], incoming: [], outgoing: [] };
@@ -302,6 +317,7 @@ export function createFriendService(
       .where(
         and(
           ne(users.id, actorId),
+          isNull(users.deletedAt),
           sql`left(lower(${users.nickname}), char_length(${prefix})) = lower(${prefix})`,
         ),
       )
@@ -311,12 +327,16 @@ export function createFriendService(
 
   /** D의 presence 이벤트를 수락된 친구에게만 전달할 때 사용하는 조회 함수입니다. */
   async function listAcceptedFriendIds(actorId: number): Promise<number[]> {
+    const lowUser = alias(users, "low_user");
+    const highUser = alias(users, "high_user");
     const rows = await db
       .select({
         low: friendships.userLowId,
         high: friendships.userHighId,
       })
       .from(friendships)
+      .innerJoin(lowUser, eq(lowUser.id, friendships.userLowId))
+      .innerJoin(highUser, eq(highUser.id, friendships.userHighId))
       .where(
         and(
           or(
@@ -324,6 +344,8 @@ export function createFriendService(
             eq(friendships.userHighId, actorId),
           ),
           eq(friendships.status, "accepted"),
+          isNull(lowUser.deletedAt),
+          isNull(highUser.deletedAt),
         ),
       );
     return rows.map((row) => (row.low === actorId ? row.high : row.low));
