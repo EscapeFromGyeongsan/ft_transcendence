@@ -128,3 +128,7 @@ E2E_BASE_URL=https://localhost:54699 E2E_TLS_SPKI=<후보_인증서_SPKI> \
 ## 후속: #110 탈퇴·친구 결함 수정
 
 위 기록은 `108a570` 후보 당시 결과다. 후속 제품 `d591bf6`에서 B88-01을 수정했고 전용 PostgreSQL 497개와 실제 HTTPS 친구·탈퇴 6개가 skip 없이 통과했다. 새 요청은 404, 친구 관계는 탈퇴 transaction에서 정리되며 commit 뒤 상대에게 알림이 전달된다. [수정·경합·재현 범위](deleted-friends-validation.md)와 [새 JSON 증거](deleted-friends-evidence.json)를 참고한다. 원본 후보의 실패 JSON은 변경하지 않았다. #111 및 나머지 인수 조건이 남아 최종 인수 보류는 유지한다.
+
+## 추가 후속: 탈퇴와 프로필·아바타 쓰기 경합
+
+제품 `0c1892b`는 탈퇴 직전 인증된 요청이 commit 뒤 닉네임·아바타를 복원하던 경합을 차단한다. 수정 전 실제 HTTP/PG 회귀 6개 실패, 수정 후 전체 505개·정상 HTTPS 3개가 skip 없이 통과했다. [범위·재현·검증](deleted-profile-validation.md)과 [별도 JSON](deleted-profile-evidence.json)을 참고한다. 기존 인수 및 #110 시점의 증거를 대체하지 않는다.
