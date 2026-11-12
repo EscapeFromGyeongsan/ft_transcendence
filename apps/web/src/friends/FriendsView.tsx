@@ -13,6 +13,7 @@ import {
 import { Avatar } from "../profile/Avatar.tsx";
 import { createFriendsController, type FriendAction } from "./friends-state.ts";
 
+/** 현재 계정·연결 상태와 친구 화면의 프로필 이동·복귀 동작을 전달합니다. */
 interface FriendsViewProps {
   currentUserId: number;
   connected: boolean;
