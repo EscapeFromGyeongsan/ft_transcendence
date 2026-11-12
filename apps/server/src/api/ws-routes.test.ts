@@ -648,6 +648,30 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
         }
       });
 
+      test("commands after the finish get a duplicate ack or GAME_FINISHED", async () => {
+        const resignId = play(1, { action: { type: "resign" } });
+        await next[1](); // game.ack
+        await next[0](); // game.updated (finished)
+        await next[1](); // game.updated (finished)
+
+        // p2 resends the same resign (its ack was lost).
+        play(1, { action: { type: "resign" } }, resignId);
+        expect(await next[1]()).toMatchObject({
+          type: "game.ack",
+          payload: { duplicate: true },
+        });
+        for (const i of [1, 0]) {
+          expect(await next[i]()).toMatchObject({ type: "game.updated" });
+        }
+
+        // p1 moves after the finish.
+        play(0, { expectedVersion: 1 });
+        expect(await next[0]()).toMatchObject({
+          type: "game.error",
+          payload: { code: "GAME_FINISHED" },
+        });
+      });
+
       test("a gameType that differs from the match is refused", async () => {
         play(0, { gameType: "othello" });
         expect(await next[0]()).toMatchObject({

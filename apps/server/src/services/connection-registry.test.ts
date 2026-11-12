@@ -88,7 +88,7 @@ describe("connection registry", () => {
     registry.subscribe(20, 2, closed);
 
     registry.unsubscribe(10, left);
-    registry.remove("s", closed);
+    expect(registry.remove("s", closed)).toEqual([10, 20]);
     registry.broadcastUpdate(10, 1, { type: "x" });
     registry.broadcastUpdate(20, 1, { type: "x" });
 
@@ -98,6 +98,8 @@ describe("connection registry", () => {
     expect(registry.isSubscribed(10, left)).toBe(false);
     expect(registry.isSubscribed(20, closed)).toBe(false);
     expect(registry.isController(20, 2, closed)).toBe(false);
+    expect(registry.hasSubscribers(10)).toBe(true);
+    expect(registry.hasSubscribers(20)).toBe(false);
     expect(registry.isSubscribed(10, stays)).toBe(true);
   });
 

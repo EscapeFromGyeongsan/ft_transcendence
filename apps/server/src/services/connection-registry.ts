@@ -50,12 +50,14 @@ export function createConnectionRegistry() {
     /**
      * 닫힌 연결을 목록에서 뺍니다. 연결의 `close` 이벤트에서 호출하며,
      * 그 연결의 경기 구독과 입력 권한도 모두 해제합니다.
+     *
+     * @returns 이 연결이 구독하고 있던 경기 ID 목록
      */
     remove(sessionId: string, socket: WebSocket) {
       deleteFrom(bySession, sessionId, socket);
-      for (const matchId of matchesOf.get(socket) ?? []) {
-        unsubscribe(matchId, socket);
-      }
+      const matchIds = [...(matchesOf.get(socket) ?? [])];
+      for (const matchId of matchIds) unsubscribe(matchId, socket);
+      return matchIds;
     },
 
     /**
@@ -94,6 +96,11 @@ export function createConnectionRegistry() {
 
     isSubscribed(matchId: number, socket: WebSocket) {
       return byMatch.get(matchId)?.has(socket) ?? false;
+    },
+
+    /** 경기를 구독한 연결이 하나라도 있는지 확인합니다. */
+    hasSubscribers(matchId: number) {
+      return byMatch.has(matchId);
     },
 
     /** 이 연결이 해당 사용자의 경기 입력 권한 연결인지 확인합니다. */
