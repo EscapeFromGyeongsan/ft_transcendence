@@ -57,6 +57,8 @@ npx playwright install chromium
 npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:up and db:migrate first)
 ```
 
+Account deletion E2E needs the #89 integration server and a disposable DB; see [the prerequisites and validation scope](Document/account-deletion-validation.md).
+
 ### Full application containers
 
 Prepare `.env.full` from `.env.full.example`, the password file, and certificates as described in [the full execution guide](Document/runtime.md). Then:

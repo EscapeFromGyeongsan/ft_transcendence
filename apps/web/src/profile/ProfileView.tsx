@@ -177,7 +177,9 @@ export function ProfileView({
   }, []);
 
   // TOTP 2FA & 42 OAuth 상태 (FR-AUTH-05, FR-AUTH-06)
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean | undefined>(
+    undefined,
+  );
   const [twoFactorSetupData, setTwoFactorSetupData] =
     useState<TwoFactorSetupResponse | null>(null);
   const [twoFactorVerifyCode, setTwoFactorVerifyCode] = useState("");
@@ -370,7 +372,7 @@ export function ProfileView({
     setActionError(null);
     try {
       const user = await api.updateRecordsPublic(recordsPublic);
-      onCurrentUserUpdated(user);
+      onCurrentUserUpdated({ ...currentUser, ...user });
       setNotice(
         recordsPublic
           ? "전적을 공개로 설정했습니다."
@@ -396,7 +398,7 @@ export function ProfileView({
     setBusy("nickname");
     try {
       const user = await api.updateNickname(nickname);
-      onCurrentUserUpdated(user);
+      onCurrentUserUpdated({ ...currentUser, ...user });
       setNotice("닉네임이 변경되었습니다.");
     } catch (error) {
       setNicknameError(
@@ -422,7 +424,7 @@ export function ProfileView({
     setBusy("avatar");
     try {
       const user = await api.uploadAvatar(file);
-      onCurrentUserUpdated(user);
+      onCurrentUserUpdated({ ...currentUser, ...user });
       setNotice("프로필 이미지가 변경되었습니다.");
     } catch (error) {
       setActionError(getErrorMessage(error));
@@ -1180,6 +1182,7 @@ export function ProfileView({
       {deleteDialogOpen && (
         <DeleteAccountDialog
           nickname={currentUser.nickname}
+          hasPassword={currentUser.hasPassword}
           twoFactorEnabled={twoFactorEnabled}
           authClient={authClient}
           onClose={() => {

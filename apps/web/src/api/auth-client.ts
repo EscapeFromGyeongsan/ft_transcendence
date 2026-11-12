@@ -7,6 +7,8 @@ export interface AuthUser {
   avatarUrl: string | null;
   recordsPublic: boolean;
   createdAt: string;
+  /** 내 계정 조회 응답의 비밀번호 보유 여부입니다. 이전 서버 응답에는 없을 수 있습니다. */
+  hasPassword?: boolean;
 }
 
 export interface TokenPair {
@@ -564,11 +566,12 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     const method = reqOptions.method ?? "GET";
     const requiresAuth = reqOptions.requiresAuth ?? true;
     const sessionId = requiresAuth ? storage.getSessionId?.() : undefined;
-    const assertCurrentSession = () => {
+    const assertCurrentSession = (accountDeleted = false) => {
       if (
         requiresAuth &&
         storage.getSessionId &&
-        storage.getSessionId() !== sessionId
+        storage.getSessionId() !== sessionId &&
+        !(accountDeleted && !storage.getTokens())
       ) {
         throw new ApiError(401, "UNAUTHENTICATED", "Login session changed.");
       }
@@ -610,7 +613,12 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
           : undefined,
     });
 
-    assertCurrentSession();
+    // 탈퇴 commit의 WS 세션 폐기가 HTTP 204보다 먼저 도착할 수 있습니다.
+    const accountDeleted =
+      path === "/api/users/me" &&
+      method === "DELETE" &&
+      response.status === 204;
+    assertCurrentSession(accountDeleted);
 
     if (response.status === 401 && requiresAuth && !hasRetried) {
       const currentTokens = storage.getTokens();
@@ -632,7 +640,7 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     }
 
     const payload = await parseResponse<T>(response);
-    assertCurrentSession();
+    assertCurrentSession(accountDeleted);
     return payload;
   }
 

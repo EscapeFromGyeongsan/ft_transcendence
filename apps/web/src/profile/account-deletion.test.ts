@@ -149,9 +149,9 @@ describe("describeDeleteAccountError (#89 계약의 400·401·403·409·422·429
   });
 
   it("400 BAD_REQUEST는 일반 오류", () => {
-    expect(describeDeleteAccountError(api(400, "BAD_REQUEST"), "password").kind).toBe(
-      "general",
-    );
+    expect(
+      describeDeleteAccountError(api(400, "BAD_REQUEST"), "password").kind,
+    ).toBe("general");
   });
 
   it("401은 세션 종료로 분류해 로그인 화면으로 보낸다", () => {
@@ -179,19 +179,27 @@ describe("describeDeleteAccountError (#89 계약의 400·401·403·409·422·429
   });
 
   it("422·429·5xx는 일반 오류이고 429는 이전 시도가 실패했음을 알린다", () => {
-    expect(describeDeleteAccountError(api(422, "VALIDATION_ERROR"), "password").kind).toBe(
-      "general",
+    expect(
+      describeDeleteAccountError(api(422, "VALIDATION_ERROR"), "password").kind,
+    ).toBe("general");
+    const limited = describeDeleteAccountError(
+      api(429, "RATE_LIMITED"),
+      "password",
     );
-    const limited = describeDeleteAccountError(api(429, "RATE_LIMITED"), "password");
     expect(limited.kind).toBe("general");
     expect(limited.message).toContain("잠시 후");
-    expect(describeDeleteAccountError(api(503, "SERVICE_UNAVAILABLE"), "password").message).toContain(
-      "다시 로그인해 처리 여부를 확인",
-    );
+    expect(
+      describeDeleteAccountError(api(503, "SERVICE_UNAVAILABLE"), "password")
+        .message,
+    ).toContain("다시 로그인해 처리 여부를 확인");
   });
 
   it("서버 표시용 message가 아니라 상태 코드·code로 분기한다", () => {
-    const misleading = new ApiError(409, "ACTIVE_MATCH", "비밀번호가 올바르지 않습니다.");
+    const misleading = new ApiError(
+      409,
+      "ACTIVE_MATCH",
+      "비밀번호가 올바르지 않습니다.",
+    );
     expect(describeDeleteAccountError(misleading, "password").kind).toBe(
       "active-match",
     );

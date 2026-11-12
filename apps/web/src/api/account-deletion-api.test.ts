@@ -41,6 +41,48 @@ const SIGNED_IN: StoredTokens = {
 };
 
 describe("authApi.deleteAccount (DELETE /api/users/me, #89)", () => {
+  it("탈퇴 204보다 세션 폐기 WS의 refresh 401이 먼저 와도 성공을 유지한다", async () => {
+    const storage = createMemoryTokenStorage(SIGNED_IN);
+    storage.getSessionId = () => (storage.getTokens() ? "session-a" : null);
+    let finishDelete!: (response: Response) => void;
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishDelete = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(errorResponse(401, "UNAUTHENTICATED"));
+    const client = createAuthApiClient({ fetchImpl: fetchMock, storage });
+    const deletion = client.deleteAccount({ password: "Test-password-1" });
+    await expect(client.refresh()).rejects.toMatchObject({ status: 401 });
+    expect(storage.getTokens()).toBeNull();
+    finishDelete(new Response(null, { status: 204 }));
+    await expect(deletion).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      "/api/users/me",
+      "/api/auth/refresh",
+    ]);
+  });
+
+  it("늦은 탈퇴 204가 새 로그인 세션을 지우지 않는다", async () => {
+    const storage = createMemoryTokenStorage(SIGNED_IN);
+    storage.getSessionId = () => storage.getTokens()?.accessToken ?? null;
+    let finishDelete!: (response: Response) => void;
+    const fetchMock = vi.fn<typeof fetch>().mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishDelete = resolve;
+      }),
+    );
+    const client = createAuthApiClient({ fetchImpl: fetchMock, storage });
+    const deletion = client.deleteAccount({ password: "Test-password-1" });
+    const next = { accessToken: "other-access", refreshToken: "other-refresh" };
+    storage.setTokens(next);
+    finishDelete(new Response(null, { status: 204 }));
+    await expect(deletion).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(storage.getTokens()).toEqual(next);
+  });
+
   it("비밀번호를 본문에 담아 Bearer로 보내고 204면 토큰만 지운다 (logout 호출 없음)", async () => {
     const storage = createMemoryTokenStorage(SIGNED_IN);
     const fetchMock = vi
@@ -64,9 +106,9 @@ describe("authApi.deleteAccount (DELETE /api/users/me, #89)", () => {
       "Content-Type": "application/json",
     });
     // 서버가 세션을 이미 폐기했으므로 /api/auth/logout은 호출하지 않는다.
-    expect(fetchMock.mock.calls.some(([p]) => String(p).includes("logout"))).toBe(
-      false,
-    );
+    expect(
+      fetchMock.mock.calls.some(([p]) => String(p).includes("logout")),
+    ).toBe(false);
     expect(storage.getTokens()).toBeNull();
   });
 

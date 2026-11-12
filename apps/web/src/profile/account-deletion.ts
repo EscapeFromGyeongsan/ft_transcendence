@@ -11,7 +11,7 @@ export const DELETE_CODE_MAX_LENGTH = 32;
 /**
  * 본인 확인 방법.
  *
- * `GET /api/users/me`가 비밀번호 보유 여부를 알려주지 않으므로 사용자가 직접 고릅니다.
+ * `GET /api/users/me`의 `hasPassword`로 결정하며, 이전 서버에서 값이 없으면 직접 고릅니다.
  * - `password`: 비밀번호 계정
  * - `oauth`: 비밀번호가 없는 42 계정 (2FA 코드, 없으면 최근 로그인)
  */
