@@ -32,6 +32,7 @@ export type ParsedAppRoute =
   | { readonly kind: "myProfile" }
   | { readonly kind: "userProfile"; readonly userId: number }
   | { readonly kind: "leaderboard" }
+  | { readonly kind: "friends" }
   | { readonly kind: "terms" }
   | { readonly kind: "privacy" }
   | { readonly kind: "notFound"; readonly pathname: string };
@@ -124,6 +125,9 @@ export function parseAppRoute(
   if (normalizedPath === "/leaderboard" || normalizedPath === "/leaderboard/") {
     return { kind: "leaderboard" };
   }
+  if (normalizedPath === "/friends" || normalizedPath === "/friends/") {
+    return { kind: "friends" };
+  }
 
   const matchPath = /^\/match\/(\d+)\/?$/.exec(normalizedPath);
   if (matchPath) {
@@ -169,6 +173,7 @@ export function resolvePathForScreen(options: {
     | "othello"
     | "profile"
     | "leaderboard"
+    | "friends"
     | "terms"
     | "privacy"
     | "notFound";
@@ -212,6 +217,8 @@ export function resolvePathForScreen(options: {
     }
     case "leaderboard":
       return "/leaderboard";
+    case "friends":
+      return "/friends";
     case "notFound":
       return null;
   }

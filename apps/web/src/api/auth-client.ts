@@ -348,6 +348,8 @@ export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
+  /** 개별 요청과 재시도를 취소하며, 다른 요청과 공유하는 refresh는 취소하지 않습니다. */
+  signal?: AbortSignal;
   /**
    * `true`이면 `Authorization: Bearer <accessToken>` 헤더를 첨부하고,
    * 401 응답 시 `/api/auth/refresh` 호출 후 1회 재시도합니다. 기본값은 `true`입니다.
@@ -557,12 +559,14 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
 
   /**
    * 새로고침 후에는 refresh로 access token을 복원하고, 인증 요청의 401은 한 번만 재시도합니다.
+   * @remarks signal 취소는 개별 요청·재시도에만 적용하며 공유 refresh는 완료될 수 있습니다.
    */
   async function request<T>(
     path: string,
     reqOptions: RequestOptions = {},
     hasRetried = false,
   ): Promise<T> {
+    reqOptions.signal?.throwIfAborted();
     const method = reqOptions.method ?? "GET";
     const requiresAuth = reqOptions.requiresAuth ?? true;
     const sessionId = requiresAuth ? storage.getSessionId?.() : undefined;
@@ -603,9 +607,11 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
       }
     }
 
+    reqOptions.signal?.throwIfAborted();
     const response = await fetchFn(`${baseUrl}${path}`, {
       method,
       headers,
+      signal: reqOptions.signal,
       body: isFormData
         ? (reqOptions.body as FormData)
         : reqOptions.body !== undefined
@@ -613,11 +619,10 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
           : undefined,
     });
 
+    reqOptions.signal?.throwIfAborted();
     // 탈퇴 commit의 WS 세션 폐기가 HTTP 204보다 먼저 도착할 수 있습니다.
     const accountDeleted =
-      path === "/api/users/me" &&
-      method === "DELETE" &&
-      response.status === 204;
+      path === "/api/users/me" && method === "DELETE" && response.status === 204;
     assertCurrentSession(accountDeleted);
 
     if (response.status === 401 && requiresAuth && !hasRetried) {
@@ -640,6 +645,7 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     }
 
     const payload = await parseResponse<T>(response);
+    reqOptions.signal?.throwIfAborted();
     assertCurrentSession(accountDeleted);
     return payload;
   }

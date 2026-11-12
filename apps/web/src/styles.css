@@ -872,6 +872,46 @@ input {
   font-size: 14px;
 }
 
+@media (max-width: 639px) {
+  .cbc-header-inner {
+    padding: 0 1rem;
+  }
+
+  .cbc-brand {
+    flex-shrink: 0;
+  }
+
+  /* Keep the brand name available to assistive technology at narrow widths. */
+  .cbc-brand-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .cbc-account-area,
+  .cbc-avatar-trigger {
+    min-width: 0;
+  }
+
+  .cbc-account-area > .cbc-security-pill,
+  .cbc-avatar-trigger .cbc-avatar-circle,
+  .cbc-avatar-trigger .cbc-avatar-img {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .cbc-avatar-trigger > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .cbc-account-dropdown {
   position: absolute;
   top: calc(100% + 0.5rem);
@@ -1961,6 +2001,96 @@ input {
 
 .cbc-profile-section-head .cbc-profile-section-title {
   margin: 0;
+}
+
+.cbc-friends-page > .cbc-profile-card,
+.cbc-friends-grid {
+  margin-top: 1.25rem;
+}
+
+.cbc-friends-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.cbc-friends-search,
+.cbc-friends-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cbc-friends-search .cbc-field {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.cbc-friends-search > button {
+  margin-top: 1rem;
+}
+
+.cbc-friends-page .cbc-profile-topbar > button,
+.cbc-friends-search > button,
+.cbc-friends-actions > button {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.cbc-friends-list {
+  padding: 0;
+  margin: 1rem 0 0;
+  list-style: none;
+}
+
+.cbc-friends-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.cbc-friends-person {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--on-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cbc-friends-person > span {
+  overflow-wrap: anywhere;
+}
+
+.cbc-friends-actions .cbc-chip.is-online {
+  color: var(--primary);
+}
+
+.cbc-friends-dialog {
+  color: var(--on-surface);
+  max-width: min(28rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  margin: auto;
+}
+
+.cbc-friends-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.cbc-friends-dialog:not([open]) {
+  display: none;
 }
 
 .cbc-profile-privacy-toggle {

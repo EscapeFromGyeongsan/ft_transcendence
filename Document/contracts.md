@@ -516,6 +516,25 @@ IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두�
 
 SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 별도다. 실제 PostgreSQL·두 세션 브라우저 검증은 [검증 기록](profile-records-privacy-validation.md)을 따른다.
 
+### 11.5 친구 웹 클라이언트 (#80·#90, 서버 PR 통합 대기)
+
+친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 PR은 미병합이다. 이 절은 #90이 소비하는 계약이며 master에 구현된 서버 API의 상태 코드 표(11.3)를 확장하지 않는다.
+
+| 클라이언트 동작 | 대조한 #95 계약 |
+|---|---|
+| 목록 | `GET /api/friends` → `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }`. 두 요청 목록에는 `requestId`, `createdAt`이 필요하다. |
+| 검색 | `GET /api/users?nickname=접두사` → `{ id, nickname, avatarUrl }[]`, 최대 20명·본인 제외. trim한 1~32자 접두사를 사용하며 `userId`로 정규화한다. |
+| 요청 | `POST /api/friends/requests { userId }` → 공통 사용자 정보와 `requestId`, `status: pending 또는 accepted` |
+| 수락 | `POST /api/friends/requests/{requestId}/accept` → 해당 요청 ID의 `accepted` 결과 |
+| 거절 | `POST /api/friends/requests/{requestId}/decline` → 204 |
+| 친구 삭제 | `DELETE /api/friends/{userId}` → 204 |
+
+목록·검색·성공 응답은 클라이언트에서 형태를 확인하며 누락된 `online`을 false로 채우지 않는다. 현재 #95는 boolean 또는 집계 미연결 시 503이며, B 검토안의 명시적 null도 확인 불가로 보존한다. 부적합한 성공 응답은 로컬 `FRIENDS_INVALID_RESPONSE`, 15초 초과는 로컬 `FRIENDS_TIMEOUT`으로 표시한다. 두 코드는 서버 오류 계약이 아니다. timeout이면 개별 요청을 취소하고 결과 미확정을 안내한다. 공유 refresh는 유지하지만 취소된 변경 요청은 뒤늦게 전송하지 않는다. #95의 `REQUEST_DECLINED`는 409이며 B 검토안의 403도 같은 안내로 처리한다. 404·409 후에는 목록을 다시 확인하고 변경 요청을 자동 재전송하지 않는다.
+
+서버 성공 이후 재조회가 실패하면 성공 안내를 유지하면서 목록 실패를 별도로 표시한다. 새 조회가 확인될 때까지 이전 목록의 변경 동작과 온라인 표시를 확정하지 않는다. 온라인은 마지막 목록 조회 시점의 값이다. WS 인증 연결 복구와 인증 후 `presence { userId, online }`·`friends.changed {}`는 REST 재조회를 유발하며, 이벤트 값으로 목록을 직접 덮지 않는다. 서버의 registry 주입·변경 후 알림 발행 및 #98의 삭제 후 수신자 경합 해결은 병합·출시 조건이다.
+
+응답 대체 검증과 미공개 서버 후보의 실제 두 계정 API·WS·DB 검증, #89 탈퇴·migration 선행 조건은 [친구 화면 검증 기록](friends-web-validation.md)에서 구분한다.
+
 ## 12. WebSocket `/api/ws` (IF-03)
 
 REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 연결 거절·close code·메시지를 기록한다. 이 경로는 HTTP 응답 본문이 없는 upgrade라 Swagger(`/docs`)에서 숨긴다(`schema.hide`). 여기 적힌 내용은 #41 기준이며, 경기 구독·명령·매칭·재접속 메시지는 #42·#43·#49·#50이 이 장에 이어서 추가한다.

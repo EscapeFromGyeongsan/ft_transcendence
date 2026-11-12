@@ -49,6 +49,7 @@ interface ProfileViewProps {
   onCurrentUserUpdated: (user: AuthUser) => void;
   onOpenProfile: (userId: number) => void;
   onOpenLeaderboard: () => void;
+  onOpenFriends: (nickname?: string) => void;
   onBack: () => void;
   /** 회원 탈퇴가 끝났을 때(토큰은 이미 삭제됨) 로그인 화면 이동과 상태 정리를 맡깁니다. */
   onAccountDeleted?: () => void;
@@ -126,6 +127,7 @@ export function ProfileView({
   onCurrentUserUpdated,
   onOpenProfile,
   onOpenLeaderboard,
+  onOpenFriends,
   onBack,
   onAccountDeleted,
   onSessionEnded,
@@ -597,6 +599,13 @@ export function ProfileView({
               />
               <h2 className="cbc-profile-name">{displayName}</h2>
               <p className="cbc-profile-id">회원 번호 #{userId}</p>
+              <button
+                type="button"
+                className="cbc-btn-secondary cbc-btn-compact"
+                onClick={() => onOpenFriends(isMine ? undefined : displayName)}
+              >
+                {isMine ? "친구 관리" : "친구 검색·요청"}
+              </button>
 
               {isMine && (
                 <>
