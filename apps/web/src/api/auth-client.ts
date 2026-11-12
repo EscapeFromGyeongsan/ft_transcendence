@@ -64,6 +64,17 @@ export interface VerifyTwoFactorInput {
   code: string;
 }
 
+/**
+ * 회원 탈퇴 본인 확인 입력 (`DELETE /api/users/me`).
+ *
+ * 비밀번호 계정은 `password`, 비밀번호가 없는 42 OAuth 계정은 2FA `code`(복구 코드 포함)를 보냅니다.
+ * 둘 다 없으면 서버가 10분 안의 로그인 여부로 확인합니다.
+ */
+export interface DeleteAccountInput {
+  password?: string;
+  code?: string;
+}
+
 export interface StoredTokens {
   accessToken: string | null;
   refreshToken: string;
@@ -732,6 +743,36 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
   }
 
   /**
+   * 회원 탈퇴를 요청합니다 (`DELETE /api/users/me`, 204).
+   *
+   * @param input - 본인 확인 값. 비밀번호 계정은 `password`, 비밀번호 없는 42 계정은 `code`, 둘 다 없으면 최근 로그인으로 확인합니다.
+   * @throws ApiError 본인 확인 실패(400 `INVALID_CREDENTIALS`·`INVALID_TWO_FACTOR_CODE`), 최근 로그인 필요(403 `RECENT_LOGIN_REQUIRED`), 진행 중 경기(409 `ACTIVE_MATCH`) 등
+   * @remarks
+   * 성공하면 서버가 이 계정의 모든 세션과 refresh token을 이미 폐기했으므로 `logout`을 호출하지 않고
+   * 이 브라우저의 토큰만 지웁니다. 실패하면 토큰과 세션은 그대로 유지됩니다.
+   * 본인 확인 실패는 401이 아닌 400이라 refresh·로그아웃으로 이어지지 않습니다.
+   */
+  async function deleteAccount(input: DeleteAccountInput = {}): Promise<void> {
+    const sessionId = storage.getSessionId?.();
+    const body: DeleteAccountInput = {};
+    if (input.password !== undefined) body.password = input.password;
+    if (input.code !== undefined) body.code = input.code;
+    await request<void>("/api/users/me", {
+      method: "DELETE",
+      body: Object.keys(body).length > 0 ? body : undefined,
+      requiresAuth: true,
+    });
+    loginAttempt++;
+    if (
+      !storage.getSessionId ||
+      storage.getSessionId() === sessionId ||
+      !storage.getTokens()
+    ) {
+      storage.clearTokens();
+    }
+  }
+
+  /**
    * 42 Intra OAuth 로그인을 시작합니다 (`POST /api/auth/oauth/42/login`).
    * 반환된 `flowToken`은 브라우저 `sessionStorage`에 자동 보관됩니다.
    */
@@ -891,6 +932,7 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     refresh,
     logout,
     getMe,
+    deleteAccount,
     startOAuth42Login,
     startOAuth42Link,
     completeOAuth42Callback,

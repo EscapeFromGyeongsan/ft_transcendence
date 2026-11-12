@@ -104,4 +104,35 @@ describe("legal-routing and policy content (Issue #64)", () => {
     expect(privacyText).toContain("1024×1024px");
     expect(privacyText).toContain("회원 탈퇴");
   });
+
+  it("describes account withdrawal the way DELETE /api/users/me behaves (#89, #85)", () => {
+    const retention = PRIVACY_POLICY_SECTIONS.find(
+      (section) => section.id === "privacy-retention",
+    );
+    const text = (retention?.bullets ?? []).join("\n");
+
+    // 요청 조건: 본인 확인 방법 3가지와 진행 중 경기 거절 (account-service.deleteAccount)
+    expect(text).toContain("비밀번호 계정은 비밀번호");
+    expect(text).toContain("복구 코드 포함");
+    expect(text).toContain("최근 10분 안에 로그인");
+    expect(text).toContain("진행 중이거나 대기 중인 경기가 있으면 탈퇴할 수 없으며");
+    // 삭제: 한 트랜잭션에서 지우는 항목 (account-repository.anonymizeUser)
+    for (const deleted of [
+      "리프레시 토큰이 삭제",
+      "비밀번호 해시",
+      "42 OAuth 연동 정보",
+      "2FA 비밀키·복구 코드",
+      "비식별 값으로 교체",
+      "아바타 이미지 참조",
+    ]) {
+      expect(text).toContain(deleted);
+    }
+    expect(text).toContain("리더보드에서 제외");
+    // 보존: games·game_players·moves(·game_commands)와 경기 당시 닉네임
+    expect(text).toContain("대국 기록(경기 결과, 착수·명령 기록)");
+    expect(text).toContain("경기 당시 닉네임");
+    expect(text).toContain('"(탈퇴한 사용자)"');
+    // 서버는 탈퇴한 사용자 기록에 보존 기한을 두지 않으므로 기한을 약속하지 않는다.
+    expect(text).not.toMatch(/\d+\s*(일|개월|년)\s*(후|뒤|동안)\s*(삭제|파기)/);
+  });
 });

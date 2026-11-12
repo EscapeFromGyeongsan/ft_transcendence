@@ -30,7 +30,11 @@ export interface MatchRecord {
   result: MatchResult;
   reason: string;
   seat: "black" | "white";
-  opponent: { id: number; nickname: string };
+  /**
+   * `nickname`은 경기 당시 닉네임입니다. `deleted`가 `true`이면 탈퇴한 사용자이므로
+   * `(탈퇴한 사용자)`를 붙이고 프로필 링크를 만들지 않습니다 (#89).
+   */
+  opponent: { id: number; nickname: string; deleted: boolean };
   finishedAt: string;
 }
 

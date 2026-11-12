@@ -3181,3 +3181,89 @@ input {
   border: 1px solid #a89f90;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
 }
+
+/* ---------- 회원 탈퇴 (#85) ---------- */
+.cbc-profile-danger {
+  border: 1px solid var(--error-container);
+}
+
+.cbc-profile-danger .cbc-btn-danger {
+  width: 100%;
+  margin-top: 0.625rem;
+}
+
+.cbc-table-user.is-deleted {
+  cursor: default;
+  color: var(--on-surface-variant);
+  font-weight: 500;
+}
+
+.cbc-table-user.is-deleted:hover {
+  color: var(--on-surface-variant);
+}
+
+.cbc-delete-dialog {
+  align-items: stretch;
+  text-align: left;
+  max-width: 480px;
+  /* 작은 화면에서 안내와 입력란이 길어져도 버튼까지 스크롤로 닿게 합니다. */
+  max-height: calc(100dvh - 3rem);
+  overflow-y: auto;
+}
+
+.cbc-delete-dialog .cbc-modal-alert-icon {
+  align-self: center;
+}
+
+.cbc-delete-title {
+  font-family: var(--font-headline);
+  font-size: 22px;
+  margin: 0 0 0.5rem;
+  text-align: center;
+}
+
+.cbc-delete-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--on-surface-variant);
+}
+
+.cbc-delete-desc p {
+  margin: 0 0 0.5rem;
+}
+
+.cbc-delete-desc ul {
+  margin: 0;
+  padding-left: 1.125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cbc-delete-form {
+  width: 100%;
+  margin-top: 0.75rem;
+  text-align: left;
+}
+
+.cbc-delete-methods {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.cbc-delete-method {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.cbc-delete-dialog :focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

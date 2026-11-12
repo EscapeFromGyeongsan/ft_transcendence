@@ -1283,6 +1283,62 @@ export function App() {
     }
   }
 
+  /**
+   * 로그인 상태를 모두 버리고 로그인 화면으로 보냅니다. 탈퇴·세션 종료처럼 서버 세션이 이미 없을 때 씁니다.
+   * 토큰 삭제는 호출한 쪽이 끝낸 상태여야 하며, 여기서는 화면 상태·메모리 속 사용자 정보만 정리합니다.
+   */
+  function leaveSignedOutState(feedback: {
+    notice?: string;
+    error?: string;
+  }) {
+    resetMessages();
+    setCurrentUser(null);
+    setProfileUserId(null);
+    setChallengeToken(null);
+    setTwoFactorCode("");
+    setLoginPassword("");
+    setAccountMenuOpen(false);
+    setLogoutModalOpen(false);
+    setPreviousViewBeforeLegal(null);
+    // 이전 사용자의 대국 상대 정보가 다음 로그인 화면에 남지 않게 합니다.
+    fetchedPlayerIdsRef.current = new Set();
+    setPlayerNicknames({});
+    saveActiveMatchIdToStorage(null);
+    setView("login");
+    if (feedback.notice) setNoticeMessage(feedback.notice);
+    if (feedback.error) setErrorMessage(feedback.error);
+  }
+
+  /** 회원 탈퇴 성공: 서버가 세션을 모두 폐기했고 `deleteAccount`가 토큰을 지운 뒤 호출됩니다. */
+  function handleAccountDeleted() {
+    leaveSignedOutState({
+      notice:
+        "회원 탈퇴가 완료되었습니다. 계정 정보는 삭제되었고 모든 기기에서 로그아웃되었습니다.",
+    });
+  }
+
+  /** 탈퇴 요청이 401: 세션이 끝났거나 이미 탈퇴 처리된 계정입니다. */
+  function handleAccountDeletionSessionEnded() {
+    authApi.storage.clearTokens();
+    leaveSignedOutState({
+      error:
+        "로그인 세션이 끝났거나 이미 탈퇴 처리된 계정입니다. 다시 로그인해 주세요.",
+    });
+  }
+
+  /** 최근 로그인이 필요한 42 계정: 로그아웃하고 로그인 화면으로 보냅니다. */
+  async function handleAccountDeletionRelogin() {
+    try {
+      await authApi.logout();
+    } catch {
+      // 로그아웃 요청이 실패해도 로컬 세션은 종료합니다 (handleConfirmLogout과 동일).
+    }
+    leaveSignedOutState({
+      notice:
+        "다시 로그인한 뒤 10분 안에 내 프로필에서 회원 탈퇴를 진행해 주세요.",
+    });
+  }
+
   async function handleConfirmLogout() {
     resetMessages();
     setSubmitting(true);
@@ -2216,6 +2272,9 @@ export function App() {
             onOpenProfile={openProfile}
             onOpenLeaderboard={() => switchView("leaderboard")}
             onBack={() => switchView("lobby")}
+            onAccountDeleted={handleAccountDeleted}
+            onSessionEnded={handleAccountDeletionSessionEnded}
+            onRequireRelogin={() => void handleAccountDeletionRelogin()}
           />
         ) : view === "leaderboard" && currentUser ? (
           <LeaderboardView

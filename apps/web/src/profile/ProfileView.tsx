@@ -34,6 +34,8 @@ import {
   validateAvatarFile,
 } from "../api/profile-format.ts";
 import { Avatar } from "./Avatar.tsx";
+import { DeleteAccountDialog } from "./DeleteAccountDialog.tsx";
+import { describeOpponent } from "./account-deletion.ts";
 
 const GAME_TYPES: GameType[] = ["gomoku", "othello"];
 const MATCH_PAGE_SIZE = 10;
@@ -48,6 +50,12 @@ interface ProfileViewProps {
   onOpenProfile: (userId: number) => void;
   onOpenLeaderboard: () => void;
   onBack: () => void;
+  /** 회원 탈퇴가 끝났을 때(토큰은 이미 삭제됨) 로그인 화면 이동과 상태 정리를 맡깁니다. */
+  onAccountDeleted?: () => void;
+  /** 탈퇴 요청이 401로 끝났을 때(세션 종료·이미 탈퇴) 로그인 화면으로 보냅니다. */
+  onSessionEnded?: () => void;
+  /** 최근 로그인이 필요할 때 로그아웃하고 로그인 화면으로 보냅니다. */
+  onRequireRelogin?: () => void;
   api?: ProfileApi;
   authClient?: AuthApiClient;
 }
@@ -119,6 +127,9 @@ export function ProfileView({
   onOpenProfile,
   onOpenLeaderboard,
   onBack,
+  onAccountDeleted,
+  onSessionEnded,
+  onRequireRelogin,
   api = profileApi,
   authClient = authApi,
 }: ProfileViewProps) {
@@ -178,6 +189,8 @@ export function ProfileView({
   );
   const [oauthAlreadyLinked, setOauthAlreadyLinked] = useState(false);
   const disableTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const deleteTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // 내 프로필 진입 시 2FA 활성화 상태를 조회합니다.
   useEffect(() => {
@@ -257,7 +270,13 @@ export function ProfileView({
         setPublicProfile(profile);
       })
       .catch((error) => {
-        if (active) setLoadError(getErrorMessage(error));
+        if (!active) return;
+        // 탈퇴한 사용자의 프로필·통계·경기 기록 조회는 404입니다 (#89).
+        setLoadError(
+          !isMine && error instanceof ApiError && error.status === 404
+            ? "존재하지 않거나 탈퇴한 사용자입니다."
+            : getErrorMessage(error),
+        );
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -946,6 +965,34 @@ export function ProfileView({
                 </div>
               </section>
             )}
+            {isMine && (
+              <section
+                className="cbc-profile-card cbc-profile-danger"
+                data-testid="profile-danger-zone"
+                aria-labelledby="profile-danger-title"
+              >
+                <h2
+                  id="profile-danger-title"
+                  className="cbc-profile-section-title"
+                >
+                  회원 탈퇴
+                </h2>
+                <p className="cbc-profile-hint">
+                  계정과 로그인 정보를 삭제합니다. 되돌릴 수 없으며, 경기 결과는
+                  상대방 전적에 &quot;(탈퇴한 사용자)&quot;로 남습니다.
+                </p>
+                <button
+                  ref={deleteTriggerBtnRef}
+                  type="button"
+                  className="cbc-btn-danger cbc-btn-compact"
+                  disabled={busy !== null}
+                  data-testid="open-delete-account-btn"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  회원 탈퇴
+                </button>
+              </section>
+            )}
           </aside>
 
           <div className="cbc-profile-main">
@@ -1062,30 +1109,46 @@ export function ProfileView({
                           </tr>
                         </thead>
                         <tbody>
-                          {matches.map((match) => (
-                            <tr key={match.matchId}>
-                              <td>
-                                <button
-                                  type="button"
-                                  className="cbc-table-user"
-                                  onClick={() =>
-                                    onOpenProfile(match.opponent.id)
-                                  }
-                                >
-                                  <Avatar
-                                    nickname={match.opponent.nickname}
-                                    size={32}
-                                  />
-                                  <span>{match.opponent.nickname}</span>
-                                </button>
-                              </td>
-                              <td>{GAME_LABELS[match.gameType]}</td>
-                              <td>
-                                <ResultBadge result={match.result} />
-                              </td>
-                              <td>{formatMatchDate(match.finishedAt)}</td>
-                            </tr>
-                          ))}
+                          {matches.map((match) => {
+                            const opponent = describeOpponent(match.opponent);
+                            return (
+                              <tr key={match.matchId}>
+                                <td>
+                                  {opponent.linkable ? (
+                                    <button
+                                      type="button"
+                                      className="cbc-table-user"
+                                      onClick={() =>
+                                        onOpenProfile(match.opponent.id)
+                                      }
+                                    >
+                                      <Avatar
+                                        nickname={match.opponent.nickname}
+                                        size={32}
+                                      />
+                                      <span>{opponent.label}</span>
+                                    </button>
+                                  ) : (
+                                    <span
+                                      className="cbc-table-user is-deleted"
+                                      data-testid="deleted-opponent"
+                                    >
+                                      <Avatar
+                                        nickname={match.opponent.nickname}
+                                        size={32}
+                                      />
+                                      <span>{opponent.label}</span>
+                                    </span>
+                                  )}
+                                </td>
+                                <td>{GAME_LABELS[match.gameType]}</td>
+                                <td>
+                                  <ResultBadge result={match.result} />
+                                </td>
+                                <td>{formatMatchDate(match.finishedAt)}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1112,6 +1175,30 @@ export function ProfileView({
             )}
           </div>
         </div>
+      )}
+
+      {deleteDialogOpen && (
+        <DeleteAccountDialog
+          nickname={currentUser.nickname}
+          twoFactorEnabled={twoFactorEnabled}
+          authClient={authClient}
+          onClose={() => {
+            setDeleteDialogOpen(false);
+            deleteTriggerBtnRef.current?.focus();
+          }}
+          onDeleted={() => {
+            setDeleteDialogOpen(false);
+            onAccountDeleted?.();
+          }}
+          onSessionEnded={() => {
+            setDeleteDialogOpen(false);
+            onSessionEnded?.();
+          }}
+          onRequireRelogin={() => {
+            setDeleteDialogOpen(false);
+            onRequireRelogin?.();
+          }}
+        />
       )}
 
       {/* 2FA Disable Confirmation Modal (19_2fa_disable_modal) */}
