@@ -173,9 +173,17 @@ export function registerStatsRoutes(
                       type: "object",
                       properties: {
                         id: { type: "integer" },
-                        nickname: { type: "string" },
+                        nickname: {
+                          type: "string",
+                          description: "경기 당시 닉네임",
+                        },
+                        deleted: {
+                          type: "boolean",
+                          description:
+                            "탈퇴한 사용자. 화면은 `(탈퇴한 사용자)`를 붙이고 프로필 링크를 만들지 않습니다.",
+                        },
                       },
-                      required: ["id", "nickname"],
+                      required: ["id", "nickname", "deleted"],
                     },
                     finishedAt: { type: "string", format: "date-time" },
                   },

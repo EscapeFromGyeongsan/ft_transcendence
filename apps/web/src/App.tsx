@@ -1320,10 +1320,7 @@ export function App() {
    * 로그인 상태를 모두 버리고 로그인 화면으로 보냅니다. 탈퇴·세션 종료처럼 서버 세션이 이미 없을 때 씁니다.
    * 토큰 삭제는 호출한 쪽이 끝낸 상태여야 하며, 여기서는 화면 상태·메모리 속 사용자 정보만 정리합니다.
    */
-  function leaveSignedOutState(feedback: {
-    notice?: string;
-    error?: string;
-  }) {
+  function leaveSignedOutState(feedback: { notice?: string; error?: string }) {
     resetMessages();
     setCurrentUser(null);
     setProfileUserId(null);
@@ -2317,6 +2314,9 @@ export function App() {
             onOpenLeaderboard={() => switchView("leaderboard")}
             onOpenFriends={openFriends}
             onBack={() => switchView("lobby")}
+            onAccountDeleted={handleAccountDeleted}
+            onSessionEnded={handleAccountDeletionSessionEnded}
+            onRequireRelogin={() => void handleAccountDeletionRelogin()}
           />
         ) : view === "friends" && currentUser ? (
           <FriendsView
@@ -2327,9 +2327,6 @@ export function App() {
             initialQuery={friendsQuery}
             onOpenProfile={openProfile}
             onBack={() => switchView("lobby")}
-            onAccountDeleted={handleAccountDeleted}
-            onSessionEnded={handleAccountDeletionSessionEnded}
-            onRequireRelogin={() => void handleAccountDeletionRelogin()}
           />
         ) : view === "leaderboard" && currentUser ? (
           <LeaderboardView

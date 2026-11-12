@@ -1183,7 +1183,11 @@ export function ProfileView({
                       className="cbc-btn-secondary cbc-btn-compact"
                       onClick={() => {
                         const generation = matchesGeneration.current;
-                        void loadMatches(nextBefore, false, () => generation === matchesGeneration.current);
+                        void loadMatches(
+                          nextBefore,
+                          false,
+                          () => generation === matchesGeneration.current,
+                        );
                       }}
                     >
                       더 보기

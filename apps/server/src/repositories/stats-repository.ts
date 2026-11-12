@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Executor } from "../db/client.ts";
 import { gamePlayers, games } from "../db/schema/games.ts";
@@ -34,6 +34,9 @@ const opponent = alias(gamePlayers, "opponent");
  *
  * @param options - `before`는 이 경기 ID보다 오래된 것만(cursor), `limit`은 페이지 크기
  * @returns 최대 `limit + 1`행. 마지막 한 행은 다음 페이지가 있는지 판단용입니다.
+ *
+ * @remarks
+ * 상대 닉네임은 경기 당시 값(`nickname_snapshot`)이라 이후 닉네임 변경·탈퇴와 관계없이 그대로입니다. 상대가 탈퇴했으면 `opponentDeleted`가 `true`입니다(DEC-09).
  */
 export function findFinishedMatches(
   db: Executor,
@@ -49,7 +52,9 @@ export function findFinishedMatches(
         reason: games.resultReason,
         seat: gamePlayers.seat,
         opponentId: users.id,
-        opponentNickname: users.nickname,
+        // Nickname at match time, so renames and deletion keep the record.
+        opponentNickname: opponent.nicknameSnapshot,
+        opponentDeleted: sql<boolean>`${users.deletedAt} IS NOT NULL`,
         finishedAt: games.finishedAt,
       })
       .from(gamePlayers)
@@ -78,7 +83,7 @@ export function findFinishedMatches(
  *
  * @remarks
  * DEC-08 순서: 승수 내림차순, 승률 내림차순, 사용자 ID 오름차순. 무효 경기는 세지 않고,
- * 집계되는 경기가 한 판 이상인 사용자만 나옵니다.
+ * 집계되는 경기가 한 판 이상인 사용자만 나옵니다. 탈퇴한 사용자는 빠집니다(DEC-09).
  */
 export function findLeaderboard(db: Executor, gameType: string, limit: number) {
   const wins = sql<number>`count(*) filter (where ${gamePlayers.result} = 'win')::int`;
@@ -96,19 +101,19 @@ export function findLeaderboard(db: Executor, gameType: string, limit: number) {
     .from(gamePlayers)
     .innerJoin(games, eq(games.id, gamePlayers.gameId))
     .innerJoin(users, eq(users.id, gamePlayers.userId))
-    .where(eq(games.gameType, gameType))
+    .where(and(eq(games.gameType, gameType), isNull(users.deletedAt)))
     .groupBy(users.id)
     .having(sql`${played} > 0`)
     .orderBy(desc(wins), sql`${winRate} desc nulls last`, users.id)
     .limit(limit);
 }
 
-/** 트랜잭션에서 전적 공개 설정을 읽고 전적 조회가 끝날 때까지 공유 잠금을 유지합니다. */
+/** 탈퇴하지 않은 사용자의 전적 공개 설정을 읽고 조회가 끝날 때까지 공유 잠금을 유지합니다. */
 export async function findRecordsAccess(db: Executor, userId: number) {
   const [row] = await db
     .select({ recordsPublic: users.recordsPublic })
     .from(users)
-    .where(eq(users.id, userId))
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
     .for("share");
   return row;
 }

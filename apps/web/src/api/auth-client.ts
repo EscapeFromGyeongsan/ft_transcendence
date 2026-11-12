@@ -626,7 +626,9 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     reqOptions.signal?.throwIfAborted();
     // 탈퇴 commit의 WS 세션 폐기가 HTTP 204보다 먼저 도착할 수 있습니다.
     const accountDeleted =
-      path === "/api/users/me" && method === "DELETE" && response.status === 204;
+      path === "/api/users/me" &&
+      method === "DELETE" &&
+      response.status === 204;
     assertCurrentSession(accountDeleted);
 
     if (response.status === 401 && requiresAuth && !hasRetried) {

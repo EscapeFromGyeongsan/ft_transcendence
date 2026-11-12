@@ -2,6 +2,7 @@ import type { PlayerColor } from "@cafe/game-contracts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { gameCommands, gamePlayers, games, moves } from "../db/schema/games.ts";
+import { users } from "../db/schema/users.ts";
 
 export type Seat = PlayerColor;
 
@@ -22,11 +23,20 @@ export async function insertGame(
   return game;
 }
 
+/**
+ * 경기 참가자 행을 추가합니다.
+ *
+ * @remarks
+ * 같은 INSERT에서 사용자의 현재 닉네임을 `nickname_snapshot`으로 저장합니다. 경기 기록은 이 값을 보여 주므로 이후 닉네임 변경·탈퇴가 과거 기록을 바꾸지 않습니다(DEC-09).
+ */
 export async function insertPlayer(
   db: Executor,
   values: { gameId: number; userId: number; seat: Seat },
 ) {
-  await db.insert(gamePlayers).values(values);
+  await db.insert(gamePlayers).values({
+    ...values,
+    nicknameSnapshot: sql`(SELECT ${users.nickname} FROM ${users} WHERE ${users.id} = ${values.userId})`,
+  });
 }
 
 /**

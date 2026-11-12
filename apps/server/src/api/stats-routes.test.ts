@@ -194,7 +194,9 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
       expect.objectContaining({ userId: 2, nickname: "p2", wins: 1 }),
     );
     expect((await get("/api/users/1/matches")).json().matches).toContainEqual(
-      expect.objectContaining({ opponent: { id: 2, nickname: "p2" } }),
+      expect.objectContaining({
+        opponent: { id: 2, nickname: "p2", deleted: false },
+      }),
     );
     expect((await get("/api/users/999/stats?gameType=gomoku")).statusCode).toBe(
       404,
@@ -302,7 +304,7 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
       result: "win",
       reason: "resign",
       seat: "white",
-      opponent: { id: 2, nickname: "p2" },
+      opponent: { id: 2, nickname: "p2", deleted: false },
     });
     expect(page1.nextBefore).toBe(second);
     const page2 = (

@@ -35,7 +35,7 @@ export function createStatsService(db: Database) {
      * 사용자의 게임 종류별 통계와 DEC-08 업적·진행도를 계산합니다.
      *
      * @param viewerId - 인증된 세션에서 확인한 조회자 ID
-     * @returns 사용자가 없으면 `undefined`
+     * @returns 사용자가 없거나 탈퇴했으면 `undefined`
      *
      * @remarks 본인 외에는 공개 전적만 조회할 수 있습니다. 권한 검사와 조회는 같은 트랜잭션에서 수행하며 무효 경기는 `played`와 승률에서 제외합니다.
      * @throws {@link RecordsPrivateError} 타인의 비공개 전적 조회
@@ -71,7 +71,7 @@ export function createStatsService(db: Database) {
      * 사용자의 끝난 경기 기록을 최신순으로 한 페이지 읽습니다.
      *
      * @param viewerId - 인증된 세션에서 확인한 조회자 ID
-     * @returns 사용자가 없으면 `undefined`. `nextBefore`를 다음 호출의 `before`로 넘기면 더 오래된 페이지를 읽습니다(없으면 `null`).
+     * @returns 사용자가 없거나 탈퇴했으면 `undefined`. `nextBefore`를 다음 호출의 `before`로 넘기면 더 오래된 페이지를 읽습니다(없으면 `null`).
      * @remarks 본인은 비공개 전적도 조회할 수 있고, 다른 사용자는 공개 전적만 조회할 수 있습니다. 권한 검사와 조회는 같은 트랜잭션에서 수행합니다.
      * @throws {@link RecordsPrivateError} 타인의 비공개 전적 조회
      */
@@ -90,7 +90,11 @@ export function createStatsService(db: Database) {
             result: row.result,
             reason: row.reason,
             seat: row.seat,
-            opponent: { id: row.opponentId, nickname: row.opponentNickname },
+            opponent: {
+              id: row.opponentId,
+              nickname: row.opponentNickname,
+              deleted: row.opponentDeleted,
+            },
             finishedAt: row.finishedAt,
           })),
           // Pass as `before` to get the next (older) page.

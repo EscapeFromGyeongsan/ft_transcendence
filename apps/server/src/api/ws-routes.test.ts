@@ -376,6 +376,58 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     expect((await retryClose).code).toBe(4401);
   });
 
+  test("friends see a user online from the first tab until the last one goes", async () => {
+    // Users 1 and 2 are friends.
+    await app.close();
+    app = await buildApp(
+      {},
+      testDatabaseUrl,
+      { jwtSecret },
+      undefined,
+      {},
+      { gomoku: stubGomoku },
+      async (userId) => (userId === 1 ? [2] : userId === 2 ? [1] : []),
+    );
+    // Register both users first: the second login of p1 also tries to
+    // register again, and that failed insert still uses up an id.
+    const tokenA = await loginToken(1);
+    const friendToken = await loginToken(2);
+    const tokenB = await loginToken(1);
+    const { socket: friend } = await authenticated(friendToken);
+    const seen: unknown[] = [];
+    let onPresence = () => {};
+    friend.on("message", (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.type !== "presence") return;
+      seen.push(message.payload);
+      onPresence();
+    });
+    const nextPresence = () =>
+      new Promise<void>((resolve) => (onPresence = resolve));
+
+    let presence = nextPresence();
+    const { socket: tabA } = await authenticated(tokenA);
+    await presence;
+    const { socket: tabB } = await authenticated(tokenB);
+    const tabBClosed = closed(tabB);
+    tabB.terminate();
+    await tabBClosed;
+
+    // Logging out the last tab's session takes the user offline.
+    presence = nextPresence();
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      headers: { authorization: `Bearer ${tokenA}` },
+    });
+    await presence;
+    expect(seen).toEqual([
+      { userId: 1, online: true },
+      { userId: 1, online: false },
+    ]);
+    for (const socket of [tabA, friend]) socket.terminate();
+  });
+
   test("the real gomoku engine refuses off-board moves as INVALID_ACTION", async () => {
     const realGomoku: RegisteredRules = {
       version: gomoku.GOMOKU_RULES_VERSION,

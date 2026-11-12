@@ -236,7 +236,11 @@ const rejectMessages: Record<ErrorCode, string> = {
  * `game.command`는 입력 권한이 있는 연결만 보낼 수 있습니다. `apply()`가
  * commit하고 돌아온 뒤에만 전송합니다. 적용되면 요청자에게 `game.ack`, 구독자
  * 전체에 `game.updated`를 보내고, 거절되면 요청자에게만 `game.error`를
- * 보냅니다. 같은 `commandId` 재전송은 요청자에게만 응답합니다.
+ * 보냅니다. 같은 `commandId` 재전송도 처음 결과로 같은 경로를 탑니다. 적용된
+ * 명령이면 요청자에게 `game.ack`(`duplicate: true`)를 보내고 최신 snapshot을
+ * 구독자 전체에 다시 broadcast합니다. 처음 commit 뒤 snapshot 전송이 실패했을
+ * 때 재전송으로 복구하기 위해서입니다. 이미 보낸 버전보다 새롭지 않으면
+ * broadcast하지 않습니다(SDS 12번).
  *
  * `queue.join`/`queue.leave`는 자동 매칭 대기열({@link createMatchmaking})로
  * 넘기고, 연결이 닫히면 그 연결의 대기 항목을 뺍니다.
@@ -250,6 +254,9 @@ const rejectMessages: Record<ErrorCode, string> = {
  * `finishBySystem()`을 다시 시도하고 `game.updated`를 보냅니다. 그동안
  * 이탈자가 돌아와도 예산은 다시 생기지 않습니다. `auth.ok`의 `activeMatchId`로
  * 클라이언트가 진행 중 경기를 찾습니다.
+ *
+ * 온라인 상태(#82): `auth.ok`를 보내기 직전에 연결을 사용자에 등록해 그때부터
+ * 온라인으로 셉니다. 인증을 확인하는 중인 연결은 세지 않습니다.
  *
  * 연결 요청(upgrade)은 IP마다 1분에 30번까지 받고({@link wsRateLimit}), 넘으면
  * upgrade 없이 HTTP 429 `RATE_LIMITED`로 응답합니다.
@@ -412,6 +419,9 @@ export function registerRealtimeRoutes(
     const result = await matchmaking.join(userId, socket, gameType);
     if (result === "joined") {
       send(socket, "queue.joined", { gameType }, requestId);
+    } else if (result === "cancelled") {
+      // Another tab left while this join was checking the DB.
+      send(socket, "queue.left", {}, requestId);
     } else if (result === "ALREADY_ACTIVE") {
       sendError(
         socket,
@@ -689,7 +699,7 @@ export function registerRealtimeRoutes(
               // committed while the session was being checked found nothing
               // to close, so check the session once more.
               registeredSession = result.sessionId;
-              connections.add(registeredSession, socket, result.userId);
+              connections.add(registeredSession, socket);
               if (!(await getAuth().authenticate(token))) result = null;
             }
           } catch (error) {
@@ -722,6 +732,8 @@ export function registerRealtimeRoutes(
           if (socket.readyState !== socket.OPEN) return;
           clearTimeout(authTimer);
           claims = result;
+          // Counted as online only now, never while still being checked.
+          connections.authenticate(socket, claims.userId);
           send(
             socket,
             "auth.ok",

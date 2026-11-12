@@ -15,8 +15,9 @@ type Entry = {
  * - `joined`: 대기열에 들어감
  * - `ALREADY_ACTIVE`: 이미 대기 중이거나 끝나지 않은 경기가 있음
  * - `closed`: 진행 중 경기를 확인하는 사이에 연결이 닫혀 등록하지 않음
+ * - `cancelled`: 확인하는 사이에 같은 사용자가 `leave()`를 불러 등록하지 않음
  */
-export type JoinResult = "joined" | "ALREADY_ACTIVE" | "closed";
+export type JoinResult = "joined" | "ALREADY_ACTIVE" | "closed" | "cancelled";
 /**
  * 매칭 취소 결과입니다. `ALREADY_MATCHED`는 이미 경기를 만드는 중이라
  * 취소할 수 없다는 뜻입니다.
@@ -60,6 +61,8 @@ export function createMatchmaking(deps: {
   const entries = new Map<number, Entry>();
   // Users whose join is still checking the DB.
   const joining = new Set<number>();
+  // Joins that a leave() cancelled while they were still checking the DB.
+  const cancelled = new Set<number>();
 
   function dequeue(entry: Entry) {
     const queue = queues.get(entry.gameType) ?? [];
@@ -125,11 +128,14 @@ export function createMatchmaking(deps: {
       if (entries.has(userId) || joining.has(userId)) return "ALREADY_ACTIVE";
       joining.add(userId);
       let activeMatchId: number | undefined;
+      let wasCancelled: boolean;
       try {
         activeMatchId = await deps.getGames().findActiveMatchId(userId);
       } finally {
         joining.delete(userId);
+        wasCancelled = cancelled.delete(userId);
       }
+      if (wasCancelled) return "cancelled";
       if (activeMatchId !== undefined) return "ALREADY_ACTIVE";
       // Closed during the lookup: removeSocket() has already run.
       if (socket.readyState !== socket.OPEN) return "closed";
@@ -142,8 +148,15 @@ export function createMatchmaking(deps: {
       return "joined";
     },
 
-    /** 대기열에서 뺍니다. 대기 중이 아니어도 `left`를 돌려줍니다. */
+    /**
+     * 대기열에서 뺍니다. 대기 중이 아니어도 `left`를 돌려줍니다.
+     *
+     * @remarks
+     * 다른 탭의 `join()`이 아직 DB를 확인하는 중이면 그 신청을 취소합니다.
+     * 그 `join()`은 대기열에 들어가지 않고 `cancelled`를 돌려줍니다.
+     */
     leave(userId: number): LeaveResult {
+      if (joining.has(userId)) cancelled.add(userId);
       const entry = entries.get(userId);
       if (!entry) return "left";
       if (entry.state === "matching") return "ALREADY_MATCHED";
