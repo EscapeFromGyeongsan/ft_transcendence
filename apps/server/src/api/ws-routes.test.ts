@@ -202,8 +202,12 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     await database?.close();
   });
 
-  // Registers and logs in user p<n>; ids follow registration order.
   async function loginToken(n = 1) {
+    return (await loginTokens(n)).accessToken;
+  }
+
+  // Registers and logs in user p<n>; ids follow registration order.
+  async function loginTokens(n = 1) {
     const email = `p${n}@example.com`;
     await app.inject({
       method: "POST",
@@ -215,7 +219,7 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       url: "/api/auth/login",
       payload: { email, password },
     });
-    return response.json().accessToken as string;
+    return response.json() as { accessToken: string; refreshToken: string };
   }
 
   async function authenticated(accessToken: string) {
@@ -287,6 +291,23 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     const retryClose = closed(retry);
     sendJson(retry, { type: "auth", payload: { accessToken: token } });
     expect((await retryClose).code).toBe(4401);
+  });
+
+  test("refresh token reuse closes open connections of that session", async () => {
+    const { accessToken, refreshToken } = await loginTokens();
+    const { socket } = await authenticated(accessToken);
+    const close = closed(socket);
+    const refresh = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/refresh",
+        payload: { refreshToken },
+      });
+
+    expect((await refresh()).statusCode).toBe(200);
+    // The rotated token comes back: treated as stolen, the session is revoked.
+    expect((await refresh()).statusCode).toBe(401);
+    expect(await close).toEqual({ code: 4401, reason: "Session ended." });
   });
 
   describe("match subscription", () => {
