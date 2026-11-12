@@ -113,3 +113,30 @@ test("multipart body on a JSON route returns 415", async () => {
     },
   });
 });
+
+test("every Swagger route has a summary and response descriptions", async () => {
+  app = await buildApp();
+  const paths = (await app.inject({ method: "GET", url: "/docs/json" })).json()
+    .paths as Record<
+    string,
+    Record<
+      string,
+      { summary?: string; responses: Record<string, { description?: string }> }
+    >
+  >;
+  const missing: string[] = [];
+  for (const [path, operations] of Object.entries(paths)) {
+    for (const [method, operation] of Object.entries(operations)) {
+      if (!operation.summary) missing.push(`${method} ${path} summary`);
+      for (const [code, response] of Object.entries(operation.responses)) {
+        if (
+          !response.description ||
+          response.description === "Default Response"
+        ) {
+          missing.push(`${method} ${path} ${code}`);
+        }
+      }
+    }
+  }
+  expect(missing).toEqual([]);
+});

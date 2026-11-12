@@ -282,8 +282,12 @@ export async function buildApp(
     {
       schema: {
         tags: ["health"],
+        summary: "서버 동작 확인",
+        description:
+          "DB를 확인하지 않습니다. DB 연결은 `/api/health/db`로 확인합니다.",
         response: {
           200: {
+            description: "서버가 요청을 받고 있음",
             type: "object",
             properties: { status: { type: "string", const: "ok" } },
             required: ["status"],
