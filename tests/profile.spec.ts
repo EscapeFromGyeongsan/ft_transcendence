@@ -89,7 +89,14 @@ test("profile edits persist and records privacy protects real match data while p
 
     // Reuse the same two accounts for actual game records and privacy checks.
     await finishGomoku(page, outsider, [nickname, viewer.nickname]);
-    await Promise.all([page.goto("/me"), outsider.goto("/me")]);
+    // 화면 이동은 SPA 동선으로 확인하고, 명시적인 새로고침에서만 세션 복원을 검증합니다.
+    for (const player of [page, outsider]) {
+      await player
+        .getByTestId("lobby-view")
+        .getByRole("button", { name: "내 프로필", exact: true })
+        .click();
+      await expect(player).toHaveURL(/\/me$/);
+    }
     await expect(page.locator(".cbc-profile-total")).toContainText("총 1전");
     await expect(
       outsider.getByRole("row", { name: new RegExp(nickname) }),
