@@ -9,7 +9,9 @@ export function createContainerDatabaseUrl(
   // Accept one newline from password-file preparation, preserving spaces.
   const password = passwordFileContents.replace(/\r?\n$/, "");
   if (!password || /[\r\n\0]/.test(password)) {
-    throw new Error("The database password file must contain one non-empty line.");
+    throw new Error(
+      "The database password file must contain one non-empty line.",
+    );
   }
   return (
     "postgresql://" +

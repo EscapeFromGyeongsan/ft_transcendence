@@ -20,9 +20,12 @@ test.each(["0", "-1", "65536", "3001.5", "bad", ""])(
   },
 );
 
-test.each(["", " ", " 0.0.0.0"])("invalid API_HOST %j is rejected", (API_HOST) => {
-  expect(() => readListenOptions({ API_HOST })).toThrow(/API_HOST/);
-});
+test.each(["", " ", " 0.0.0.0"])(
+  "invalid API_HOST %j is rejected",
+  (API_HOST) => {
+    expect(() => readListenOptions({ API_HOST })).toThrow(/API_HOST/);
+  },
+);
 
 test("container host accepts requests with a wildcard listen binding", async () => {
   const app = await buildApp();
@@ -30,7 +33,8 @@ test("container host accepts requests with a wildcard listen binding", async () 
     const { host } = readListenOptions({ API_HOST: "0.0.0.0" });
     await app.listen({ host, port: 0 });
     const address = app.server.address();
-    if (!address || typeof address === "string") throw new Error("No TCP address");
+    if (!address || typeof address === "string")
+      throw new Error("No TCP address");
     expect(address.address).toBe("0.0.0.0");
     const response = await fetch(
       "http://127.0.0.1:" + address.port + "/api/health",

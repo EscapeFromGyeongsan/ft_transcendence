@@ -34,7 +34,7 @@ test.each([
   ["", "db"],
   ["cafe", ""],
 ])("missing database initialization setting is rejected", (user, database) => {
-  expect(() => createContainerDatabaseUrl(user, database, "test-password")).toThrow(
-    /POSTGRES_USER and POSTGRES_DB/,
-  );
+  expect(() =>
+    createContainerDatabaseUrl(user, database, "test-password"),
+  ).toThrow(/POSTGRES_USER and POSTGRES_DB/);
 });
