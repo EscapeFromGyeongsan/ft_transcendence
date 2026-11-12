@@ -61,8 +61,18 @@ export type TwoFactorLoginResult =
   | { ok: true; tokens: TokenPair }
   | { ok: false; code: "UNAUTHENTICATED" | "INVALID_TWO_FACTOR_CODE" };
 
-/** 필요한 설정(DB·JWT·2FA 키·OAuth 앱)이 없어 기능을 쓸 수 없을 때 던집니다. 라우트에서 503으로 바뀝니다. */
-export class ServiceUnavailableError extends Error {}
+/**
+ * 필요한 설정(DB·JWT·2FA 키·OAuth 앱)이 없어 기능을 쓸 수 없을 때 던집니다. 라우트에서 503으로 바뀌며,
+ * `message`가 응답 본문의 `error.message`가 됩니다. 기본값은 DB가 없을 때의 문구입니다.
+ */
+export class ServiceUnavailableError extends Error {
+  constructor(message = "Database is unavailable.") {
+    super(message);
+  }
+}
+
+/** 2FA 키(`TWO_FACTOR_KEY`)가 없어 2FA를 쓸 수 없을 때의 503 문구입니다. */
+export const TWO_FACTOR_NOT_CONFIGURED = "Two-factor is not configured.";
 
 const CHALLENGE_TTL_SECONDS = 5 * 60;
 const MAX_CHALLENGE_ATTEMPTS = 5;
@@ -207,7 +217,8 @@ export function createAuthService(
       challengeToken: string,
       code: string,
     ): Promise<TwoFactorLoginResult> {
-      if (!twoFactor) throw new ServiceUnavailableError();
+      if (!twoFactor)
+        throw new ServiceUnavailableError(TWO_FACTOR_NOT_CONFIGURED);
       const now = new Date();
       return db.transaction(async (tx) => {
         const challenge = await twoFactorRepo.findChallengeForUpdate(

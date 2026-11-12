@@ -311,6 +311,12 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
       url: "/api/auth/oauth/42/login",
     });
     expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "42 login is not configured.",
+      },
+    });
   });
   test("a callback from another browser (wrong flowToken) is refused", async () => {
     const flow = await startLogin();
