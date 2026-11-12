@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { GameSnapshot, GameType } from "@cafe/game-contracts";
 import type { RawData, WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
@@ -42,6 +42,21 @@ export const closeCodes = {
   malformedMessage: 4400,
   unauthenticated: 4401,
 } as const;
+
+/**
+ * `/api/ws` 연결 요청의 IP별 제한입니다. 인증 전 소켓은 최대 5초 유지되고
+ * 인증마다 DB를 조회하므로, 연결을 반복해 자원을 소모하지 못하게 막습니다.
+ * 새로고침·재연결이 잦은 정상 사용은 넘지 않는 값입니다.
+ */
+export const wsRateLimit = {
+  rateLimit: {
+    max: 30,
+    timeWindow: "1 minute",
+    // Real connections always have an IP; the fake socket of injectWS in
+    // tests has none, which would crash the default key generator.
+    keyGenerator: (request: FastifyRequest) => request.ip ?? "unknown",
+  },
+};
 
 /** `/api/ws` 동작 설정입니다. 테스트에서 시간 값을 줄일 때 씁니다. */
 export type RealtimeConfig = {
@@ -214,6 +229,9 @@ const rejectMessages: Record<ErrorCode, string> = {
  * 구독자 전체에 다시 broadcast합니다. 처음 commit 뒤 snapshot 전송이 실패했을
  * 때 재전송으로 복구하기 위해서입니다. 이미 보낸 버전보다 새롭지 않으면
  * broadcast하지 않습니다(SDS 12번).
+ *
+ * 연결 요청(upgrade)은 IP마다 1분에 30번까지 받고({@link wsRateLimit}), 넘으면
+ * upgrade 없이 HTTP 429 `RATE_LIMITED`로 응답합니다.
  */
 export function registerRealtimeRoutes(
   app: FastifyInstance,
@@ -390,7 +408,7 @@ export function registerRealtimeRoutes(
   // does not end up in proxy or access logs.
   app.get(
     "/api/ws",
-    { websocket: true, schema: { hide: true } },
+    { websocket: true, schema: { hide: true }, config: wsRateLimit },
     (socket, request) => {
       let claims: AccessTokenClaims | undefined;
       // Session the socket is registered under, set before auth.ok.

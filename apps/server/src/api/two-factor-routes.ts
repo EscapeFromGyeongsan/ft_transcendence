@@ -33,6 +33,11 @@ const invalidCode = errorSchema(
 );
 const security = [{ bearerAuth: [] }];
 
+/**
+ * 2FA 상태 조회·설정·활성화·해제·로그인 확인 route를 등록합니다.
+ *
+ * @remarks 서비스 getter가 설정 없음으로 {@link ServiceUnavailableError}를 던지면 503이 됩니다(2FA 키가 없을 때 등).
+ */
 export function registerTwoFactorRoutes(
   app: FastifyInstance,
   getAuth: () => AuthService,
