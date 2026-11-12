@@ -246,8 +246,20 @@ export async function buildApp(
       .code(500)
       .send(errorBody("INTERNAL_ERROR", "Internal server error."));
   });
+  app.setNotFoundHandler((_request, reply) =>
+    reply.code(404).send(errorBody("NOT_FOUND", "Route not found.")),
+  );
   // JSON-only API: other bodies get 415 instead of failing validation as text.
   app.removeContentTypeParser("text/plain");
+  // The multipart parser is global; only routes that declare it accept it.
+  app.addHook("preValidation", async (request, reply) => {
+    const consumes = request.routeOptions.schema?.consumes;
+    if (request.isMultipart() && !consumes?.includes("multipart/form-data")) {
+      return reply
+        .code(415)
+        .send(errorBody("UNSUPPORTED_MEDIA_TYPE", "Use application/json."));
+    }
+  });
   await app.register(rateLimit, { global: false });
   await app.register(multipart, {
     limits: { fileSize: avatarMaxBytes, files: 1 },

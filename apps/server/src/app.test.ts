@@ -74,3 +74,42 @@ test("statement timeout (57014) maps to 503", async () => {
   expect(response.statusCode).toBe(503);
   expect(response.json().error.code).toBe("SERVICE_UNAVAILABLE");
 });
+
+test("unknown route returns 404 in the common error format", async () => {
+  app = await buildApp();
+  for (const [method, url] of [
+    ["GET", "/api/nope"],
+    ["PUT", "/api/users/me"],
+  ] as const) {
+    const response = await app.inject({ method, url });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: { code: "NOT_FOUND", message: "Route not found." },
+    });
+  }
+});
+
+test("GET /api/ws without upgrade returns 404 with no body", async () => {
+  app = await buildApp();
+  const response = await app.inject({ method: "GET", url: "/api/ws" });
+  expect(response.statusCode).toBe(404);
+  expect(response.body).toBe("");
+});
+
+test("multipart body on a JSON route returns 415", async () => {
+  app = await buildApp();
+  const boundary = "json-route-boundary";
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/register",
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    payload: `--${boundary}\r\nContent-Disposition: form-data; name="email"\r\n\r\na@b.io\r\n--${boundary}--\r\n`,
+  });
+  expect(response.statusCode).toBe(415);
+  expect(response.json()).toEqual({
+    error: {
+      code: "UNSUPPORTED_MEDIA_TYPE",
+      message: "Use application/json.",
+    },
+  });
+});

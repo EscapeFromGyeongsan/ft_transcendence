@@ -8,6 +8,7 @@ import {
 import {
   errorBody,
   errorSchema,
+  parseErrorResponses,
   rateLimitResponse,
   serverErrorResponses,
   unauthenticatedResponse,
@@ -126,6 +127,7 @@ export function registerAvatarRoutes(
         security: [{ bearerAuth: [] }],
         response: {
           204: { description: "삭제 성공. 아바타가 없어도 204", type: "null" },
+          ...parseErrorResponses,
           401: unauthenticatedResponse,
           ...serverErrorResponses,
         },
