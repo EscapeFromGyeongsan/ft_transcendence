@@ -63,6 +63,50 @@ function deferred<T>() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("OAuth 콜백과 브라우저 인증 경계", () => {
+  it.each(["login", "twoFactor", "oauth"])(
+    "익명 %s 대기 중 다른 탭의 새 로그인을 덮지 않는다",
+    async (method) => {
+      const firstWindow = installBrowserStorage();
+      const storage = createBrowserTokenStorage();
+      const response = deferred<Response>();
+      const client = createAuthApiClient({
+        storage,
+        fetchImpl: vi.fn<typeof fetch>().mockReturnValue(response.promise),
+      });
+      const pending = (
+        method === "login"
+          ? client.login({
+              email: "old@example.test",
+              password: "test-password",
+            })
+          : method === "twoFactor"
+            ? client.verifyTwoFactorLogin({
+                challengeToken: "old-challenge",
+                code: "123456",
+              })
+            : client.completeOAuth42Callback(callbackInput)
+      ).catch((error: unknown) => error);
+      vi.stubGlobal("window", {
+        localStorage: firstWindow.localStorage,
+        sessionStorage: createWebStorage(),
+      });
+      const otherStorage = createBrowserTokenStorage();
+      otherStorage.setTokens(priorTokens, true);
+      vi.stubGlobal("window", firstWindow);
+      response.resolve(jsonResponse(issuedTokens));
+
+      expect(await pending).toMatchObject({
+        status: 401,
+        code: "UNAUTHENTICATED",
+      });
+      expect(storage.getTokens()).toBeNull();
+      expect(firstWindow.localStorage.getItem(REFRESH_KEY)).toBe(
+        priorTokens.refreshToken,
+      );
+      expect(otherStorage.getTokens()).toEqual(priorTokens);
+    },
+  );
+
   it.each([true, false])(
     "로그인 유지=%s인 OAuth 로그인은 refresh만 보관하고 새로고침 후 갱신한다",
     async (remember) => {
