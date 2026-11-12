@@ -167,6 +167,8 @@ export function ProfileView({
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // 사용자·종목이 바뀌면 올려서, 그 전에 보낸 "더 보기" 응답을 버립니다.
+  const matchesGeneration = useRef(0);
 
   // Once either endpoint denies access, late successes must not re-display
   // earlier data. A fresh profile load is required before revealing records.
@@ -332,9 +334,14 @@ export function ProfileView({
   // 전적 첫 페이지 (사용자·종목 필터 변경 시 재조회).
   useEffect(() => {
     let active = true;
+    const generation = ++matchesGeneration.current;
     setMatches([]);
     setNextBefore(null);
-    void loadMatches(undefined, true, () => active);
+    void loadMatches(
+      undefined,
+      true,
+      () => active && generation === matchesGeneration.current,
+    );
     return () => {
       active = false;
     };
@@ -1174,9 +1181,10 @@ export function ProfileView({
                     <button
                       type="button"
                       className="cbc-btn-secondary cbc-btn-compact"
-                      onClick={() =>
-                        void loadMatches(nextBefore, false, () => true)
-                      }
+                      onClick={() => {
+                        const generation = matchesGeneration.current;
+                        void loadMatches(nextBefore, false, () => generation === matchesGeneration.current);
+                      }}
                     >
                       더 보기
                     </button>
