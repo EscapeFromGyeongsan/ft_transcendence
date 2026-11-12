@@ -3,6 +3,7 @@ import { authApi, isTokenPair, type AuthUser } from "./api/auth-client.ts";
 import {
   getAuthFieldErrors,
   getErrorMessage,
+  isTransientError,
   type AuthFieldErrors,
 } from "./api/errors.ts";
 
@@ -135,9 +136,14 @@ export function App() {
         setCurrentUser(user);
         setView("lobby");
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
-        authApi.storage.clearTokens();
+        // 429·5xx면 저장된 토큰이 아직 유효하므로 지우지 않고, 새로고침으로 다시 복원할 수 있게 둡니다.
+        if (isTransientError(error)) {
+          setErrorMessage(getErrorMessage(error));
+        } else {
+          authApi.storage.clearTokens();
+        }
         setCurrentUser(null);
         setView("login");
       })
@@ -280,6 +286,11 @@ export function App() {
       setAccountMenuOpen(false);
       setNoticeMessage("세션 토큰이 성공적으로 갱신되었습니다.");
     } catch (error) {
+      // 429·5xx는 세션이 그대로이므로 로그인 상태를 유지하고 오류만 보여 줍니다.
+      if (isTransientError(error)) {
+        setErrorMessage(getErrorMessage(error));
+        return;
+      }
       setCurrentUser(null);
       setAccountMenuOpen(false);
       setLogoutModalOpen(false);

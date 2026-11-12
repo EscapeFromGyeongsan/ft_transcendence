@@ -48,6 +48,19 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 서버가 잠시 요청을 처리하지 못한 오류(429·5xx)인지 확인합니다.
+ *
+ * @remarks
+ * 이때 서버는 refresh token을 회전하지 않았으므로 저장된 토큰은 아직 유효합니다.
+ * 토큰을 지우거나 로그아웃시키지 말고 오류만 보여 줍니다.
+ */
+export function isTransientError(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError && (error.status === 429 || error.status >= 500)
+  );
+}
+
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   EMAIL_TAKEN: "이미 등록된 이메일입니다.",
   NICKNAME_TAKEN: "이미 사용 중인 닉네임입니다.",
