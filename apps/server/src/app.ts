@@ -136,8 +136,8 @@ export async function buildApp(
     onError: (error) =>
       app.log.error({ err: error }, "Presence friend lookup failed."),
   });
-  // A session revoked for refresh-token reuse closes its WebSocket
-  // connections, like a logout (#51).
+  // A session revoked for refresh token reuse also closes its WebSocket
+  // connections, like logout does below.
   const auth =
     database && authConfig
       ? createAuthService(database.db, authConfig, twoFactor, (sessionId) =>
