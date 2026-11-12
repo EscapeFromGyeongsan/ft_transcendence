@@ -27,6 +27,13 @@ const profileSchema = {
   required: ["id", "nickname", "avatarUrl"],
 };
 
+// 탈퇴 화면이 본인 확인 입력란(비밀번호 또는 2FA 코드)을 고를 수 있게 비밀번호 유무를 함께 돌려줍니다.
+const meSchema = {
+  ...userSchema,
+  properties: { ...userSchema.properties, hasPassword: { type: "boolean" } },
+  required: [...userSchema.required, "hasPassword"],
+};
+
 const signedOut = () =>
   errorBody("UNAUTHENTICATED", "Authentication required.");
 
@@ -52,7 +59,7 @@ export function registerUserRoutes(
         summary: "내 계정 정보",
         security: [{ bearerAuth: [] }],
         response: {
-          200: { description: "조회 성공", ...userSchema },
+          200: { description: "조회 성공", ...meSchema },
           401: unauthenticatedResponse,
           ...serverErrorResponses,
         },

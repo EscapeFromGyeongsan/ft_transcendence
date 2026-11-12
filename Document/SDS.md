@@ -1303,7 +1303,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     S([requireAuth 통과]) --> Find[users 조회 userId]
-    Find -->|있음| R200[200 id, email, nickname, avatarUrl, createdAt]
+    Find -->|있음| R200[200 id, email, nickname, avatarUrl, createdAt, hasPassword]
     Find -->|"없음 (세션은 살아 있는데 계정 행 없음)"| R401[401 UNAUTHENTICATED]
 ```
 
