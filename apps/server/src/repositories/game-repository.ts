@@ -61,6 +61,26 @@ export function findPlayers(db: Executor, gameId: number) {
     .where(eq(gamePlayers.gameId, gameId));
 }
 
+/**
+ * 사용자가 참가한 끝나지 않은 경기 하나의 ID를 찾습니다. 없으면 `undefined`입니다.
+ *
+ * @remarks FR-MATCH-02에 따라 사용자당 진행 중 경기는 하나입니다.
+ */
+export async function findActiveGameIdForUser(db: Executor, userId: number) {
+  const [row] = await db
+    .select({ id: games.id })
+    .from(gamePlayers)
+    .innerJoin(games, eq(games.id, gamePlayers.gameId))
+    .where(
+      and(
+        eq(gamePlayers.userId, userId),
+        inArray(games.status, ["waiting", "playing", "paused"]),
+      ),
+    )
+    .limit(1);
+  return row?.id;
+}
+
 /** 경기의 착수 기록을 수 번호 오름차순으로 읽습니다. */
 export function findMoves(db: Executor, gameId: number) {
   return db

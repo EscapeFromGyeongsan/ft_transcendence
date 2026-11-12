@@ -23,6 +23,8 @@ function deleteFrom<K, V>(map: Map<K, Set<V>>, key: K, value: V) {
  */
 export function createConnectionRegistry() {
   const bySession = new Map<string, Set<WebSocket>>();
+  const byUser = new Map<number, Set<WebSocket>>();
+  const userOf = new Map<WebSocket, number>();
   const byMatch = new Map<number, Set<WebSocket>>();
   const matchesOf = new Map<WebSocket, Set<number>>();
   // FR-MATCH-02: per match and user, only the socket that subscribed last
@@ -42,9 +44,16 @@ export function createConnectionRegistry() {
   }
 
   return {
-    /** 인증에 성공한 연결을 세션에 등록합니다. */
-    add(sessionId: string, socket: WebSocket) {
+    /**
+     * 인증에 성공한 연결을 세션과 사용자에 등록합니다.
+     *
+     * @param userId - 연결의 사용자. `sendToUser()`가 이 사용자의 모든 연결을
+     *   찾을 때 씁니다.
+     */
+    add(sessionId: string, socket: WebSocket, userId: number) {
       addTo(bySession, sessionId, socket);
+      addTo(byUser, userId, socket);
+      userOf.set(socket, userId);
     },
 
     /**
@@ -55,6 +64,9 @@ export function createConnectionRegistry() {
      */
     remove(sessionId: string, socket: WebSocket) {
       deleteFrom(bySession, sessionId, socket);
+      const userId = userOf.get(socket);
+      if (userId !== undefined) deleteFrom(byUser, userId, socket);
+      userOf.delete(socket);
       const matchIds = [...(matchesOf.get(socket) ?? [])];
       for (const matchId of matchIds) unsubscribe(matchId, socket);
       return matchIds;
@@ -128,6 +140,12 @@ export function createConnectionRegistry() {
       const data = JSON.stringify(message);
       for (const socket of sockets) socket.send(data);
       return true;
+    },
+
+    /** 사용자의 인증된 연결 전체(여러 탭·기기)에 메시지를 보냅니다. */
+    sendToUser(userId: number, message: object) {
+      const data = JSON.stringify(message);
+      for (const socket of byUser.get(userId) ?? []) socket.send(data);
     },
 
     /**

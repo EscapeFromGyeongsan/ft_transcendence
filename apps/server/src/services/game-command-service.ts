@@ -443,6 +443,24 @@ export function createGameCommandService(
      */
     getMatch,
 
+    /** 이 게임 종류의 엔진이 등록되어 경기를 만들 수 있는지 확인합니다. */
+    isRegistered(gameType: string) {
+      return rulesByGameType[gameType as GameType] !== undefined;
+    },
+
+    /**
+     * 사용자의 끝나지 않은 경기(`waiting`/`playing`/`paused`) ID를 찾습니다.
+     *
+     * @returns 경기 ID, 없으면 `undefined`
+     *
+     * @remarks
+     * 매칭 신청 거절(FR-MATCH-02)과 재접속 시 진행 중 경기 안내(D)에 씁니다.
+     * 잠금 없이 읽으므로, 동시 신청 경합은 호출하는 쪽에서 막습니다.
+     */
+    findActiveMatchId(userId: number) {
+      return repo.findActiveGameIdForUser(db, userId);
+    },
+
     /**
      * 서버가 확정한 경기 상태를 공통 계약의 `GameSnapshot` 형태로 돌려줍니다.
      *

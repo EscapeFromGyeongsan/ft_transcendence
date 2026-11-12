@@ -750,4 +750,83 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       });
     });
   });
+
+  describe("matchmaking", () => {
+    test("two queued players get the same new match and can subscribe", async () => {
+      const players = [];
+      for (const n of [1, 2]) {
+        const { socket } = await authenticated(await loginToken(n));
+        players.push({ socket, next: inbox(socket) });
+      }
+      const matched = [];
+      for (const { socket, next } of players) {
+        sendJson(socket, {
+          type: "queue.join",
+          requestId: "q1",
+          payload: { gameType: "gomoku" },
+        });
+        expect(await next()).toEqual({
+          type: "queue.joined",
+          requestId: "q1",
+          payload: { gameType: "gomoku" },
+        });
+      }
+      for (const { next } of players) matched.push(await next());
+      expect(matched[0]).toMatchObject({
+        type: "queue.matched",
+        payload: { gameType: "gomoku" },
+      });
+      expect(matched[1]).toEqual(matched[0]);
+      const { matchId } = (matched[0] as { payload: { matchId: number } })
+        .payload;
+
+      const [p1] = players;
+      sendJson(p1.socket, { type: "match.subscribe", payload: { matchId } });
+      const snapshot = (await p1.next()) as {
+        payload: { players: { black: number; white: number } };
+      };
+      expect(
+        [snapshot.payload.players.black, snapshot.payload.players.white].sort(),
+      ).toEqual([1, 2]);
+
+      // Playing a match counts as active (DB check).
+      sendJson(p1.socket, {
+        type: "queue.join",
+        payload: { gameType: "gomoku" },
+      });
+      expect(await p1.next()).toMatchObject({
+        type: "error",
+        payload: { code: "ALREADY_ACTIVE" },
+      });
+      for (const { socket } of players) socket.terminate();
+    });
+
+    test("invalid gameType is refused and leave is acknowledged", async () => {
+      const { socket } = await authenticated(await loginToken());
+      const next = inbox(socket);
+      sendJson(socket, { type: "queue.join", payload: { gameType: "chess" } });
+      expect(await next()).toMatchObject({
+        type: "error",
+        payload: { code: "INVALID_MESSAGE" },
+      });
+      // Known to the contract but no engine is registered.
+      sendJson(socket, {
+        type: "queue.join",
+        payload: { gameType: "othello" },
+      });
+      expect(await next()).toMatchObject({
+        type: "error",
+        payload: { code: "INVALID_MESSAGE" },
+      });
+      sendJson(socket, { type: "queue.join", payload: { gameType: "gomoku" } });
+      await next();
+      sendJson(socket, { type: "queue.leave", requestId: "l1", payload: {} });
+      expect(await next()).toEqual({
+        type: "queue.left",
+        requestId: "l1",
+        payload: {},
+      });
+      socket.terminate();
+    });
+  });
 });

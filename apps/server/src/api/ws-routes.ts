@@ -4,6 +4,7 @@ import type { RawData, WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
 import type { AuthService } from "../services/auth-service.ts";
 import type { ConnectionRegistry } from "../services/connection-registry.ts";
+import { createMatchmaking } from "../services/matchmaking.ts";
 import type {
   ErrorCode,
   GameAction,
@@ -139,6 +140,10 @@ function isMatchId(value: unknown): value is number {
 const gameTypes: readonly unknown[] = ["gomoku", "othello"];
 // game_commands.expected_version is an int4 column.
 const MAX_EXPECTED_VERSION = 2_147_483_647;
+
+function isGameType(value: unknown): value is GameType {
+  return gameTypes.includes(value);
+}
 // game_commands.command_id is a uuid column.
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -177,7 +182,7 @@ export function parseCommand(
   const action = parseAction(payload.action);
   if (
     !isMatchId(matchId) ||
-    !gameTypes.includes(gameType) ||
+    !isGameType(gameType) ||
     typeof commandId !== "string" ||
     !uuidPattern.test(commandId) ||
     !Number.isSafeInteger(expectedVersion) ||
@@ -240,6 +245,9 @@ const rejectMessages: Record<ErrorCode, string> = {
  * 때 재전송으로 복구하기 위해서입니다. 이미 보낸 버전보다 새롭지 않으면
  * broadcast하지 않습니다(SDS 12번).
  *
+ * `queue.join`/`queue.leave`는 자동 매칭 대기열({@link createMatchmaking})로
+ * 넘기고, 연결이 닫히면 그 연결의 대기 항목을 뺍니다.
+ *
  * 연결 요청(upgrade)은 IP마다 1분에 30번까지 받고({@link wsRateLimit}), 넘으면
  * upgrade 없이 HTTP 429 `RATE_LIMITED`로 응답합니다.
  */
@@ -261,6 +269,57 @@ export function registerRealtimeRoutes(
     for (const matchId of matchIds) {
       if (!connections.hasSubscribers(matchId)) matchGameTypes.delete(matchId);
     }
+  }
+
+  const matchmaking = createMatchmaking({
+    getGames,
+    send: (socket, type, payload) => send(socket, type, payload),
+    notifyUser: (userId, type, payload) =>
+      connections.sendToUser(userId, { type, payload }),
+    onError: (error) => app.log.error({ err: error }, "Matchmaking failed."),
+  });
+
+  async function joinQueue(
+    socket: WebSocket,
+    userId: number,
+    { requestId, payload }: Envelope,
+  ) {
+    const { gameType } = payload;
+    if (!isGameType(gameType) || !getGames().isRegistered(gameType)) {
+      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid gameType.");
+      return;
+    }
+    const result = await matchmaking.join(userId, socket, gameType);
+    if (result === "joined") {
+      send(socket, "queue.joined", { gameType }, requestId);
+    } else if (result === "cancelled") {
+      // Another tab left while this join was checking the DB.
+      send(socket, "queue.left", {}, requestId);
+    } else if (result === "ALREADY_ACTIVE") {
+      sendError(
+        socket,
+        requestId,
+        "ALREADY_ACTIVE",
+        "Already queued or playing a match.",
+      );
+    }
+  }
+
+  function leaveQueue(
+    socket: WebSocket,
+    userId: number,
+    { requestId }: Envelope,
+  ) {
+    if (matchmaking.leave(userId) === "ALREADY_MATCHED") {
+      sendError(
+        socket,
+        requestId,
+        "ALREADY_MATCHED",
+        "A match is being created for you.",
+      );
+      return;
+    }
+    send(socket, "queue.left", {}, requestId);
   }
 
   // Only participants may subscribe. The socket joins the match before the
@@ -438,6 +497,7 @@ export function registerRealtimeRoutes(
 
       socket.on("close", () => {
         clearTimeout(authTimer);
+        matchmaking.removeSocket(socket);
         if (registeredSession) {
           dropUnwatched(connections.remove(registeredSession, socket));
         }
@@ -494,7 +554,7 @@ export function registerRealtimeRoutes(
               // committed while the session was being checked found nothing
               // to close, so check the session once more.
               registeredSession = result.sessionId;
-              connections.add(registeredSession, socket);
+              connections.add(registeredSession, socket, result.userId);
               if (!(await getAuth().authenticate(token))) result = null;
             }
           } catch (error) {
@@ -533,6 +593,12 @@ export function registerRealtimeRoutes(
               return;
             case "game.command":
               await command(socket, claims.userId, message);
+              return;
+            case "queue.join":
+              await joinQueue(socket, claims.userId, message);
+              return;
+            case "queue.leave":
+              leaveQueue(socket, claims.userId, message);
               return;
             default:
               sendError(
