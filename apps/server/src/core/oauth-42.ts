@@ -19,7 +19,7 @@ export type OAuthProfile = {
   login: string;
 };
 
-// The provider could not be reached or answered unexpectedly (maps to 502).
+/** 42 API에 연결할 수 없거나 예상하지 못한 응답을 받은 경우입니다. 라우트에서 502로 바뀝니다. */
 export class OAuthProviderError extends Error {}
 
 // A 2xx body that is not a JSON object is a provider fault, not ours.
@@ -36,6 +36,12 @@ async function readJsonObject(response: Response) {
   return body as Record<string, unknown>;
 }
 
+/**
+ * 42 Intra OAuth 2.0 authorization code 흐름의 클라이언트를 만듭니다.
+ *
+ * @remarks
+ * state 생성·검증은 하지 않습니다. state는 `OAuthService`가 발급하고 확인합니다.
+ */
 export function create42Client(config: OAuth42Config) {
   const request = config.fetch ?? fetch;
 
@@ -59,7 +65,14 @@ export function create42Client(config: OAuth42Config) {
       return `${AUTHORIZE_URL}?${params}`;
     },
 
-    // Returns null when 42 rejects the code (invalid, expired or reused).
+    /**
+     * authorization code를 42 access token으로 바꾸고 사용자 프로필을 읽습니다.
+     *
+     * @returns 프로필. 42가 code를 거절하면(잘못됨·만료·재사용) `null`
+     * @throws OAuthProviderError 42에 연결할 수 없거나 응답 형식이 예상과 다른 경우
+     *
+     * @remarks 42 access token은 프로필 조회에만 쓰고 저장하지 않습니다.
+     */
     async exchange(code: string): Promise<OAuthProfile | null> {
       const tokenResponse = await call(TOKEN_URL, {
         method: "POST",

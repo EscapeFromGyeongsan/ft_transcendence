@@ -1,0 +1,8 @@
+{
+  "status": "follow_up_required",
+  "functionalChecks": 14,
+  "testsPassed": 162,
+  "heartbeatDurationMs": 30002,
+  "heartbeatWithinTarget": false,
+  "heartbeatIssue": "https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/50#issuecomment-6552329811"
+}

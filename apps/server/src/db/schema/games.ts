@@ -13,8 +13,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./users.ts";
 
-// Values follow @cafe/game-contracts (GameType, GameStatus, TwoPlayerResult).
-// Plain text + CHECK instead of pg enums so adding a value is a simple migration.
+/**
+ * 경기 한 판의 서버 확정 상태입니다.
+ *
+ * @remarks
+ * 값은 `@cafe/game-contracts`(GameType, GameStatus, TwoPlayerResult)를 따릅니다.
+ * `state_version`은 착수·기권·이탈 종료·재시작 무효 처리에서 1씩 오르고, 일시정지·복귀에서는 유지됩니다.
+ * 값을 추가할 때 migration이 단순하도록 pg enum 대신 text + CHECK를 씁니다.
+ */
 export const games = pgTable(
   "games",
   {
@@ -71,6 +77,7 @@ export const games = pgTable(
   ],
 );
 
+/** 경기 참가자와 좌석(`black`/`white`)입니다. `result`는 경기가 끝날 때 채웁니다. */
 export const gamePlayers = pgTable(
   "game_players",
   {
@@ -102,7 +109,12 @@ export const gamePlayers = pgTable(
   ],
 );
 
-// Authoritative move history. Board state is rebuilt by replaying these rows.
+/**
+ * 서버가 확정한 착수 기록입니다. 판 상태는 이 행들을 다시 적용해 만듭니다.
+ *
+ * @remarks
+ * 좌표는 0 기준 `row_idx`·`col_idx`(0..14)입니다. 같은 경기에서 수 번호와 칸은 각각 한 번만 나옵니다.
+ */
 export const moves = pgTable(
   "moves",
   {
@@ -137,8 +149,12 @@ export const moves = pgTable(
   ],
 );
 
-// One row per processed command. UNIQUE(game_id, command_id) blocks a resent
-// command from being applied twice; the stored outcome is replayed instead.
+/**
+ * 처리한 명령마다 한 행입니다.
+ *
+ * @remarks
+ * UNIQUE(game_id, command_id)로 재전송된 명령이 두 번 적용되지 않습니다. 대신 저장된 결과를 다시 돌려줍니다.
+ */
 export const gameCommands = pgTable(
   "game_commands",
   {

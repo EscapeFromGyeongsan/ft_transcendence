@@ -12,8 +12,12 @@ import {
 } from "drizzle-orm/pg-core";
 import { sessions, users } from "./users.ts";
 
-// External identity linked to a platform account. One account per provider
-// user, and at most one link per provider for each platform account.
+/**
+ * 플랫폼 계정에 연결된 외부 계정입니다.
+ *
+ * @remarks
+ * UNIQUE 제약으로 제공자 사용자 하나는 계정 하나에만, 계정 하나는 제공자마다 최대 하나의 연결만 가집니다.
+ */
 export const oauthAccounts = pgTable(
   "oauth_accounts",
   {
@@ -41,9 +45,13 @@ export const oauthAccounts = pgTable(
   ],
 );
 
-// One-time OAuth `state`. Blocks forged callbacks and replayed responses.
-// browser_hash binds the flow to the browser that started it (login CSRF);
-// mode "link" also records the user and session, rechecked at callback.
+/**
+ * 한 번만 쓰는 OAuth `state`입니다. 위조된 callback과 재전송된 응답을 막습니다.
+ *
+ * @remarks
+ * `browser_hash`는 흐름을 시작한 브라우저에 묶습니다(login CSRF 방지).
+ * `mode`가 `link`이면 사용자와 세션도 기록하고 callback에서 다시 확인합니다. CHECK 제약이 mode별 필수 열을 강제합니다.
+ */
 export const oauthStates = pgTable(
   "oauth_states",
   {
@@ -71,8 +79,12 @@ export const oauthStates = pgTable(
   ],
 );
 
-// TOTP secret (AES-256-GCM encrypted). enabled_at NULL means setup started
-// but not confirmed. last_used_step blocks reusing a code.
+/**
+ * 사용자의 TOTP secret입니다(AES-256-GCM 암호문).
+ *
+ * @remarks
+ * `enabled_at`이 NULL이면 설정을 시작했지만 확인하지 않은 상태입니다. `last_used_step`으로 같은 코드의 재사용을 막습니다.
+ */
 export const twoFactorSecrets = pgTable("two_factor_secrets", {
   userId: bigint("user_id", { mode: "number" })
     .primaryKey()
@@ -85,6 +97,7 @@ export const twoFactorSecrets = pgTable("two_factor_secrets", {
     .notNull(),
 });
 
+/** 2FA 복구 코드입니다. 해시만 저장하고, 사용하면 `used_at`을 채워 다시 쓸 수 없게 합니다. */
 export const twoFactorRecoveryCodes = pgTable(
   "two_factor_recovery_codes",
   {
@@ -100,7 +113,7 @@ export const twoFactorRecoveryCodes = pgTable(
   (table) => [index("two_factor_recovery_codes_user_idx").on(table.userId)],
 );
 
-// Pending second step of a login (password or OAuth) for a 2FA account.
+/** 2FA 계정의 로그인(비밀번호·OAuth) 두 번째 단계를 기다리는 challenge입니다. 토큰 해시만 저장합니다. */
 export const twoFactorChallenges = pgTable(
   "two_factor_challenges",
   {

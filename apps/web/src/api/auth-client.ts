@@ -64,7 +64,7 @@ export interface VerifyTwoFactorInput {
 }
 
 export interface StoredTokens {
-  accessToken: string;
+  accessToken: string | null;
   refreshToken: string;
 }
 
@@ -72,9 +72,15 @@ export interface TokenStorage {
   getTokens(): StoredTokens | null;
   setTokens(tokens: StoredTokens, persistent?: boolean): void;
   clearTokens(): void;
+  /** 브라우저 로그인 변경·로그아웃을 구별하는 비밀이 아닌 표식이며 토큰 갱신 중에는 유지됩니다. */
+  getSessionId?(): string | null;
+  /** refresh 잠금 안에서 이전 저장 형식의 토큰을 이전합니다. */
+  prepareRefresh?(): void;
 }
 
-const STORAGE_KEY = "cyber_board_cafe.auth.tokens";
+const REFRESH_STORAGE_KEY = "cbc.auth.refreshToken";
+const LEGACY_STORAGE_KEY = "cyber_board_cafe.auth.tokens";
+const SESSION_STORAGE_KEY = "cbc.auth.sessionId";
 export const OAUTH_FLOW_TOKEN_KEY = "cyber_board_cafe.oauth42.flow_token";
 
 /**
@@ -95,7 +101,9 @@ export function saveOAuthFlowToken(flowToken: string): void {
 export function getOAuthFlowToken(): string | null {
   if (typeof globalThis.window === "undefined") return null;
   try {
-    return globalThis.window.sessionStorage?.getItem(OAUTH_FLOW_TOKEN_KEY) ?? null;
+    return (
+      globalThis.window.sessionStorage?.getItem(OAUTH_FLOW_TOKEN_KEY) ?? null
+    );
   } catch {
     return null;
   }
@@ -114,91 +122,198 @@ export function clearOAuthFlowToken(): void {
 }
 
 /**
- * 브라우저 `localStorage`/`sessionStorage` 및 메모리 폴백을 지원하는 기본 토큰 저장소입니다.
+ * access token은 메모리에만, refresh token은 로그인 유지 선택에 따라 브라우저 저장소에 보관합니다.
+ * 저장소 접근이 차단되면 현재 페이지의 메모리만 사용합니다.
  */
 export function createBrowserTokenStorage(): TokenStorage {
   let memoryTokens: StoredTokens | null = null;
   let usePersistent = true;
+  let initialized = false;
+  let sessionId: string | null = null;
+  let persistedSessionId: string | null = null;
+  let persisted = false;
 
-  function readFromWebStorage(
-    storage: Storage | undefined,
-  ): StoredTokens | null {
-    if (!storage) return null;
+  function browserStorage(name: "localStorage" | "sessionStorage") {
     try {
-      const raw = storage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as Partial<StoredTokens>;
-      if (
-        typeof parsed.accessToken === "string" &&
-        parsed.accessToken.length > 0 &&
-        typeof parsed.refreshToken === "string" &&
-        parsed.refreshToken.length > 0
-      ) {
-        return {
-          accessToken: parsed.accessToken,
-          refreshToken: parsed.refreshToken,
-        };
+      return typeof window === "undefined" ? undefined : window[name];
+    } catch {
+      return undefined;
+    }
+  }
+
+  function readRefreshToken(storage: Storage | undefined, migrate = true) {
+    let refreshToken: string | null = null;
+    let saved = false;
+    try {
+      refreshToken = storage?.getItem(REFRESH_STORAGE_KEY) || null;
+      saved = !!refreshToken;
+      const legacy = storage?.getItem(LEGACY_STORAGE_KEY);
+      // 공유 저장소의 이전 작업도 refresh와 같은 잠금 안에서 수행합니다.
+      if (migrate) storage?.removeItem(LEGACY_STORAGE_KEY);
+      if (!refreshToken && legacy) {
+        const parsed: unknown = JSON.parse(legacy);
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "refreshToken" in parsed &&
+          typeof parsed.refreshToken === "string" &&
+          parsed.refreshToken.length > 0
+        ) {
+          refreshToken = parsed.refreshToken;
+          if (migrate) storage?.setItem(REFRESH_STORAGE_KEY, refreshToken);
+          saved = !!storage;
+        }
       }
     } catch {
-      // Ignore storage access or parse errors
+      // 저장에 실패해도 읽은 refresh token은 현재 페이지에서 사용할 수 있습니다.
     }
-    return null;
+    return { refreshToken, saved };
+  }
+
+  function clearWebStorage(storage: Storage | undefined) {
+    try {
+      storage?.removeItem(REFRESH_STORAGE_KEY);
+      storage?.removeItem(LEGACY_STORAGE_KEY);
+      storage?.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      // 접근이 차단된 저장소는 변경할 수 없습니다.
+    }
+  }
+
+  function getTokens(): StoredTokens | null {
+    if (!initialized) {
+      initialized = true;
+      const migrate = !(typeof navigator !== "undefined" && navigator.locks);
+      const sessionToken = readRefreshToken(
+        browserStorage("sessionStorage"),
+        migrate,
+      );
+      const localToken = readRefreshToken(
+        browserStorage("localStorage"),
+        migrate,
+      );
+      const selectedToken = sessionToken.refreshToken
+        ? sessionToken
+        : localToken;
+      const { refreshToken } = selectedToken;
+      if (refreshToken) {
+        usePersistent = !sessionToken.refreshToken;
+        memoryTokens = { accessToken: null, refreshToken };
+        persisted = selectedToken.saved;
+        const selected = browserStorage(
+          usePersistent ? "localStorage" : "sessionStorage",
+        );
+        sessionId = crypto.randomUUID();
+        try {
+          persistedSessionId = selected?.getItem(SESSION_STORAGE_KEY) || null;
+        } catch {
+          if (persisted) memoryTokens = null;
+        }
+      }
+    }
+    if (memoryTokens && persisted) {
+      const selected = browserStorage(
+        usePersistent ? "localStorage" : "sessionStorage",
+      );
+      try {
+        const storedSessionId = selected?.getItem(SESSION_STORAGE_KEY) || null;
+        const { refreshToken } = readRefreshToken(selected, false);
+        if (
+          !refreshToken ||
+          (selected?.getItem(SESSION_STORAGE_KEY) || null) !==
+            storedSessionId ||
+          (storedSessionId !== persistedSessionId &&
+            !(
+              persistedSessionId === null &&
+              storedSessionId?.startsWith("restored:")
+            ))
+        ) {
+          memoryTokens = null;
+        } else {
+          persistedSessionId = storedSessionId;
+          memoryTokens = { ...memoryTokens, refreshToken };
+        }
+      } catch {
+        // 공유 토큰을 다시 읽을 수 없으면 오래된 일회용 토큰을 보내지 않습니다.
+        memoryTokens = null;
+      }
+    }
+    return memoryTokens;
   }
 
   return {
-    getTokens(): StoredTokens | null {
-      if (memoryTokens) return memoryTokens;
-      if (typeof window !== "undefined") {
-        const sessionTokens = readFromWebStorage(window.sessionStorage);
-        if (sessionTokens) {
-          usePersistent = false;
-          memoryTokens = sessionTokens;
-          return sessionTokens;
-        }
-        const localTokens = readFromWebStorage(window.localStorage);
-        if (localTokens) {
-          usePersistent = true;
-          memoryTokens = localTokens;
-          return localTokens;
-        }
-      }
-      return null;
+    getTokens,
+    getSessionId: () => (getTokens() ? sessionId : null),
+    prepareRefresh(): void {
+      if (!getTokens() || !persisted) return;
+      const selected = browserStorage(
+        usePersistent ? "localStorage" : "sessionStorage",
+      );
+      const latest = readRefreshToken(selected);
+      memoryTokens = latest.refreshToken
+        ? { ...memoryTokens!, refreshToken: latest.refreshToken }
+        : null;
+      persisted = latest.saved;
+      readRefreshToken(
+        browserStorage(usePersistent ? "sessionStorage" : "localStorage"),
+      );
     },
-
     setTokens(tokens: StoredTokens, persistent?: boolean): void {
+      const newSession = typeof persistent === "boolean" || !sessionId;
       if (typeof persistent === "boolean") {
         usePersistent = persistent;
       }
+      if (newSession) {
+        sessionId = crypto.randomUUID();
+        persistedSessionId = sessionId;
+      } else {
+        // 첫 복원 표식은 refresh 잠금 안에서 확정하며 대기 중인 복원 탭만 채택합니다.
+        persistedSessionId ??= `restored:${sessionId}`;
+      }
+      initialized = true;
       memoryTokens = {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       };
-      if (typeof window !== "undefined") {
-        try {
-          const serialized = JSON.stringify(memoryTokens);
-          if (usePersistent) {
-            window.localStorage?.setItem(STORAGE_KEY, serialized);
-            window.sessionStorage?.removeItem(STORAGE_KEY);
-          } else {
-            window.sessionStorage?.setItem(STORAGE_KEY, serialized);
-            window.localStorage?.removeItem(STORAGE_KEY);
-          }
-        } catch {
-          // Ignore quota or privacy mode errors
-        }
+      const local = browserStorage("localStorage");
+      const session = browserStorage("sessionStorage");
+      if (newSession) {
+        clearWebStorage(local);
+        clearWebStorage(session);
+      }
+      const selected = usePersistent ? local : session;
+      persisted = false;
+      try {
+        selected?.setItem(SESSION_STORAGE_KEY, persistedSessionId!);
+        selected?.setItem(REFRESH_STORAGE_KEY, tokens.refreshToken);
+        persisted = !!selected;
+      } catch {
+        clearWebStorage(selected);
+        // 할당량·개인정보 설정으로 저장할 수 없으면 메모리만 사용합니다.
       }
     },
 
     clearTokens(): void {
+      getTokens();
       memoryTokens = null;
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage?.removeItem(STORAGE_KEY);
-          window.sessionStorage?.removeItem(STORAGE_KEY);
-        } catch {
-          // Ignore storage errors
+      initialized = true;
+      const selected = browserStorage(
+        usePersistent ? "localStorage" : "sessionStorage",
+      );
+      try {
+        if (
+          persisted &&
+          (selected?.getItem(SESSION_STORAGE_KEY) || null) ===
+            persistedSessionId
+        ) {
+          clearWebStorage(selected);
         }
+      } catch {
+        // 다른 로그인이나 접근 불가 저장소는 지우지 않습니다.
       }
+      sessionId = null;
+      persistedSessionId = null;
+      persisted = false;
     },
   };
 }
@@ -257,6 +372,27 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     options.fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
   const storage = options.storage ?? createBrowserTokenStorage();
   let inFlightRefresh: Promise<TokenPair> | null = null;
+  let loginAttempt = 0;
+  let inFlightOAuth: {
+    code: string;
+    state: string;
+    flowToken: string;
+    result: Promise<OAuthCallbackResult>;
+  } | null = null;
+
+  function beginLoginAttempt() {
+    const attempt = ++loginAttempt;
+    const tokens = storage.getTokens();
+    const sessionId = storage.getSessionId?.();
+    return () => {
+      const sameSession = storage.getSessionId
+        ? storage.getSessionId() === sessionId
+        : storage.getTokens()?.refreshToken === tokens?.refreshToken;
+      if (attempt !== loginAttempt || !sameSession) {
+        throw new ApiError(401, "UNAUTHENTICATED", "Login session changed.");
+      }
+    };
+  }
 
   async function parseResponse<T>(response: Response): Promise<T> {
     if (response.status === 204) {
@@ -310,22 +446,49 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
    * @param explicitRefreshToken - 직접 지정할 refresh token (생략 시 저장소의 토큰 사용)
    * @returns 새로 발급된 `TokenPair`
    * @throws ApiError refresh token이 없거나 서버가 401 등으로 거절한 경우
+   * @throws TypeError 네트워크 요청에 실패한 경우
    */
   async function refresh(explicitRefreshToken?: string): Promise<TokenPair> {
-    if (inFlightRefresh && !explicitRefreshToken) {
+    if (inFlightRefresh) {
       return inFlightRefresh;
     }
 
     const currentTokens = storage.getTokens();
-    const tokenToUse = explicitRefreshToken ?? currentTokens?.refreshToken;
-    if (!tokenToUse) {
-      storage.clearTokens();
-      options.onAuthFailure?.();
-      throw new ApiError(401, "UNAUTHENTICATED", "Refresh token is missing.");
+    if (
+      explicitRefreshToken &&
+      currentTokens &&
+      explicitRefreshToken !== currentTokens.refreshToken
+    ) {
+      throw new ApiError(
+        401,
+        "UNAUTHENTICATED",
+        "Refresh token belongs to another session.",
+      );
     }
+    const sessionId = storage.getSessionId?.();
+    const isCurrentSession = () =>
+      storage.getSessionId
+        ? storage.getSessionId() === sessionId
+        : storage.getTokens()?.refreshToken === currentTokens?.refreshToken;
 
     const runRefresh = async (): Promise<TokenPair> => {
       try {
+        if (!isCurrentSession()) {
+          throw new ApiError(401, "UNAUTHENTICATED", "Login session changed.");
+        }
+        storage.prepareRefresh?.();
+        if (!isCurrentSession()) {
+          throw new ApiError(401, "UNAUTHENTICATED", "Login session changed.");
+        }
+        const latestTokens = storage.getTokens();
+        const tokenToUse = latestTokens?.refreshToken ?? explicitRefreshToken;
+        if (!tokenToUse) {
+          throw new ApiError(
+            401,
+            "UNAUTHENTICATED",
+            "Refresh token is missing.",
+          );
+        }
         const response = await fetchFn(`${baseUrl}/api/auth/refresh`, {
           method: "POST",
           headers: {
@@ -335,29 +498,39 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
           body: JSON.stringify({ refreshToken: tokenToUse }),
         });
         const nextTokens = await parseResponse<TokenPair>(response);
+        if (!isCurrentSession()) {
+          throw new ApiError(401, "UNAUTHENTICATED", "Login session changed.");
+        }
         storage.setTokens({
           accessToken: nextTokens.accessToken,
           refreshToken: nextTokens.refreshToken,
         });
         return nextTokens;
       } catch (error) {
-        storage.clearTokens();
-        options.onAuthFailure?.();
+        if (isCurrentSession() || !storage.getTokens()) {
+          storage.clearTokens();
+          options.onAuthFailure?.();
+        }
         throw error;
-      } finally {
-        inFlightRefresh = null;
       }
     };
 
-    if (!explicitRefreshToken) {
-      inFlightRefresh = runRefresh();
-      return inFlightRefresh;
+    // 같은 origin의 탭이 일회용 refresh token을 동시에 소비하지 않게 합니다.
+    // shortcut: Web Locks 미지원 환경은 같은 탭만 보호하며, 지원 환경 확대 시 탭 간 조정이 필요합니다.
+    const result =
+      typeof navigator !== "undefined" && navigator.locks
+        ? navigator.locks.request("cbc.auth.refresh", runRefresh)
+        : runRefresh();
+    inFlightRefresh = result;
+    try {
+      return await result;
+    } finally {
+      if (inFlightRefresh === result) inFlightRefresh = null;
     }
-    return runRefresh();
   }
 
   /**
-   * 공통 API 요청을 전송하고, 인증 요청에서 401이 반환되면 `refresh()` 후 정확히 1회 재시도합니다.
+   * 새로고침 후에는 refresh로 access token을 복원하고, 인증 요청의 401은 한 번만 재시도합니다.
    */
   async function request<T>(
     path: string,
@@ -366,6 +539,16 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
   ): Promise<T> {
     const method = reqOptions.method ?? "GET";
     const requiresAuth = reqOptions.requiresAuth ?? true;
+    const sessionId = requiresAuth ? storage.getSessionId?.() : undefined;
+    const assertCurrentSession = () => {
+      if (
+        requiresAuth &&
+        storage.getSessionId &&
+        storage.getSessionId() !== sessionId
+      ) {
+        throw new ApiError(401, "UNAUTHENTICATED", "Login session changed.");
+      }
+    };
     const headers: Record<string, string> = {
       Accept: "application/json",
       ...reqOptions.headers,
@@ -378,9 +561,17 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
       headers["Content-Type"] = "application/json";
     }
 
+    let accessToken: string | null = null;
     if (requiresAuth) {
-      const tokens = storage.getTokens();
+      let tokens = storage.getTokens();
+      if (!hasRetried && !tokens?.accessToken && tokens?.refreshToken) {
+        await refresh();
+        hasRetried = true;
+        tokens = storage.getTokens();
+      }
+      assertCurrentSession();
       if (tokens?.accessToken) {
+        accessToken = tokens.accessToken;
         headers.Authorization = `Bearer ${tokens.accessToken}`;
       }
     }
@@ -395,10 +586,18 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
           : undefined,
     });
 
+    assertCurrentSession();
+
     if (response.status === 401 && requiresAuth && !hasRetried) {
       const currentTokens = storage.getTokens();
       if (currentTokens?.refreshToken) {
-        await refresh();
+        if (
+          !currentTokens.accessToken ||
+          currentTokens.accessToken === accessToken
+        ) {
+          await refresh();
+        }
+        assertCurrentSession();
         return request<T>(path, reqOptions, true);
       }
     }
@@ -408,7 +607,9 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
       options.onAuthFailure?.();
     }
 
-    return parseResponse<T>(response);
+    const payload = await parseResponse<T>(response);
+    assertCurrentSession();
+    return payload;
   }
 
   /**
@@ -426,18 +627,20 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
    * 이메일과 비밀번호로 로그인하고 세션을 생성합니다 (`POST /api/auth/login`).
    *
    * @param input - 이메일과 비밀번호
-   * @param remember - `true`면 `localStorage`, `false`면 `sessionStorage`에 토큰 보관
+   * @param remember - `true`면 `localStorage`, `false`면 `sessionStorage`에 refresh token만 보관
    * @returns 2FA 미사용 계정은 `TokenPair`, 2FA 활성 계정은 `TwoFactorChallenge`
    */
   async function login(
     input: LoginInput,
     remember = true,
   ): Promise<LoginResult> {
+    const assertCurrentLogin = beginLoginAttempt();
     const result = await request<LoginResult>("/api/auth/login", {
       method: "POST",
       body: input,
       requiresAuth: false,
     });
+    assertCurrentLogin();
 
     if (isTokenPair(result)) {
       storage.setTokens(
@@ -459,11 +662,13 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
     input: VerifyTwoFactorInput,
     remember = true,
   ): Promise<TokenPair> {
+    const assertCurrentLogin = beginLoginAttempt();
     const tokens = await request<TokenPair>("/api/auth/2fa/verify", {
       method: "POST",
       body: input,
       requiresAuth: false,
     });
+    assertCurrentLogin();
     storage.setTokens(
       {
         accessToken: tokens.accessToken,
@@ -482,6 +687,8 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
    * `/api/auth/refresh` 후 1회 재시도하여 서버 세션을 정상 폐기합니다.
    */
   async function logout(): Promise<void> {
+    loginAttempt++;
+    const sessionId = storage.getSessionId?.();
     try {
       const tokens = storage.getTokens();
       if (tokens?.accessToken || tokens?.refreshToken) {
@@ -491,7 +698,13 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
         });
       }
     } finally {
-      storage.clearTokens();
+      if (
+        !storage.getSessionId ||
+        storage.getSessionId() === sessionId ||
+        !storage.getTokens()
+      ) {
+        storage.clearTokens();
+      }
     }
   }
 
@@ -510,6 +723,7 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
    * 반환된 `flowToken`은 브라우저 `sessionStorage`에 자동 보관됩니다.
    */
   async function startOAuth42Login(): Promise<OAuthAuthorizeResponse> {
+    const assertCurrentLogin = beginLoginAttempt();
     const res = await request<OAuthAuthorizeResponse>(
       "/api/auth/oauth/42/login",
       {
@@ -517,6 +731,7 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
         requiresAuth: false,
       },
     );
+    assertCurrentLogin();
     saveOAuthFlowToken(res.flowToken);
     return res;
   }
@@ -526,6 +741,7 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
    * 반환된 `flowToken`은 브라우저 `sessionStorage`에 자동 보관됩니다.
    */
   async function startOAuth42Link(): Promise<OAuthAuthorizeResponse> {
+    const assertCurrentLogin = beginLoginAttempt();
     const res = await request<OAuthAuthorizeResponse>(
       "/api/auth/oauth/42/link",
       {
@@ -533,12 +749,16 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
         requiresAuth: true,
       },
     );
+    assertCurrentLogin();
     saveOAuthFlowToken(res.flowToken);
     return res;
   }
 
   /**
    * 42 OAuth 리다이렉트 콜백(`code`, `state`, `flowToken`)을 서버로 전달하여 로그인·2FA 챌린지·계정 연결을 완료합니다 (`POST /api/auth/oauth/42/callback`).
+   * @throws ApiError flowToken이 없거나 서버가 거절하거나 대기 중 로그인 상태가 바뀐 경우
+   * @throws TypeError 네트워크 요청에 실패한 경우
+   * @remarks 동일한 콜백의 동시 호출은 첫 호출의 로그인 유지 선택으로 일회용 state를 한 번만 전송합니다.
    */
   async function completeOAuth42Callback(
     input: { code: string; state: string; flowToken?: string | null },
@@ -553,32 +773,55 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
       );
     }
 
-    try {
-      const result = await request<OAuthCallbackResult>(
-        "/api/auth/oauth/42/callback",
-        {
-          method: "POST",
-          body: {
-            code: input.code,
-            state: input.state,
-            flowToken: resolvedFlowToken,
-          },
-          requiresAuth: false,
-        },
-      );
-
-      if (isTokenPair(result)) {
-        storage.setTokens(
+    if (
+      inFlightOAuth?.code === input.code &&
+      inFlightOAuth.state === input.state &&
+      inFlightOAuth.flowToken === resolvedFlowToken
+    ) {
+      return inFlightOAuth.result;
+    }
+    const assertCurrentLogin = beginLoginAttempt();
+    const complete = async () => {
+      try {
+        const result = await request<OAuthCallbackResult>(
+          "/api/auth/oauth/42/callback",
           {
-            accessToken: result.accessToken,
-            refreshToken: result.refreshToken,
+            method: "POST",
+            body: {
+              code: input.code,
+              state: input.state,
+              flowToken: resolvedFlowToken,
+            },
+            requiresAuth: false,
           },
-          remember,
         );
+
+        assertCurrentLogin();
+        if (isTokenPair(result)) {
+          storage.setTokens(
+            {
+              accessToken: result.accessToken,
+              refreshToken: result.refreshToken,
+            },
+            remember,
+          );
+        }
+        return result;
+      } finally {
+        if (getOAuthFlowToken() === resolvedFlowToken) clearOAuthFlowToken();
       }
-      return result;
+    };
+    const result = complete();
+    inFlightOAuth = {
+      code: input.code,
+      state: input.state,
+      flowToken: resolvedFlowToken,
+      result,
+    };
+    try {
+      return await result;
     } finally {
-      clearOAuthFlowToken();
+      if (inFlightOAuth?.result === result) inFlightOAuth = null;
     }
   }
 
