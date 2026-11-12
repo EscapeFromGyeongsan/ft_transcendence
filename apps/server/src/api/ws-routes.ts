@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import type { WebSocket } from "ws";
+import type { GameSnapshot } from "@cafe/game-contracts";
+import type { RawData, WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
 import type { AuthService } from "../services/auth-service.ts";
 import type { ConnectionRegistry } from "../services/connection-registry.ts";
+import type { GameCommandService } from "../services/game-command-service.ts";
 
 /**
  * WebSocket으로 주고받는 모든 메시지의 공통 형식(IF-03, SDS 2.5의 9번)입니다.
@@ -104,13 +106,29 @@ function send(
   socket.send(JSON.stringify({ type, requestId, payload }));
 }
 
+function sendError(
+  socket: WebSocket,
+  requestId: string | undefined,
+  code: string,
+  message: string,
+  details: object = {},
+) {
+  send(socket, "error", { code, message, ...details }, requestId);
+}
+
+// Same bound as the REST API: BIGINT ids travel as safe JSON integers.
+function isMatchId(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
 /**
  * WebSocket endpoint `/api/ws`를 등록합니다.
  *
  * @param getAuth - 연결 인증에 쓰는 인증 서비스. DB가 없으면 예외를 던지며,
  *   이때 연결은 1011로 닫힙니다.
- * @param connections - 인증된 연결을 세션별로 보관하는 목록. 로그아웃 시 연결을
- *   닫을 때 같은 인스턴스를 씁니다.
+ * @param getGames - 경기 조회·snapshot에 쓰는 경기 서비스(B)
+ * @param connections - 인증된 연결을 세션별·경기별로 보관하는 목록. 로그아웃 시
+ *   연결을 닫을 때 같은 인스턴스를 씁니다.
  *
  * @remarks
  * 보안: access token은 URL이 아니라 연결 후 첫 `auth` 메시지로만 받아 로그에
@@ -121,16 +139,87 @@ function send(
  * 클라이언트는 `auth.ok`를 받기 전에 다른 메시지를 보내면 안 됩니다.
  * 인증 처리 중 들어온 메시지는 4401로 닫습니다.
  *
+ * `match.subscribe`는 그 경기의 참가자만 할 수 있습니다. 구독 목록에 먼저
+ * 등록한 뒤 snapshot을 읽으므로, 그 사이에 commit된 갱신도 놓치지 않습니다.
+ * 클라이언트는 snapshot의 `stateVersion` 이하인 갱신을 버립니다.
+ *
  * 연결 요청(upgrade)은 IP마다 1분에 30번까지 받고({@link wsRateLimit}), 넘으면
  * upgrade 없이 HTTP 429 `RATE_LIMITED`로 응답합니다.
  */
 export function registerRealtimeRoutes(
   app: FastifyInstance,
   getAuth: () => AuthService,
+  getGames: () => GameCommandService,
   connections: ConnectionRegistry,
   config: RealtimeConfig = {},
 ) {
   const authTimeoutMs = config.authTimeoutMs ?? 5000;
+
+  // Only participants may subscribe. The socket joins the match before the
+  // snapshot is read, so an update committed in between is still delivered;
+  // clients drop updates whose stateVersion is not newer than their snapshot.
+  async function subscribe(
+    socket: WebSocket,
+    userId: number,
+    { requestId, payload }: Envelope,
+  ) {
+    const { matchId } = payload;
+    if (!isMatchId(matchId)) {
+      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid matchId.");
+      return;
+    }
+    const games = getGames();
+    const match = await games.getMatch(matchId);
+    if (!match) {
+      sendError(socket, requestId, "NOT_FOUND", "Match not found.", {
+        matchId,
+      });
+      return;
+    }
+    if (!match.players.some((player) => player.userId === userId)) {
+      sendError(
+        socket,
+        requestId,
+        "NOT_PARTICIPANT",
+        "Only players of this match can subscribe.",
+        { matchId },
+      );
+      return;
+    }
+    // Closed while the match was read: the close handler already ran.
+    if (socket.readyState !== socket.OPEN) return;
+    const wasSubscribed = connections.isSubscribed(matchId, socket);
+    connections.subscribe(matchId, socket);
+    // On failure undo only this request, not an earlier subscription.
+    const undo = () => {
+      if (!wasSubscribed) connections.unsubscribe(matchId, socket);
+    };
+    let snapshot: GameSnapshot | undefined;
+    try {
+      snapshot = await games.getSnapshot(matchId);
+    } catch (error) {
+      undo();
+      throw error;
+    }
+    if (!snapshot) {
+      undo();
+      sendError(socket, requestId, "NOT_FOUND", "Match not found.", {
+        matchId,
+      });
+      return;
+    }
+    send(socket, "match.snapshot", snapshot, requestId);
+  }
+
+  function unsubscribe(socket: WebSocket, { requestId, payload }: Envelope) {
+    const { matchId } = payload;
+    if (!isMatchId(matchId)) {
+      sendError(socket, requestId, "INVALID_MESSAGE", "Invalid matchId.");
+      return;
+    }
+    connections.unsubscribe(matchId, socket);
+    send(socket, "match.unsubscribed", { matchId }, requestId);
+  }
 
   // The access token arrives in the first message, never in the URL, so it
   // does not end up in proxy or access logs.
@@ -141,7 +230,6 @@ export function registerRealtimeRoutes(
       let claims: AccessTokenClaims | undefined;
       // Session the socket is registered under, set before auth.ok.
       let registeredSession: string | undefined;
-      let authenticating = false;
       const authTimer = setTimeout(
         () =>
           socket.close(closeCodes.unauthenticated, "Authentication timed out."),
@@ -155,7 +243,26 @@ export function registerRealtimeRoutes(
         }
       });
 
-      socket.on("message", async (data, isBinary) => {
+      // Messages of one socket are handled one at a time in arrival order,
+      // so e.g. a match.unsubscribe never overtakes an earlier subscribe.
+      let pending = Promise.resolve();
+      let firstMessage = true;
+      socket.on("message", (data, isBinary) => {
+        // Only the auth message may come before auth.ok; anything else sent
+        // while it is being checked is refused right away, not queued.
+        if (!claims && !firstMessage) {
+          socket.close(closeCodes.unauthenticated, "Authenticate first.");
+          return;
+        }
+        firstMessage = false;
+        pending = pending
+          .then(() => handleMessage(data, isBinary))
+          .catch((error) =>
+            request.log.error({ err: error }, "WebSocket message failed."),
+          );
+      });
+
+      async function handleMessage(data: RawData, isBinary: boolean) {
         const message = isBinary ? null : parseEnvelope(data.toString());
         if (!message) {
           socket.close(closeCodes.malformedMessage, "Malformed message.");
@@ -164,16 +271,10 @@ export function registerRealtimeRoutes(
 
         if (!claims) {
           const token = message.payload.accessToken;
-          // Clients wait for auth.ok before sending anything else.
-          if (
-            authenticating ||
-            message.type !== "auth" ||
-            typeof token !== "string"
-          ) {
+          if (message.type !== "auth" || typeof token !== "string") {
             socket.close(closeCodes.unauthenticated, "Authenticate first.");
             return;
           }
-          authenticating = true;
           let result: AccessTokenClaims | null;
           try {
             result = await getAuth().authenticate(token);
@@ -193,7 +294,6 @@ export function registerRealtimeRoutes(
             socket.close(closeCodes.internalError, "Service unavailable.");
             return;
           }
-          authenticating = false;
           if (!result) {
             socket.close(
               closeCodes.unauthenticated,
@@ -209,22 +309,35 @@ export function registerRealtimeRoutes(
           return;
         }
 
-        switch (message.type) {
-          case "ping":
-            send(socket, "pong", {}, message.requestId);
-            return;
-          default:
-            send(
-              socket,
-              "error",
-              {
-                code: "UNSUPPORTED_MESSAGE",
-                message: `Unsupported message type: ${message.type.slice(0, 64)}`,
-              },
-              message.requestId,
-            );
+        try {
+          switch (message.type) {
+            case "ping":
+              send(socket, "pong", {}, message.requestId);
+              return;
+            case "match.subscribe":
+              await subscribe(socket, claims.userId, message);
+              return;
+            case "match.unsubscribe":
+              unsubscribe(socket, message);
+              return;
+            default:
+              sendError(
+                socket,
+                message.requestId,
+                "UNSUPPORTED_MESSAGE",
+                `Unsupported message type: ${message.type.slice(0, 64)}`,
+              );
+          }
+        } catch (error) {
+          request.log.error({ err: error }, "WebSocket message failed.");
+          sendError(
+            socket,
+            message.requestId,
+            "INTERNAL_ERROR",
+            "Internal server error.",
+          );
         }
-      });
+      }
     },
   );
 }
