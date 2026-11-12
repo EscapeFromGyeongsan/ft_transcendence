@@ -250,6 +250,61 @@ describe("authApi client & 401 refresh retry", () => {
     expect(onAuthFailure).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    [429, "RATE_LIMITED"],
+    [503, "SERVICE_UNAVAILABLE"],
+  ])(
+    "refresh가 %i이면 토큰을 그대로 두고 로그아웃하지 않는다",
+    async (status, code) => {
+      const onAuthFailure = vi.fn();
+      const storage = createMemoryTokenStorage({
+        accessToken: null,
+        refreshToken: "r1",
+      });
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          jsonResponse(status, { error: { code, message: "Try later." } }),
+        );
+
+      const client = createAuthApiClient({
+        fetchImpl: fetchMock,
+        storage,
+        onAuthFailure,
+      });
+
+      await expect(client.getMe()).rejects.toMatchObject({ status, code });
+      expect(storage.getTokens()).toEqual({
+        accessToken: null,
+        refreshToken: "r1",
+      });
+      expect(onAuthFailure).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refresh가 401이면 토큰을 비우고 로그아웃 처리한다", async () => {
+    const onAuthFailure = vi.fn();
+    const storage = createMemoryTokenStorage({
+      accessToken: null,
+      refreshToken: "revoked",
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse(401, {
+        error: { code: "UNAUTHENTICATED", message: "Session revoked." },
+      }),
+    );
+
+    const client = createAuthApiClient({
+      fetchImpl: fetchMock,
+      storage,
+      onAuthFailure,
+    });
+
+    await expect(client.getMe()).rejects.toMatchObject({ status: 401 });
+    expect(storage.getTokens()).toBeNull();
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+  });
+
   it("로그인 자체의 401(INVALID_CREDENTIALS)에서는 refresh를 시도하지 않는다", async () => {
     const storage = createMemoryTokenStorage({
       accessToken: "old-access",

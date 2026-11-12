@@ -1,4 +1,4 @@
-import { ApiError, isServerErrorPayload } from "./errors.ts";
+import { ApiError, isServerErrorPayload, isTransientError } from "./errors.ts";
 
 export interface AuthUser {
   id: number;
@@ -535,7 +535,11 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
         });
         return nextTokens;
       } catch (error) {
-        if (isCurrentSession() || !storage.getTokens()) {
+        // 429·5xx는 토큰이 회전되지 않았으므로 저장된 토큰을 남겨 둡니다.
+        if (
+          !isTransientError(error) &&
+          (isCurrentSession() || !storage.getTokens())
+        ) {
           storage.clearTokens();
           options.onAuthFailure?.();
         }

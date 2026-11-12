@@ -9,6 +9,7 @@ import {
 import {
   getAuthFieldErrors,
   getErrorMessage,
+  isTransientError,
   type AuthFieldErrors,
 } from "./api/errors.ts";
 import { GomokuMatchView } from "./game/GomokuMatchView.tsx";
@@ -1127,10 +1128,15 @@ export function App() {
           return resumedMatchId !== null ? "gomoku" : "lobby";
         });
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
-        authApi.storage.clearTokens();
-        saveActiveMatchIdToStorage(null);
+        // 429·5xx면 저장된 토큰이 아직 유효하므로 다음 복원 시도를 위해 유지합니다.
+        if (isTransientError(error)) {
+          setErrorMessage(getErrorMessage(error));
+        } else {
+          authApi.storage.clearTokens();
+          saveActiveMatchIdToStorage(null);
+        }
         setCurrentUser(null);
         setView((current) =>
           current === "terms" || current === "privacy" || current === "notFound"
@@ -1295,6 +1301,11 @@ export function App() {
       setAccountMenuOpen(false);
       setNoticeMessage("세션 토큰이 성공적으로 갱신되었습니다.");
     } catch (error) {
+      // 429·5xx는 세션이 그대로이므로 로그인 상태를 유지하고 오류만 보여 줍니다.
+      if (isTransientError(error)) {
+        setErrorMessage(getErrorMessage(error));
+        return;
+      }
       setCurrentUser(null);
       setAccountMenuOpen(false);
       setLogoutModalOpen(false);
