@@ -56,7 +56,8 @@ import {
 
 const unavailableCodes = new Set(["ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"]);
 
-// Connection-level failures (DB down, pool timeout) map to 503, not 500.
+// Connection-level failures (DB down, pool timeout) and statement timeouts
+// (57014, includes lock waits) map to 503, not 500.
 function isDatabaseUnavailable(error: unknown) {
   if (error instanceof ServiceUnavailableError) return true;
   for (
@@ -70,6 +71,7 @@ function isDatabaseUnavailable(error: unknown) {
     if (
       unavailableCodes.has(code) ||
       code.startsWith("08") ||
+      code === "57014" ||
       code.startsWith("57P") ||
       message.includes("timeout exceeded when trying to connect") ||
       message.includes("Connection terminated")
@@ -120,8 +122,8 @@ export async function buildApp(
     return twoFactor;
   };
   const connections = createConnectionRegistry();
-  // A session revoked for refresh-token reuse closes its WebSocket
-  // connections, like a logout (#51).
+  // A session revoked for refresh token reuse also closes its WebSocket
+  // connections, like logout does below.
   const auth =
     database && authConfig
       ? createAuthService(database.db, authConfig, twoFactor, (sessionId) =>

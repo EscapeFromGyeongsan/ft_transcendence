@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { GameSnapshot, GameType } from "@cafe/game-contracts";
 import type { RawData, WebSocket } from "ws";
 import type { AccessTokenClaims } from "../core/tokens.ts";
@@ -37,13 +37,38 @@ export type Envelope = {
  * - `internalError`(1011): 인증 서비스 장애 등 서버 내부 오류
  * - `messageTooLarge`(1009): 16 KiB를 넘는 메시지. 서버 코드가 아니라 `ws`
  *   라이브러리가 `maxPayload` 설정에 따라 닫습니다.
+ * - `tooManyPending`(1008): 처리를 기다리는 메시지가
+ *   {@link MAX_PENDING_MESSAGES}개를 넘음
  */
 export const closeCodes = {
   internalError: 1011,
+  tooManyPending: 1008,
   messageTooLarge: 1009,
   malformedMessage: 4400,
   unauthenticated: 4401,
 } as const;
+
+/**
+ * 한 연결에서 처리를 기다릴 수 있는 메시지 수입니다. 메시지는 연결마다
+ * 순서대로 하나씩 처리하므로, DB 응답보다 빠르게 보내면 대기열이 늘어납니다.
+ * 정상 클라이언트는 응답을 기다리며 보내므로 넘지 않는 값입니다.
+ */
+export const MAX_PENDING_MESSAGES = 32;
+
+/**
+ * `/api/ws` 연결 요청의 IP별 제한입니다. 인증 전 소켓은 최대 5초 유지되고
+ * 인증마다 DB를 조회하므로, 연결을 반복해 자원을 소모하지 못하게 막습니다.
+ * 새로고침·재연결이 잦은 정상 사용은 넘지 않는 값입니다.
+ */
+export const wsRateLimit = {
+  rateLimit: {
+    max: 30,
+    timeWindow: "1 minute",
+    // Real connections always have an IP; the fake socket of injectWS in
+    // tests has none, which would crash the default key generator.
+    keyGenerator: (request: FastifyRequest) => request.ip ?? "unknown",
+  },
+};
 
 /** `/api/ws` 동작 설정입니다. 테스트에서 시간 값을 줄일 때 씁니다. */
 export type RealtimeConfig = {
@@ -239,6 +264,9 @@ const rejectMessages: Record<ErrorCode, string> = {
  * `finishBySystem()`을 다시 시도하고 `game.updated`를 보냅니다. 그동안
  * 이탈자가 돌아와도 예산은 다시 생기지 않습니다. `auth.ok`의 `activeMatchId`로
  * 클라이언트가 진행 중 경기를 찾습니다.
+ *
+ * 연결 요청(upgrade)은 IP마다 1분에 30번까지 받고({@link wsRateLimit}), 넘으면
+ * upgrade 없이 HTTP 429 `RATE_LIMITED`로 응답합니다.
  */
 export function registerRealtimeRoutes(
   app: FastifyInstance,
@@ -267,11 +295,15 @@ export function registerRealtimeRoutes(
   });
 
   // Game type of each match a socket has subscribed to, for command checks.
+  // Kept after the match finishes, so a resent final command still gets its
+  // duplicate ack and a new one gets GAME_FINISHED; dropped once nobody
+  // watches the match.
   const matchGameTypes = new Map<number, GameType>();
 
-  function forgetMatch(matchId: number) {
-    connections.forgetMatch(matchId);
-    matchGameTypes.delete(matchId);
+  function dropUnwatched(matchIds: Iterable<number>) {
+    for (const matchId of matchIds) {
+      if (!connections.hasSubscribers(matchId)) matchGameTypes.delete(matchId);
+    }
   }
 
   const matchmaking = createMatchmaking({
@@ -381,7 +413,7 @@ export function registerRealtimeRoutes(
     });
     if (snapshot.status === "finished") {
       absences.finish(matchId);
-      forgetMatch(matchId);
+      connections.forgetMatch(matchId);
     }
   }
 
@@ -468,7 +500,9 @@ export function registerRealtimeRoutes(
     }
     // On failure undo only this request, not an earlier subscription.
     const undo = () => {
-      if (!wasSubscribed) connections.unsubscribe(matchId, socket);
+      if (wasSubscribed) return;
+      connections.unsubscribe(matchId, socket);
+      dropUnwatched([matchId]);
     };
     let snapshot: GameSnapshot | undefined;
     try {
@@ -509,6 +543,7 @@ export function registerRealtimeRoutes(
     }
     connections.unsubscribe(matchId, socket);
     uncountConnection(socket, matchId, userId);
+    dropUnwatched([matchId]);
     send(socket, "match.unsubscribed", { matchId }, requestId);
   }
 
@@ -596,7 +631,7 @@ export function registerRealtimeRoutes(
   // does not end up in proxy or access logs.
   app.get(
     "/api/ws",
-    { websocket: true, schema: { hide: true } },
+    { websocket: true, schema: { hide: true }, config: wsRateLimit },
     (socket, request) => {
       let claims: AccessTokenClaims | undefined;
       // Session the socket is registered under, set before auth.ok.
@@ -630,16 +665,17 @@ export function registerRealtimeRoutes(
         if (!registeredSession) return;
         // A silent peer has been gone since it last answered (SDS 13번).
         const leftAt = silent ? lastSeen : Date.now();
-        const matchIds = connections.matchesOf(socket);
-        connections.remove(registeredSession, socket);
+        const matchIds = connections.remove(registeredSession, socket);
         for (const matchId of matchIds) {
           uncountConnection(socket, matchId, claims!.userId, leftAt);
         }
+        dropUnwatched(matchIds);
       });
 
       // Messages of one socket are handled one at a time in arrival order,
       // so e.g. a match.unsubscribe never overtakes an earlier subscribe.
       let pending = Promise.resolve();
+      let pendingCount = 0;
       let firstMessage = true;
       socket.on("message", (data, isBinary) => {
         seen();
@@ -650,14 +686,24 @@ export function registerRealtimeRoutes(
           return;
         }
         firstMessage = false;
+        // A client that does not wait for replies would grow the queue and
+        // its DB reads without bound.
+        if (pendingCount >= MAX_PENDING_MESSAGES) {
+          socket.close(closeCodes.tooManyPending, "Too many pending messages.");
+          return;
+        }
+        pendingCount++;
         pending = pending
           .then(() => handleMessage(data, isBinary))
           .catch((error) =>
             request.log.error({ err: error }, "WebSocket message failed."),
-          );
+          )
+          .finally(() => pendingCount--);
       });
 
       async function handleMessage(data: RawData, isBinary: boolean) {
+        // Messages still queued when the socket closed are dropped.
+        if (socket.readyState !== socket.OPEN) return;
         const message = isBinary ? null : parseEnvelope(data.toString());
         if (!message) {
           socket.close(closeCodes.malformedMessage, "Malformed message.");

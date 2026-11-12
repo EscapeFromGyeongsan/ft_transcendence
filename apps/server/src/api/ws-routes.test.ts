@@ -20,9 +20,11 @@ import {
   type RegisteredRules,
 } from "../services/game-command-service.ts";
 import {
+  MAX_PENDING_MESSAGES,
   parseCommand,
   parseEnvelope,
   type RealtimeConfig,
+  wsRateLimit,
 } from "./ws-routes.ts";
 import {
   openTestDatabase,
@@ -215,6 +217,17 @@ describe("/api/ws without a database", () => {
     expect((await close).code).toBe(1011);
   });
 
+  test("upgrades over the per-IP limit are refused with 429", async () => {
+    app = await buildApp({}, undefined, { jwtSecret });
+    await app.ready();
+    const sockets: WebSocket[] = [];
+    for (let i = 0; i < wsRateLimit.rateLimit.max; i++) {
+      sockets.push(await app.injectWS("/api/ws"));
+    }
+    await expect(app.injectWS("/api/ws")).rejects.toThrow(/429/);
+    for (const socket of sockets) socket.terminate();
+  });
+
   test("closes 1011 when authentication is unavailable", async () => {
     app = await buildApp({}, undefined, { jwtSecret });
     const socket = await connect(app);
@@ -250,8 +263,12 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     await database?.close();
   });
 
-  // Registers and logs in user p<n>; ids follow registration order.
   async function loginToken(n = 1) {
+    return (await loginTokens(n)).accessToken;
+  }
+
+  // Registers and logs in user p<n>; ids follow registration order.
+  async function loginTokens(n = 1) {
     const email = `p${n}@example.com`;
     await app.inject({
       method: "POST",
@@ -263,7 +280,7 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       url: "/api/auth/login",
       payload: { email, password },
     });
-    return response.json().accessToken as string;
+    return response.json() as { accessToken: string; refreshToken: string };
   }
 
   async function authenticated(accessToken: string) {
@@ -297,6 +314,19 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       payload: { code: "UNSUPPORTED_MESSAGE" },
     });
     socket.terminate();
+  });
+
+  test("a client that floods messages without waiting is closed with 1008", async () => {
+    const { socket } = await authenticated(await loginToken());
+    const close = closed(socket);
+    // Each subscribe waits for the DB, so these pile up in the queue.
+    for (let i = 0; i <= MAX_PENDING_MESSAGES; i++) {
+      sendJson(socket, { type: "match.subscribe", payload: { matchId: 1 } });
+    }
+    expect(await close).toEqual({
+      code: 1008,
+      reason: "Too many pending messages.",
+    });
   });
 
   test("a second message while authenticating is closed with 4401", async () => {
@@ -413,6 +443,23 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       });
     }
     socket.terminate();
+  });
+
+  test("refresh token reuse closes open connections of that session", async () => {
+    const { accessToken, refreshToken } = await loginTokens();
+    const { socket } = await authenticated(accessToken);
+    const close = closed(socket);
+    const refresh = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/refresh",
+        payload: { refreshToken },
+      });
+
+    expect((await refresh()).statusCode).toBe(200);
+    // The rotated token comes back: treated as stolen, the session is revoked.
+    expect((await refresh()).statusCode).toBe(401);
+    expect(await close).toEqual({ code: 4401, reason: "Session ended." });
   });
 
   describe("match subscription", () => {
@@ -650,6 +697,30 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
             },
           });
         }
+      });
+
+      test("commands after the finish get a duplicate ack or GAME_FINISHED", async () => {
+        const resignId = play(1, { action: { type: "resign" } });
+        await next[1](); // game.ack
+        await next[0](); // game.updated (finished)
+        await next[1](); // game.updated (finished)
+
+        // p2 resends the same resign (its ack was lost).
+        play(1, { action: { type: "resign" } }, resignId);
+        expect(await next[1]()).toMatchObject({
+          type: "game.ack",
+          payload: { duplicate: true },
+        });
+        for (const i of [1, 0]) {
+          expect(await next[i]()).toMatchObject({ type: "game.updated" });
+        }
+
+        // p1 moves after the finish.
+        play(0, { expectedVersion: 1 });
+        expect(await next[0]()).toMatchObject({
+          type: "game.error",
+          payload: { code: "GAME_FINISHED" },
+        });
       });
 
       test("a gameType that differs from the match is refused", async () => {
