@@ -1301,6 +1301,17 @@ export function App() {
     }
   }
 
+  // 탈퇴 후에는 서버 세션이 이미 없으므로 logout 요청 없이 로그인 화면으로 보냅니다 (#85).
+  function handleAccountDeleted() {
+    resetMessages();
+    setCurrentUser(null);
+    setProfileUserId(null);
+    setAccountMenuOpen(false);
+    setLogoutModalOpen(false);
+    setView("login");
+    setNoticeMessage("회원 탈퇴가 완료되었습니다.");
+  }
+
   return (
     <div className="cbc-shell">
       {/* Top Fixed Header */}
@@ -2216,6 +2227,7 @@ export function App() {
             onOpenProfile={openProfile}
             onOpenLeaderboard={() => switchView("leaderboard")}
             onBack={() => switchView("lobby")}
+            onAccountDeleted={handleAccountDeleted}
           />
         ) : view === "leaderboard" && currentUser ? (
           <LeaderboardView

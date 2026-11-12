@@ -30,7 +30,8 @@ export interface MatchRecord {
   result: MatchResult;
   reason: string;
   seat: "black" | "white";
-  opponent: { id: number; nickname: string };
+  /** `nickname`은 경기 당시 닉네임, `deleted`는 상대가 탈퇴했는지 여부입니다. */
+  opponent: { id: number; nickname: string; deleted: boolean };
   finishedAt: string;
 }
 
@@ -47,6 +48,14 @@ export interface LeaderboardEntry {
   wins: number;
   played: number;
   winRate: number;
+}
+
+/** 회원 탈퇴 본인 확인 값. 서버는 계정 종류에 맞는 값 하나만 확인합니다. */
+export interface AccountDeletionInput {
+  /** 비밀번호로 가입한 계정의 비밀번호 */
+  password?: string;
+  /** 비밀번호가 없는 42 계정의 2FA 코드 또는 복구 코드 */
+  code?: string;
 }
 
 export interface MatchQuery {
@@ -92,6 +101,22 @@ export function createProfileApi(request: RequestFn) {
         );
       }
       return user;
+    },
+
+    /**
+     * 회원 탈퇴 (`DELETE /api/users/me`).
+     *
+     * @remarks
+     * 빈 값은 보내지 않습니다. 비밀번호는 공백도 비밀번호의 일부라 그대로 보내고,
+     * 코드는 앞뒤 공백을 제거합니다. 성공하면 서버가 모든 세션을 폐기하므로
+     * 호출한 쪽에서 로컬 토큰을 지워야 합니다.
+     */
+    deleteAccount: (input: AccountDeletionInput = {}) => {
+      const body: AccountDeletionInput = {};
+      if (input.password) body.password = input.password;
+      const code = input.code?.trim();
+      if (code) body.code = code;
+      return request<void>("/api/users/me", { method: "DELETE", body });
     },
 
     /** 아바타 업로드·교체 (`PUT /api/users/me/avatar`, multipart `file`). */

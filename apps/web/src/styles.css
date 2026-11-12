@@ -966,6 +966,30 @@ input {
   margin-bottom: 1.25rem;
 }
 
+.cbc-account-deletion-scope {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.5rem;
+  background-color: var(--surface-container-low);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.cbc-account-deletion-scope p {
+  margin: 0;
+}
+
+.cbc-account-deletion-scope p + p {
+  margin-top: 0.5rem;
+}
+
+.cbc-account-deletion-scope strong {
+  display: block;
+  color: var(--on-surface);
+}
+
 .cbc-modal-actions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1948,7 +1972,8 @@ input {
 }
 
 .cbc-btn-primary:disabled,
-.cbc-btn-secondary:disabled {
+.cbc-btn-secondary:disabled,
+.cbc-btn-danger:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -2265,6 +2290,12 @@ input {
 
 .cbc-table-user:hover {
   color: var(--primary);
+}
+
+/* 탈퇴한 상대: 프로필 링크 없음 */
+.cbc-table-user.is-deleted {
+  color: var(--on-surface-variant);
+  cursor: default;
 }
 
 .cbc-result-badge {

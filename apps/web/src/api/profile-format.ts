@@ -1,4 +1,4 @@
-import type { GameType, MatchResult } from "./profile-api.ts";
+import type { GameType, MatchRecord, MatchResult } from "./profile-api.ts";
 
 export const GAME_LABELS: Record<GameType, string> = {
   gomoku: "오목 (15×15)",
@@ -37,6 +37,17 @@ export function formatMatchDate(iso: string): string {
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}.${mm}.${dd}`;
+}
+
+/**
+ * 전적의 상대 이름을 표시용으로 만듭니다. 탈퇴한 상대는 경기 당시 닉네임 뒤에 `(탈퇴한 사용자)`를 붙입니다.
+ */
+export function formatOpponentName(
+  opponent: Pick<MatchRecord["opponent"], "nickname" | "deleted">,
+): string {
+  return opponent.deleted
+    ? `${opponent.nickname} (탈퇴한 사용자)`
+    : opponent.nickname;
 }
 
 /**

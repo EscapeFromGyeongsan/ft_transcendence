@@ -14,11 +14,13 @@ import {
 } from "../api/auth-client.ts";
 import {
   ApiError,
+  getAccountDeletionErrorMessage,
   getAuthFieldErrors,
   getErrorMessage,
 } from "../api/errors.ts";
 import {
   profileApi,
+  type AccountDeletionInput,
   type GameStats,
   type GameType,
   type MatchRecord,
@@ -29,10 +31,12 @@ import {
   GAME_LABELS,
   RESULT_LABELS,
   formatMatchDate,
+  formatOpponentName,
   formatWinRate,
   sumStats,
   validateAvatarFile,
 } from "../api/profile-format.ts";
+import { AccountDeletionDialog } from "./AccountDeletionDialog.tsx";
 import { Avatar } from "./Avatar.tsx";
 
 const GAME_TYPES: GameType[] = ["gomoku", "othello"];
@@ -48,11 +52,44 @@ interface ProfileViewProps {
   onOpenProfile: (userId: number) => void;
   onOpenLeaderboard: () => void;
   onBack: () => void;
+  /** 탈퇴가 끝나고 로컬 토큰을 지운 뒤 호출합니다. 상위에서 로그인 화면으로 보냅니다. */
+  onAccountDeleted: () => void;
   api?: ProfileApi;
   authClient?: AuthApiClient;
 }
 
 type StatsMap = Partial<Record<GameType, GameStats>>;
+
+/**
+ * 전적 표의 상대 플레이어 칸입니다. 탈퇴한 상대는 경기 당시 닉네임에 `(탈퇴한 사용자)`를 붙이고 프로필 링크를 만들지 않습니다.
+ */
+export function MatchOpponent({
+  opponent,
+  onOpenProfile,
+}: {
+  opponent: MatchRecord["opponent"];
+  onOpenProfile: (userId: number) => void;
+}) {
+  const name = formatOpponentName(opponent);
+  if (opponent.deleted) {
+    return (
+      <span className="cbc-table-user is-deleted">
+        <Avatar nickname={opponent.nickname} size={32} />
+        <span>{name}</span>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="cbc-table-user"
+      onClick={() => onOpenProfile(opponent.id)}
+    >
+      <Avatar nickname={opponent.nickname} size={32} />
+      <span>{name}</span>
+    </button>
+  );
+}
 
 function ResultBadge({ result }: { result: MatchRecord["result"] }) {
   return (
@@ -119,6 +156,7 @@ export function ProfileView({
   onOpenProfile,
   onOpenLeaderboard,
   onBack,
+  onAccountDeleted,
   api = profileApi,
   authClient = authApi,
 }: ProfileViewProps) {
@@ -149,6 +187,7 @@ export function ProfileView({
     | "twoFactorEnable"
     | "twoFactorDisable"
     | "oauthLink"
+    | "accountDelete"
     | null
   >(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -178,6 +217,11 @@ export function ProfileView({
   );
   const [oauthAlreadyLinked, setOauthAlreadyLinked] = useState(false);
   const disableTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // 회원 탈퇴 대화상자 (#85)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // 내 프로필 진입 시 2FA 활성화 상태를 조회합니다.
   useEffect(() => {
@@ -257,7 +301,13 @@ export function ProfileView({
         setPublicProfile(profile);
       })
       .catch((error) => {
-        if (active) setLoadError(getErrorMessage(error));
+        if (!active) return;
+        // 탈퇴한 사용자도 프로필·통계 조회가 404입니다.
+        setLoadError(
+          !isMine && error instanceof ApiError && error.status === 404
+            ? "존재하지 않거나 탈퇴한 사용자입니다."
+            : getErrorMessage(error),
+        );
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -504,6 +554,36 @@ export function ProfileView({
     } finally {
       setBusy(null);
     }
+  }
+
+  const closeDeleteModal = useCallback(() => {
+    if (busy === "accountDelete") return;
+    setDeleteModalOpen(false);
+    setDeleteError(null);
+    deleteTriggerBtnRef.current?.focus();
+  }, [busy]);
+
+  async function handleDeleteAccount(input: AccountDeletionInput) {
+    if (busy !== null) return;
+    setDeleteError(null);
+    setBusy("accountDelete");
+    try {
+      await api.deleteAccount(input);
+    } catch (error) {
+      // 이 코드는 2FA가 켜진 계정에만 오므로, 상태 조회가 실패했어도 코드 입력란을 보여줍니다.
+      if (
+        error instanceof ApiError &&
+        error.code === "INVALID_TWO_FACTOR_CODE"
+      ) {
+        setTwoFactorEnabled(true);
+      }
+      setDeleteError(getAccountDeletionErrorMessage(error));
+      setBusy(null);
+      return;
+    }
+    // 서버가 모든 세션을 폐기했으므로 logout 요청 없이 로컬 토큰만 지웁니다.
+    authClient.storage.clearTokens();
+    onAccountDeleted();
   }
 
   async function handleStartOAuth42Link() {
@@ -946,6 +1026,33 @@ export function ProfileView({
                 </div>
               </section>
             )}
+
+            {isMine && (
+              <section
+                className="cbc-profile-card"
+                data-testid="profile-account-deletion"
+              >
+                <h2 className="cbc-profile-section-title">회원 탈퇴</h2>
+                <p className="cbc-profile-hint">
+                  탈퇴하면 계정과 개인정보가 즉시 삭제되며 되돌릴 수 없습니다.
+                  경기 기록은 상대의 전적을 위해 남습니다.
+                </p>
+                <button
+                  ref={deleteTriggerBtnRef}
+                  type="button"
+                  className="cbc-btn-danger cbc-btn-compact"
+                  style={{ width: "100%", marginTop: "0.75rem" }}
+                  disabled={busy !== null}
+                  data-testid="open-account-deletion-modal-btn"
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteModalOpen(true);
+                  }}
+                >
+                  회원 탈퇴
+                </button>
+              </section>
+            )}
           </aside>
 
           <div className="cbc-profile-main">
@@ -1065,19 +1172,10 @@ export function ProfileView({
                           {matches.map((match) => (
                             <tr key={match.matchId}>
                               <td>
-                                <button
-                                  type="button"
-                                  className="cbc-table-user"
-                                  onClick={() =>
-                                    onOpenProfile(match.opponent.id)
-                                  }
-                                >
-                                  <Avatar
-                                    nickname={match.opponent.nickname}
-                                    size={32}
-                                  />
-                                  <span>{match.opponent.nickname}</span>
-                                </button>
+                                <MatchOpponent
+                                  opponent={match.opponent}
+                                  onOpenProfile={onOpenProfile}
+                                />
                               </td>
                               <td>{GAME_LABELS[match.gameType]}</td>
                               <td>
@@ -1112,6 +1210,16 @@ export function ProfileView({
             )}
           </div>
         </div>
+      )}
+
+      {deleteModalOpen && (
+        <AccountDeletionDialog
+          twoFactorEnabled={twoFactorEnabled}
+          submitting={busy === "accountDelete"}
+          error={deleteError}
+          onCancel={closeDeleteModal}
+          onConfirm={(input) => void handleDeleteAccount(input)}
+        />
       )}
 
       {/* 2FA Disable Confirmation Modal (19_2fa_disable_modal) */}

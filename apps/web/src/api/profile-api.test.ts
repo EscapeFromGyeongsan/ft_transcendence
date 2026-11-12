@@ -5,10 +5,15 @@ import {
   type TokenStorage,
 } from "./auth-client.ts";
 import { createProfileApi } from "./profile-api.ts";
-import { ApiError, getErrorMessage } from "./errors.ts";
+import {
+  ApiError,
+  getAccountDeletionErrorMessage,
+  getErrorMessage,
+} from "./errors.ts";
 import {
   avatarInitial,
   formatMatchDate,
+  formatOpponentName,
   formatWinRate,
   sumStats,
   validateAvatarFile,
@@ -135,6 +140,103 @@ describe("profile API client", () => {
     expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
   });
 
+  it("DELETE /api/users/me에 본인 확인 값을 JSON으로 보내고 204를 처리한다", async () => {
+    const { fetchMock, api } = setup();
+    fetchMock.mockImplementation(
+      async () => new Response(null, { status: 204 }),
+    );
+
+    await expect(
+      api.deleteAccount({ password: " pass word ", code: "" }),
+    ).resolves.toBeUndefined();
+    await api.deleteAccount({ password: "", code: " 123456 " });
+    await api.deleteAccount();
+
+    const bodies = fetchMock.mock.calls.map(([, init]) => init?.body);
+    expect(bodies).toEqual([
+      JSON.stringify({ password: " pass word " }),
+      JSON.stringify({ code: "123456" }),
+      JSON.stringify({}),
+    ]);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/users/me");
+    expect(init?.method).toBe("DELETE");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers.Authorization).toBe("Bearer access");
+  });
+
+  it.each([
+    [
+      400,
+      "INVALID_CREDENTIALS",
+      "비밀번호가 맞지 않습니다. 다시 확인해 주세요.",
+    ],
+    [
+      400,
+      "INVALID_TWO_FACTOR_CODE",
+      "2단계 인증 코드 또는 복구 코드가 맞지 않습니다. 다시 확인해 주세요.",
+    ],
+    [
+      403,
+      "RECENT_LOGIN_REQUIRED",
+      "본인 확인을 위해 다시 로그인한 뒤 10분 안에 탈퇴를 진행해 주세요.",
+    ],
+    [
+      409,
+      "ACTIVE_MATCH",
+      "진행 중이거나 대기 중인 경기가 있습니다. 경기를 끝낸 뒤 다시 시도해 주세요.",
+    ],
+    [429, "RATE_LIMITED", "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."],
+    [
+      503,
+      "SERVICE_UNAVAILABLE",
+      "서버 또는 데이터베이스에 일시적으로 연결할 수 없습니다.",
+    ],
+  ])(
+    "탈퇴 실패 %i %s를 보존하고 탈퇴 화면용 한국어 안내로 변환한다",
+    async (status, code, message) => {
+      const { fetchMock, api } = setup();
+      fetchMock.mockResolvedValueOnce(
+        json(status, { error: { code, message: "server" } }),
+      );
+      const error = await api.deleteAccount({ password: "x" }).catch((e) => e);
+      expect(error).toMatchObject({ status, code });
+      expect(getAccountDeletionErrorMessage(error)).toBe(message);
+    },
+  );
+
+  it("탈퇴 요청이 refresh 후에도 401이면 로컬 토큰을 지운다", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    const storage = memoryStorage({
+      accessToken: "access",
+      refreshToken: "refresh",
+    });
+    const client = createAuthApiClient({ fetchImpl: fetchMock, storage });
+    const api = createProfileApi(client.request);
+    const unauthenticated = () =>
+      json(401, { error: { code: "UNAUTHENTICATED", message: "x" } });
+    fetchMock
+      .mockResolvedValueOnce(unauthenticated())
+      .mockResolvedValueOnce(
+        json(200, {
+          accessToken: "access2",
+          tokenType: "Bearer",
+          expiresIn: 1800,
+          refreshToken: "refresh2",
+        }),
+      )
+      .mockResolvedValueOnce(unauthenticated());
+
+    const error = await api.deleteAccount({ password: "x" }).catch((e) => e);
+
+    expect(error).toMatchObject({ status: 401, code: "UNAUTHENTICATED" });
+    expect(storage.getTokens()).toBeNull();
+    expect(getAccountDeletionErrorMessage(error)).toBe(
+      "로그인이 필요하거나 세션이 만료되었습니다. 다시 로그인해 주세요.",
+    );
+  });
+
   it("통계·전적·리더보드·공개 프로필 요청 URL을 구성한다", async () => {
     const { fetchMock, api } = setup();
     fetchMock.mockImplementation(async () => json(200, []));
@@ -169,6 +271,15 @@ describe("profile formatting helpers", () => {
     expect(formatMatchDate("not-a-date")).toBe("-");
     expect(formatMatchDate("2026-11-02T12:00:00.000Z")).toMatch(
       /^2026\.11\.0[23]$/,
+    );
+  });
+
+  it("탈퇴한 상대는 경기 당시 닉네임 뒤에 (탈퇴한 사용자)를 붙인다", () => {
+    expect(formatOpponentName({ nickname: "alex", deleted: false })).toBe(
+      "alex",
+    );
+    expect(formatOpponentName({ nickname: "alex", deleted: true })).toBe(
+      "alex (탈퇴한 사용자)",
     );
   });
 

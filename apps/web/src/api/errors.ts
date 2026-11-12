@@ -72,6 +72,10 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   IMAGE_TOO_BIG: "이미지는 가로·세로 1024px 이하여야 합니다.",
   NOT_FOUND: "요청한 정보를 찾을 수 없습니다.",
   RECORDS_PRIVATE: "이 사용자의 전적은 비공개입니다.",
+  RECENT_LOGIN_REQUIRED:
+    "본인 확인을 위해 다시 로그인한 뒤 10분 안에 탈퇴를 진행해 주세요.",
+  ACTIVE_MATCH:
+    "진행 중이거나 대기 중인 경기가 있습니다. 경기를 끝낸 뒤 다시 시도해 주세요.",
   INVALID_RESPONSE:
     "저장 결과를 확인할 수 없습니다. 새로고침 후 다시 확인해 주세요.",
   RATE_LIMITED: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
@@ -127,6 +131,27 @@ export function getErrorMessage(error: unknown): string {
   }
 
   return "요청을 처리하는 중 알 수 없는 오류가 발생했습니다.";
+}
+
+/** 탈퇴 화면에서는 같은 코드라도 로그인 화면과 다른 안내가 필요합니다. */
+const ACCOUNT_DELETION_MESSAGES: Record<string, string> = {
+  INVALID_CREDENTIALS: "비밀번호가 맞지 않습니다. 다시 확인해 주세요.",
+  INVALID_TWO_FACTOR_CODE:
+    "2단계 인증 코드 또는 복구 코드가 맞지 않습니다. 다시 확인해 주세요.",
+};
+
+/**
+ * 회원 탈퇴(`DELETE /api/users/me`) 실패를 화면에 표시할 안내 문구로 바꿉니다.
+ *
+ * @param error - 탈퇴 요청 중 발생한 예외
+ * @returns 탈퇴 전용 문구가 있으면 그 문구, 없으면 {@link getErrorMessage}의 결과
+ */
+export function getAccountDeletionErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const mapped = ACCOUNT_DELETION_MESSAGES[error.code];
+    if (mapped) return mapped;
+  }
+  return getErrorMessage(error);
 }
 
 export interface AuthFieldErrors {
