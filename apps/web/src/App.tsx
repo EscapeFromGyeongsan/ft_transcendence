@@ -213,7 +213,7 @@ function EyeIcon({ visible }: { visible: boolean }) {
 }
 
 /**
- * 사이버 보드게임 카페의 인증(회원가입·로그인·2FA·토큰 갱신·로그아웃) 및 로비 진입 화면을 관리하는 최상위 컴포넌트입니다.
+ * 사이버 보드게임 카페의 인증·화면 전환과 실시간 대국 상태를 관리하는 최상위 컴포넌트입니다.
  */
 export function App() {
   const [notFoundPath, setNotFoundPath] = useState<string>(() => {
@@ -237,6 +237,8 @@ export function App() {
 
   const avatarTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
   const lastLogoutTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // 사용자 이동은 기록을 추가하고, 초기 복구·실시간 갱신·popstate는 현재 기록만 보정합니다.
+  const navigationModeRef = useRef<"push" | "replace">("replace");
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -289,6 +291,7 @@ export function App() {
   }
 
   function switchView(next: ScreenView) {
+    if (next !== view) navigationModeRef.current = "push";
     resetMessages();
     setAccountMenuOpen(false);
     setLogoutModalOpen(false);
@@ -305,6 +308,7 @@ export function App() {
   }
 
   function openLegalDoc(doc: LegalDocKind) {
+    if (doc !== view) navigationModeRef.current = "push";
     resetMessages();
     setAccountMenuOpen(false);
     setLogoutModalOpen(false);
@@ -321,6 +325,7 @@ export function App() {
   }
 
   function handleBackFromLegal() {
+    navigationModeRef.current = "push";
     resetMessages();
     if (
       previousViewBeforeLegal &&
@@ -381,14 +386,20 @@ export function App() {
       profileUserId,
       currentUserId: currentUser?.id ?? null,
     });
+    const navigationMode = navigationModeRef.current;
+    navigationModeRef.current = "replace";
     if (
       targetPath !== null &&
       globalThis.window.location?.pathname !== targetPath
     ) {
       try {
-        globalThis.window.history.replaceState(null, "", targetPath);
+        if (navigationMode === "push") {
+          globalThis.window.history.pushState(null, "", targetPath);
+        } else {
+          globalThis.window.history.replaceState(null, "", targetPath);
+        }
       } catch {
-        // 테스트·제한 환경에서 history.replaceState 예외 무시
+        // 테스트·제한 환경에서 history 변경 예외 무시
       }
     }
   }, [
@@ -408,6 +419,7 @@ export function App() {
       return;
     }
     function handlePopState() {
+      navigationModeRef.current = "replace";
       const route = parseInitialAppRoute();
       switch (route.kind) {
         case "terms":
@@ -438,11 +450,7 @@ export function App() {
           break;
         case "match":
           if (currentUser) {
-            setGomokuState((prev) => ({
-              ...prev,
-              matchId: route.matchId,
-            }));
-            setView("gomoku");
+            openGomokuMatch(route.matchId);
           } else {
             setView("login");
           }
@@ -629,7 +637,14 @@ export function App() {
           setGomokuState((prev) =>
             applyIncomingSnapshot(prev, snapshot, "match.snapshot"),
           );
-          setView("gomoku");
+          // 약관·개인정보 화면을 열람 중이면 스냅샷은 반영하되 화면은 유지합니다.
+          setView((current) =>
+            current === "terms" ||
+            current === "privacy" ||
+            current === "notFound"
+              ? current
+              : "gomoku",
+          );
         },
         onGameUpdated(snapshot) {
           saveActiveMatchIdToStorage(
@@ -682,6 +697,7 @@ export function App() {
   }, [currentUserId]);
 
   function openProfile(userId: number) {
+    if (userId !== profileUserId) navigationModeRef.current = "push";
     setProfileUserId(userId);
     switchView("profile");
   }
@@ -741,19 +757,31 @@ export function App() {
       return;
     }
 
-    saveActiveMatchIdToStorage(parsedId);
-    setGomokuState((prev) => ({
-      ...createInitialGomokuClientState(
-        prev.viewerUserId ?? currentUser?.id ?? null,
-        parsedId,
-      ),
-      connectionPhase: wsClientRef.current?.getPhase() ?? "connecting",
-    }));
-    setView("gomoku");
+    navigationModeRef.current = "push";
+    openGomokuMatch(parsedId);
+  }
 
+  function openGomokuMatch(matchId: number) {
     const client = wsClientRef.current;
-    if (client) {
-      if (!client.subscribeMatch(parsedId)) {
+    const subscribedMatchId = client?.getSubscribedMatchId() ?? null;
+    if (subscribedMatchId !== null && subscribedMatchId !== matchId) {
+      client?.unsubscribeMatch(subscribedMatchId);
+    }
+    saveActiveMatchIdToStorage(matchId);
+    setGomokuState((prev) =>
+      prev.matchId === matchId
+        ? prev
+        : {
+            ...createInitialGomokuClientState(
+              prev.viewerUserId ?? currentUser?.id ?? null,
+              matchId,
+            ),
+            connectionPhase: client?.getPhase() ?? "connecting",
+          },
+    );
+    setView("gomoku");
+    if (client && subscribedMatchId !== matchId) {
+      if (!client.subscribeMatch(matchId)) {
         client.reconnectNow();
       }
     }
