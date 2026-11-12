@@ -41,6 +41,26 @@ describe("회원 탈퇴 대화상자 (#85)", () => {
     expect(html).toContain("2단계 인증 코드 또는 복구 코드");
   });
 
+  it("비밀번호 계정은 2FA가 켜져 있어도 비밀번호 입력란만 보여준다", () => {
+    const html = renderDialog({ hasPassword: true, twoFactorEnabled: true });
+    expect(html).toContain('id="account-deletion-password"');
+    expect(html).not.toContain("account-deletion-code-input");
+    expect(html).not.toContain("42 계정으로 가입해");
+  });
+
+  it("42 전용 계정은 비밀번호 입력란 없이 2FA 코드 또는 최근 로그인 안내를 보여준다", () => {
+    const withCode = renderDialog({
+      hasPassword: false,
+      twoFactorEnabled: true,
+    });
+    expect(withCode).not.toContain('id="account-deletion-password"');
+    expect(withCode).toContain("account-deletion-code-input");
+    const recent = renderDialog({ hasPassword: false });
+    expect(recent).not.toContain('id="account-deletion-password"');
+    expect(recent).not.toContain("account-deletion-code-input");
+    expect(recent).toContain("account-deletion-recent-login");
+  });
+
   it("요청 중에는 입력과 버튼을 비활성화하고 진행 문구를 보여준다", () => {
     const html = renderDialog({ twoFactorEnabled: true, submitting: true });
     expect(html).toContain("탈퇴 처리 중...");

@@ -1215,6 +1215,7 @@ export function ProfileView({
       {deleteModalOpen && (
         <AccountDeletionDialog
           twoFactorEnabled={twoFactorEnabled}
+          hasPassword={currentUser.hasPassword}
           submitting={busy === "accountDelete"}
           error={deleteError}
           onCancel={closeDeleteModal}

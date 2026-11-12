@@ -7,6 +7,8 @@ export interface AuthUser {
   avatarUrl: string | null;
   recordsPublic: boolean;
   createdAt: string;
+  /** 비밀번호로 로그인할 수 있는 계정인지. `GET /api/users/me`에만 있습니다. */
+  hasPassword?: boolean;
 }
 
 export interface TokenPair {

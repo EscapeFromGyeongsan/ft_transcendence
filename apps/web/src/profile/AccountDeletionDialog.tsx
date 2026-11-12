@@ -5,6 +5,11 @@ import type { AccountDeletionInput } from "../api/profile-api.ts";
 export interface AccountDeletionDialogProps {
   /** 2FA가 켜진 계정이면 2FA 코드 입력란을 함께 표시합니다. */
   twoFactorEnabled: boolean;
+  /**
+   * 비밀번호 계정이면 `true`(비밀번호만), 42 전용 계정이면 `false`(2FA 코드 또는 최근 로그인).
+   * 모르면 두 입력란을 모두 보여 줍니다.
+   */
+  hasPassword?: boolean;
   /** 탈퇴 요청 중이면 입력과 버튼을 비활성화하고 Escape·바깥 클릭으로 닫히지 않게 합니다. */
   submitting: boolean;
   error: string | null;
@@ -17,12 +22,13 @@ export interface AccountDeletionDialogProps {
  * 되돌릴 수 없음과 삭제·보존 항목을 안내하고 본인 확인 값을 받아 탈퇴를 요청하는 대화상자입니다 (#85, DEC-09).
  *
  * @remarks
- * 화면은 계정에 비밀번호가 있는지 알 수 없으므로 비밀번호 입력란은 항상 표시하고,
- * 비밀번호가 없는 42 계정은 비워 두도록 안내합니다. 열리면 첫 입력란으로 포커스를 옮기고
- * Escape로 닫습니다 (NFR-UX-02).
+ * 서버는 비밀번호 계정은 비밀번호로, 42 전용 계정은 2FA 코드(켠 경우) 또는 최근 로그인으로
+ * 본인을 확인하므로 `hasPassword`에 맞는 입력란만 보여 줍니다. 열리면 첫 입력란(없으면 확인 버튼)으로
+ * 포커스를 옮기고 Escape로 닫습니다 (NFR-UX-02).
  */
 export function AccountDeletionDialog({
   twoFactorEnabled,
+  hasPassword,
   submitting,
   error,
   onCancel,
@@ -31,9 +37,12 @@ export function AccountDeletionDialog({
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const firstInputRef = useRef<HTMLInputElement | null>(null);
+  const confirmRef = useRef<HTMLButtonElement | null>(null);
+  const showPassword = hasPassword !== false;
+  const showCode = twoFactorEnabled && hasPassword !== true;
 
   useEffect(() => {
-    firstInputRef.current?.focus();
+    (firstInputRef.current ?? confirmRef.current)?.focus();
   }, []);
 
   useEffect(() => {
@@ -115,37 +124,61 @@ export function AccountDeletionDialog({
           onSubmit={handleSubmit}
           noValidate
         >
-          <div className="cbc-field">
-            <label className="cbc-label" htmlFor="account-deletion-password">
-              비밀번호
-            </label>
-            <input
-              ref={firstInputRef}
-              id="account-deletion-password"
-              type="password"
-              autoComplete="current-password"
-              className={`cbc-input ${error ? "is-error" : ""}`}
-              data-testid="account-deletion-password-input"
-              value={password}
-              disabled={submitting}
-              aria-describedby="account-deletion-password-help"
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <p id="account-deletion-password-help" className="cbc-field-helper">
+          {showPassword && (
+            <div className="cbc-field">
+              <label className="cbc-label" htmlFor="account-deletion-password">
+                비밀번호
+              </label>
+              <input
+                ref={firstInputRef}
+                id="account-deletion-password"
+                type="password"
+                autoComplete="current-password"
+                className={`cbc-input ${error ? "is-error" : ""}`}
+                data-testid="account-deletion-password-input"
+                value={password}
+                disabled={submitting}
+                aria-describedby={
+                  hasPassword === undefined
+                    ? "account-deletion-password-help"
+                    : undefined
+                }
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              {hasPassword === undefined && (
+                <p
+                  id="account-deletion-password-help"
+                  className="cbc-field-helper"
+                >
+                  <span>
+                    {twoFactorEnabled
+                      ? "42 계정으로 가입해 비밀번호가 없다면 비워 두고 아래에 인증 코드를 입력해 주세요."
+                      : "42 계정으로 가입해 비밀번호가 없다면 비워 두세요. 이 경우 로그인한 지 10분 안에만 탈퇴할 수 있습니다."}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {hasPassword === false && !twoFactorEnabled && (
+            <p
+              className="cbc-field-helper"
+              data-testid="account-deletion-recent-login"
+            >
               <span>
-                {twoFactorEnabled
-                  ? "42 계정으로 가입해 비밀번호가 없다면 비워 두고 아래에 인증 코드를 입력해 주세요."
-                  : "42 계정으로 가입해 비밀번호가 없다면 비워 두세요. 이 경우 로그인한 지 10분 안에만 탈퇴할 수 있습니다."}
+                42 계정은 로그인한 지 10분 안에만 탈퇴할 수 있습니다. 시간이
+                지났다면 다시 로그인한 뒤 진행해 주세요.
               </span>
             </p>
-          </div>
+          )}
 
-          {twoFactorEnabled && (
+          {showCode && (
             <div className="cbc-field">
               <label className="cbc-label" htmlFor="account-deletion-code">
                 2단계 인증 코드 또는 복구 코드
               </label>
               <input
+                ref={showPassword ? undefined : firstInputRef}
                 id="account-deletion-code"
                 type="text"
                 autoComplete="one-time-code"
@@ -159,7 +192,9 @@ export function AccountDeletionDialog({
               />
               <p id="account-deletion-code-help" className="cbc-field-helper">
                 <span>
-                  비밀번호가 없는 42 계정만 이 코드로 본인을 확인합니다.
+                  {hasPassword === false
+                    ? "인증 앱의 6자리 코드 또는 복구 코드로 본인을 확인합니다."
+                    : "비밀번호가 없는 42 계정만 이 코드로 본인을 확인합니다."}
                 </span>
               </p>
             </div>
@@ -181,6 +216,7 @@ export function AccountDeletionDialog({
               취소
             </button>
             <button
+              ref={confirmRef}
               type="submit"
               className="cbc-btn-danger"
               disabled={submitting}
