@@ -1,0 +1,284 @@
+{
+  "검증일시": "2026-10-12T17:33:36.567709+09:00",
+  "검증자": "이 대화의 Codex",
+  "구현커밋": "9dc764ad5327a3de66bfe0186124a807519df8f5",
+  "동기화한원격커밋": "e8e515bea4a988ec424d9ba46ac9f7e88f4f8b38",
+  "환경": {
+    "OS": "WSL Ubuntu 24.04",
+    "호스트Node": "25.5.0",
+    "호스트npm": "11.8.0",
+    "컨테이너Node": "24.21.0",
+    "컨테이너Nginx": "1.28.3",
+    "컨테이너PostgreSQL": "17.11",
+    "Docker": "29.6.2",
+    "Compose": "5.3.1",
+    "Chromium": "153.0.8010.12"
+  },
+  "검증프로젝트": "cafe-env-check-20261012082027",
+  "포트": {
+    "HTTP": 50043,
+    "HTTPS": 47927,
+    "개발DB": 54989
+  },
+  "기동명령": "docker compose --env-file <검증용 runtime.env> --project-directory . -p cafe-env-check-20261012082027 -f infra/compose.full.yaml up --build -d --wait --wait-timeout 120",
+  "기본검사": {
+    "npm ci": 0,
+    "npm test": {
+      "exit": 0,
+      "tests": 27
+    },
+    "npm run build": 0,
+    "Node24 컨테이너 npm test": {
+      "exit": 0,
+      "tests": 27,
+      "user": "root; 테스트 도구의 임시 config 파일 기록 권한을 위한 검증 전용 실행"
+    },
+    "npm run test:e2e": {
+      "exit": 0,
+      "tests": 2
+    },
+    "npm run db:migrate": 0,
+    "npm run db:check": 0
+  },
+  "HTTPS와생명주기": [
+    {
+      "check": "HTTPS",
+      "path": "/",
+      "status": 200
+    },
+    {
+      "check": "HTTPS",
+      "path": "/api/health",
+      "status": 200
+    },
+    {
+      "check": "HTTPS",
+      "path": "/api/health/db",
+      "status": 200
+    },
+    {
+      "check": "HTTPS",
+      "path": "/docs",
+      "status": 200
+    },
+    {
+      "check": "HTTPS",
+      "path": "/docs/",
+      "status": 200
+    },
+    {
+      "check": "HTTPS",
+      "path": "/docs/json",
+      "status": 200
+    },
+    {
+      "check": "HTTPS",
+      "path": "/docs/static/swagger-ui.css",
+      "status": 200
+    },
+    {
+      "check": "HTTPS",
+      "path": "/docs/static/swagger-ui-bundle.js",
+      "status": 200
+    },
+    {
+      "check": "certificate SAN",
+      "host": "127.0.0.1"
+    },
+    {
+      "check": "HTTP redirect",
+      "status": 308,
+      "queryPreserved": true
+    },
+    {
+      "check": "OS trust",
+      "defaultCurlExit": 60,
+      "explicitCA": true
+    },
+    {
+      "check": "nginx configuration",
+      "result": ""
+    },
+    {
+      "check": "published ports",
+      "services": [
+        "web"
+      ],
+      "binding": "127.0.0.1"
+    },
+    {
+      "check": "certificate overwrite prevention",
+      "exit": 1,
+      "filesUnchanged": true
+    },
+    {
+      "check": "API recreate",
+      "recovered": true
+    },
+    {
+      "check": "persistence after down/up",
+      "sameVolume": true,
+      "sameRowAndTimestamp": true,
+      "row": "runtime-persistence-probe:2026-10-12 08:24:39.710792+00"
+    },
+    {
+      "check": "DB outage",
+      "readiness": 503,
+      "liveness": 200,
+      "response": {
+        "error": {
+          "code": "SERVICE_UNAVAILABLE",
+          "message": "Database is unavailable."
+        }
+      }
+    },
+    {
+      "check": "DB recovery",
+      "readiness": 200
+    },
+    {
+      "check": "SIGTERM shutdown",
+      "exitCodes": {
+        "api": 0,
+        "db": 0,
+        "migrate": 0,
+        "web": 0
+      }
+    },
+    {
+      "check": "restart after stop",
+      "readiness": 200
+    }
+  ],
+  "브라우저": [
+    {
+      "name": "desktop",
+      "home": 200,
+      "database": 200,
+      "swaggerOperations": 2,
+      "errors": [],
+      "browser": "153.0.8010.12",
+      "trust": "ignoreHTTPSErrors=true; TLS independently verified by curl --cacert"
+    },
+    {
+      "name": "mobile",
+      "home": 200,
+      "database": 200,
+      "swaggerOperations": 2,
+      "errors": [],
+      "browser": "153.0.8010.12",
+      "trust": "ignoreHTTPSErrors=true; TLS independently verified by curl --cacert"
+    }
+  ],
+  "추가검사": [
+    {
+      "check": "DNS after forced IP change",
+      "oldIp": "172.22.0.2",
+      "newIp": "172.22.0.4",
+      "statuses": [
+        "200"
+      ]
+    },
+    {
+      "check": "runtime permissions",
+      "apiUid": 1000,
+      "secretsAndTLSReadOnly": true
+    },
+    {
+      "check": "unmounted final images",
+      "privateFilesAbsent": true
+    },
+    {
+      "check": "actual Docker build context",
+      "secretCertificateAndDotenvFixturesExcluded": true,
+      "nodeModulesAndGitExcluded": true,
+      "exampleIncluded": true,
+      "gitIgnoreCount": 3
+    },
+    {
+      "check": "image identifiers",
+      "images": {
+        "api": "sha256:a86c8d89b5ffca4c9deaa854c6d53e634160e737495b7bf79862c03007720d73",
+        "db": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+        "migrate": "sha256:d07f8e963f402ed9b4537a9b389e4523caae9283a578d45bd863da7017b94f17",
+        "web": "sha256:abd772476f04df8dc823e5d2396ba1941ce94187e1a86e1d8f6c3494eda531e7"
+      }
+    }
+  ],
+  "migration실패": {
+    "upExit": 1,
+    "서비스": [
+      {
+        "service": "api",
+        "state": "created",
+        "exit": 0
+      },
+      {
+        "service": "db",
+        "state": "running",
+        "exit": 0
+      },
+      {
+        "service": "migrate",
+        "state": "exited",
+        "exit": 1
+      },
+      {
+        "service": "web",
+        "state": "created",
+        "exit": 0
+      }
+    ]
+  },
+  "CRLF비밀번호": {
+    "별도빈DB": true,
+    "migrationExit": 0,
+    "상태": "예약 문자와 CRLF 파일로 실제 migration 연결 성공"
+  },
+  "개발회귀": {
+    "PORT": 51821,
+    "webPort": 55327,
+    "SIGINT": 0,
+    "두포트해제": true,
+    "E2E": 2
+  },
+  "preview회귀": [
+    {
+      "check": "preview proxy and SIGTERM",
+      "PORT": 57629,
+      "previewPort": 60711,
+      "apiExit": 0,
+      "previewExit": 143,
+      "bothPortsClosed": true
+    }
+  ],
+  "의존성감사": {
+    "전체": {
+      "info": 0,
+      "low": 0,
+      "moderate": 4,
+      "high": 1,
+      "critical": 0,
+      "total": 5
+    },
+    "대상": [
+      "@esbuild-kit/core-utils",
+      "@esbuild-kit/esm-loader",
+      "drizzle-kit",
+      "esbuild",
+      "source-map-js"
+    ],
+    "npm audit --omit=dev": 0,
+    "잠금파일변경": false
+  },
+  "미실행": [
+    "Windows 브라우저 OS/CA 신뢰 저장소 등록 후 경고 없는 접속",
+    "작성자 외 팀원의 README 재현",
+    "실제 WebSocket endpoint의 WSS 메시지·종료·재접속"
+  ],
+  "주의": "브라우저 기능 검사는 ignoreHTTPSErrors=true; 인증서/SAN은 curl --cacert로 별도 검증. 데이터 보존은 connection_probe 행만 확인.",
+  "정리": {
+    "검증용프로젝트4개": "컨테이너·네트워크·볼륨 제거",
+    "기존DB볼륨2개": "유지"
+  }
+}
