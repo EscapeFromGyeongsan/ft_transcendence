@@ -501,7 +501,7 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 1. 클라이언트는 `GET /api/ws`로 연결한다. access token은 URL·헤더에 넣지 않는다(프록시·접근 로그에 남지 않게 하기 위함).
 2. 연결 후 5초 안에 첫 메시지로 `auth`를 보낸다. 서버는 JWT와 서버 세션을 함께 확인하고 `auth.ok`로 답한다.
 3. `auth.ok`를 받기 전에는 다른 메시지를 보내지 않는다. 인증 처리 중 들어온 메시지는 4401로 닫는다.
-4. 인증은 연결 시점에만 한다. 연결 중 access token이 만료돼도 연결은 유지되고, 세션 폐기(로그아웃)만 연결을 닫는다.
+4. 인증은 연결 시점에만 한다. 연결 중 access token이 만료돼도 연결은 유지되고, 세션 폐기(로그아웃, refresh token 재사용)만 연결을 닫는다.
 
 ### 12.2 메시지 형식
 
@@ -523,7 +523,7 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 | 5초 안에 `auth`가 오지 않음 | 4401 `Authentication timed out.` |
 | 첫 메시지가 `auth`가 아니거나 `accessToken`이 없음, 인증 중 다른 메시지 | 4401 `Authenticate first.` |
 | 토큰 무효·만료, 폐기된 세션 | 4401 `Invalid or expired token.` |
-| 로그아웃으로 세션 폐기 | 그 세션의 모든 연결을 4401 `Session ended.` |
+| 로그아웃 또는 refresh token 재사용으로 세션 폐기 | 그 세션의 모든 연결을 4401 `Session ended.` |
 | JSON이 아니거나 envelope 형식이 틀림, binary 프레임 | 4400 `Malformed message.` |
 | 16 KiB를 넘는 메시지 | 1009 (`ws`의 `maxPayload`) |
 | 응답을 기다리지 않고 보내 처리 대기 메시지가 32개를 넘음 | 1008 `Too many pending messages.` |
