@@ -5,6 +5,8 @@ const deployedURL = process.env.E2E_BASE_URL;
 const baseURL = deployedURL ?? `http://127.0.0.1:${port}`;
 export default defineConfig({
   testDir: "../tests",
+  // #88 검증은 격리 HTTPS 후보와 별도 인증서 설정이 필요합니다.
+  testIgnore: "**/*acceptance-88.spec.ts",
   outputDir: "../test-results",
   fullyParallel: true,
   // Real games share per-game queues; keep different tests' pairs together.

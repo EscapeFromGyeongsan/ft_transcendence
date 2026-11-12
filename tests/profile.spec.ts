@@ -196,17 +196,15 @@ test("profile edits persist and records privacy protects real match data while p
   ).toBeVisible();
   expect((await page.request.get(avatarURL!)).status()).toBe(404);
 
-  // The real server has no #69 endpoint yet: an actual 404 must remain an error.
-  const unavailable = page.waitForResponse(
+  // 통합 후보에는 실제 친구 API가 연결되어 있으므로 빈 목록도 성공 응답입니다.
+  const friendsResponse = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/friends",
   );
   await page.getByRole("button", { name: "친구 관리", exact: true }).click();
-  expect((await unavailable).status()).toBe(404);
+  expect((await friendsResponse).status()).toBe(200);
   await expect(page.getByTestId("friends-view")).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText(
-    "친구 정보를 찾을 수 없습니다.",
-  );
   await expect(
     page.getByText("아직 친구가 없습니다.", { exact: true }),
-  ).toHaveCount(0);
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });

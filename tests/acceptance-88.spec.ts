@@ -161,7 +161,7 @@ test("#88 real HTTPS accounts, games, records and friends work with keyboard acc
     await expect(
       page.getByRole("heading", { name: "로그인", exact: true }),
     ).toBeVisible();
-    await tabTo(page, page.getByLabel("이메일", { exact: true }));
+    await tabTo(page, page.getByRole("textbox", { name: /^이메일/ }));
     await capture("login");
     for (const [kind, title] of [
       ["terms", "서비스 이용약관"],
