@@ -243,7 +243,19 @@ export function createBrowserTokenStorage(): TokenStorage {
 
   return {
     getTokens,
-    getSessionId: () => (getTokens() ? sessionId : null),
+    getSessionId() {
+      if (getTokens()) return sessionId;
+      try {
+        // 익명 요청도 다른 탭의 새 로그인을 감지하며 그 토큰을 채택하지 않습니다.
+        return (
+          browserStorage("sessionStorage")?.getItem(SESSION_STORAGE_KEY) ||
+          browserStorage("localStorage")?.getItem(SESSION_STORAGE_KEY) ||
+          null
+        );
+      } catch {
+        return null;
+      }
+    },
     prepareRefresh(): void {
       if (!getTokens() || !persisted) return;
       const selected = browserStorage(
