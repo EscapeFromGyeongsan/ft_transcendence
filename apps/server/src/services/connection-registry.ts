@@ -142,6 +142,28 @@ export function createConnectionRegistry() {
       return true;
     },
 
+    /**
+     * 메시지를 버전 순서 검사 없이 경기 구독자에게 보냅니다.
+     *
+     * @remarks
+     * 이탈·복귀 알림처럼 경기 상태가 없는 이벤트와, 일시정지·재개 때의
+     * `match.snapshot`에 씁니다. 일시정지·재개는 `stateVersion`을 올리지 않아
+     * {@link broadcastUpdate}의 "더 새로운 버전만" 검사를 통과하지 못하기
+     * 때문입니다. 클라이언트는 버전이 같거나 높은 `match.snapshot`으로 상태를
+     * 바꿉니다(SDS 9번).
+     *
+     * @param exceptUserId - 이 사용자의 연결에는 보내지 않습니다. 이탈·복귀한
+     *   본인을 빼고 상대에게만 알릴 때 씁니다.
+     */
+    broadcastEvent(matchId: number, message: object, exceptUserId?: number) {
+      const data = JSON.stringify(message);
+      for (const socket of byMatch.get(matchId) ?? []) {
+        if (exceptUserId === undefined || userOf.get(socket) !== exceptUserId) {
+          socket.send(data);
+        }
+      }
+    },
+
     /** 사용자의 인증된 연결 전체(여러 탭·기기)에 메시지를 보냅니다. */
     sendToUser(userId: number, message: object) {
       const data = JSON.stringify(message);
