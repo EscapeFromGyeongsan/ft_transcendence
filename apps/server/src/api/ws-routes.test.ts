@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   afterAll,
   afterEach,
@@ -11,13 +12,19 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import type { Cell } from "@cafe/game-contracts";
+import { gomoku } from "@cafe/game-engine";
 import { buildApp } from "../app.ts";
 import { signAccessToken } from "../core/tokens.ts";
 import {
   createGameCommandService,
   type RegisteredRules,
 } from "../services/game-command-service.ts";
-import { parseEnvelope, wsRateLimit } from "./ws-routes.ts";
+import {
+  MAX_PENDING_MESSAGES,
+  parseCommand,
+  parseEnvelope,
+  wsRateLimit,
+} from "./ws-routes.ts";
 import {
   openTestDatabase,
   resetTestDatabase,
@@ -62,6 +69,22 @@ function sendJson(socket: WebSocket, message: unknown) {
   socket.send(JSON.stringify(message));
 }
 
+// Buffers every message so several replies in a row are not missed.
+function inbox(socket: WebSocket) {
+  const queue: unknown[] = [];
+  const waiting: ((message: unknown) => void)[] = [];
+  socket.on("message", (data) => {
+    const message = JSON.parse(data.toString());
+    const resolve = waiting.shift();
+    if (resolve) resolve(message);
+    else queue.push(message);
+  });
+  return () =>
+    queue.length > 0
+      ? Promise.resolve(queue.shift())
+      : new Promise<unknown>((resolve) => waiting.push(resolve));
+}
+
 test("parseEnvelope accepts only { type, requestId?, payload } objects", () => {
   expect(parseEnvelope('{"type":"ping","payload":{}}')).toEqual({
     type: "ping",
@@ -91,6 +114,41 @@ async function connect(app: FastifyInstance) {
   await app.ready();
   return app.injectWS("/api/ws");
 }
+
+test("parseCommand checks the shared GameCommand shape", () => {
+  const valid = {
+    matchId: 1,
+    gameType: "gomoku",
+    commandId: "8f14e45f-ceea-4e7a-9d3c-2f6b1a0c9b11",
+    expectedVersion: 0,
+    action: { type: "place", row: 7, col: 7, extra: true },
+  };
+  expect(parseCommand(valid)).toEqual({
+    matchId: 1,
+    gameType: "gomoku",
+    commandId: valid.commandId,
+    expectedVersion: 0,
+    action: { type: "place", row: 7, col: 7 },
+  });
+  expect(parseCommand({ ...valid, action: { type: "resign" } })).toMatchObject({
+    action: { type: "resign" },
+  });
+  for (const change of [
+    { matchId: "1" },
+    { gameType: "chess" },
+    { gameType: undefined },
+    { commandId: "c1" },
+    { expectedVersion: -1 },
+    { expectedVersion: 1.5 },
+    { expectedVersion: 2_147_483_648 },
+    { action: { type: "place", row: "7", col: 7 } },
+    { action: { type: "place", row: 7 } },
+    { action: { type: "undo" } },
+    { action: undefined },
+  ]) {
+    expect(parseCommand({ ...valid, ...change })).toBeNull();
+  }
+});
 
 describe("/api/ws without a database", () => {
   let app: FastifyInstance;
@@ -255,6 +313,19 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     socket.terminate();
   });
 
+  test("a client that floods messages without waiting is closed with 1008", async () => {
+    const { socket } = await authenticated(await loginToken());
+    const close = closed(socket);
+    // Each subscribe waits for the DB, so these pile up in the queue.
+    for (let i = 0; i <= MAX_PENDING_MESSAGES; i++) {
+      sendJson(socket, { type: "match.subscribe", payload: { matchId: 1 } });
+    }
+    expect(await close).toEqual({
+      code: 1008,
+      reason: "Too many pending messages.",
+    });
+  });
+
   test("a second message while authenticating is closed with 4401", async () => {
     const accessToken = await loginToken();
     const socket = await connect(app);
@@ -291,6 +362,57 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
     const retryClose = closed(retry);
     sendJson(retry, { type: "auth", payload: { accessToken: token } });
     expect((await retryClose).code).toBe(4401);
+  });
+
+  test("the real gomoku engine refuses off-board moves as INVALID_ACTION", async () => {
+    const realGomoku: RegisteredRules = {
+      version: gomoku.GOMOKU_RULES_VERSION,
+      rules: gomoku.rules,
+      board: gomoku.board,
+    };
+    await app.close();
+    app = await buildApp(
+      {},
+      testDatabaseUrl,
+      { jwtSecret },
+      undefined,
+      {},
+      {
+        gomoku: realGomoku,
+      },
+    );
+    const token = await loginToken(1);
+    await loginToken(2);
+    const matchId = await createGameCommandService(database.db, {
+      gomoku: realGomoku,
+    }).createMatch({ gameType: "gomoku", blackUserId: 1, whiteUserId: 2 });
+    const { socket } = await authenticated(token);
+    const next = inbox(socket);
+    sendJson(socket, { type: "match.subscribe", payload: { matchId } });
+    await next();
+
+    // The DB allows only 0..14, so these must never reach insertMove.
+    for (const [row, col] of [
+      [15, 0],
+      [-1, 0],
+      [0, 15],
+    ]) {
+      sendJson(socket, {
+        type: "game.command",
+        payload: {
+          matchId,
+          gameType: "gomoku",
+          commandId: randomUUID(),
+          expectedVersion: 0,
+          action: { type: "place", row, col },
+        },
+      });
+      expect(await next()).toMatchObject({
+        type: "game.error",
+        payload: { code: "INVALID_ACTION" },
+      });
+    }
+    socket.terminate();
   });
 
   test("refresh token reuse closes open connections of that session", async () => {
@@ -424,6 +546,207 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
         type: "match.unsubscribed",
         requestId: "r1",
         payload: { matchId: matchA },
+      });
+    });
+
+    describe("game commands", () => {
+      let next: (() => Promise<unknown>)[];
+
+      // p1·p2 watch match A, p3·p4 watch match B.
+      beforeEach(async () => {
+        next = sockets.map(inbox);
+        for (const [i, socket] of sockets.entries()) {
+          sendJson(socket, {
+            type: "match.subscribe",
+            payload: { matchId: i < 2 ? matchA : matchB },
+          });
+          await next[i]();
+        }
+      });
+
+      function play(i: number, change: object = {}, commandId = randomUUID()) {
+        sendJson(sockets[i], {
+          type: "game.command",
+          requestId: "c1",
+          payload: {
+            matchId: matchA,
+            gameType: "gomoku",
+            commandId,
+            expectedVersion: 0,
+            action: { type: "place", row: 7, col: 7 },
+            ...change,
+          },
+        });
+        return commandId;
+      }
+
+      // The next message after a ping proves nothing else was queued.
+      async function expectNothingPending(i: number) {
+        sendJson(sockets[i], { type: "ping", payload: {} });
+        expect(await next[i]()).toMatchObject({ type: "pong" });
+      }
+
+      test("an applied move is acked to the sender and broadcast to the match only", async () => {
+        const commandId = play(0);
+        expect(await next[0]()).toEqual({
+          type: "game.ack",
+          requestId: "c1",
+          payload: {
+            matchId: matchA,
+            commandId,
+            stateVersion: 1,
+            duplicate: false,
+          },
+        });
+        for (const i of [0, 1]) {
+          const update = (await next[i]()) as {
+            type: string;
+            payload: { board: unknown[][] };
+          };
+          expect(update).toMatchObject({
+            type: "game.updated",
+            payload: { matchId: matchA, stateVersion: 1, currentPlayerId: 2 },
+          });
+          expect(update.payload.board[7][7]).toBe("black");
+        }
+        for (const i of [0, 1, 2, 3]) await expectNothingPending(i);
+      });
+
+      test("a resent commandId is acked as duplicate and not broadcast again", async () => {
+        const commandId = play(0);
+        await next[0]();
+        await next[0]();
+        play(0, {}, commandId);
+        expect(await next[0]()).toMatchObject({
+          type: "game.ack",
+          payload: { stateVersion: 1, duplicate: true },
+        });
+        expect(await next[1]()).toMatchObject({ type: "game.updated" });
+        await expectNothingPending(0);
+        await expectNothingPending(1);
+      });
+
+      test("a stale expectedVersion gets game.error and the latest snapshot", async () => {
+        play(0);
+        await next[1]();
+        play(1, { action: { type: "place", row: 0, col: 0 } });
+        expect(await next[1]()).toMatchObject({
+          type: "game.error",
+          requestId: "c1",
+          payload: {
+            code: "VERSION_CONFLICT",
+            matchId: matchA,
+            duplicate: false,
+          },
+        });
+        expect(await next[1]()).toMatchObject({
+          type: "match.snapshot",
+          payload: { stateVersion: 1 },
+        });
+      });
+
+      test("a rejected move is reported to the sender only", async () => {
+        play(1);
+        expect(await next[1]()).toMatchObject({
+          type: "game.error",
+          payload: { code: "NOT_YOUR_TURN" },
+        });
+        await expectNothingPending(0);
+        await expectNothingPending(1);
+      });
+
+      test("resign finishes the match for both players", async () => {
+        play(1, { action: { type: "resign" } });
+        await next[1]();
+        for (const i of [0, 1]) {
+          expect(await next[i]()).toMatchObject({
+            type: "game.updated",
+            payload: {
+              status: "finished",
+              result: { outcome: "win", winnerId: 1, reason: "resign" },
+            },
+          });
+        }
+      });
+
+      test("commands after the finish get a duplicate ack or GAME_FINISHED", async () => {
+        const resignId = play(1, { action: { type: "resign" } });
+        await next[1](); // game.ack
+        await next[0](); // game.updated (finished)
+        await next[1](); // game.updated (finished)
+
+        // p2 resends the same resign (its ack was lost).
+        play(1, { action: { type: "resign" } }, resignId);
+        expect(await next[1]()).toMatchObject({
+          type: "game.ack",
+          payload: { duplicate: true },
+        });
+        for (const i of [1, 0]) {
+          expect(await next[i]()).toMatchObject({ type: "game.updated" });
+        }
+
+        // p1 moves after the finish.
+        play(0, { expectedVersion: 1 });
+        expect(await next[0]()).toMatchObject({
+          type: "game.error",
+          payload: { code: "GAME_FINISHED" },
+        });
+      });
+
+      test("a gameType that differs from the match is refused", async () => {
+        play(0, { gameType: "othello" });
+        expect(await next[0]()).toMatchObject({
+          type: "error",
+          payload: { code: "INVALID_MESSAGE", matchId: matchA },
+        });
+        await expectNothingPending(1);
+      });
+
+      test("an invalid command payload is refused before apply", async () => {
+        play(0, { commandId: "not-a-uuid" });
+        expect(await next[0]()).toMatchObject({
+          type: "error",
+          payload: { code: "INVALID_MESSAGE" },
+        });
+        await expectNothingPending(1);
+      });
+
+      test("commands need a subscription", async () => {
+        sendJson(sockets[0], {
+          type: "match.unsubscribe",
+          payload: { matchId: matchA },
+        });
+        await next[0]();
+        play(0);
+        expect(await next[0]()).toMatchObject({
+          type: "game.error",
+          payload: { code: "NOT_SUBSCRIBED" },
+        });
+      });
+
+      test("a newer subscription of the same user takes control", async () => {
+        const { socket: tab2 } = await authenticated(await loginToken(1));
+        sockets.push(tab2);
+        next.push(inbox(tab2));
+        sendJson(tab2, {
+          type: "match.subscribe",
+          payload: { matchId: matchA },
+        });
+        expect(await next[4]()).toMatchObject({ type: "match.snapshot" });
+        expect(await next[0]()).toEqual({
+          type: "session.replaced",
+          payload: { matchId: matchA },
+        });
+
+        play(0);
+        expect(await next[0]()).toMatchObject({
+          type: "game.error",
+          payload: { code: "SESSION_REPLACED" },
+        });
+        play(4);
+        expect(await next[4]()).toMatchObject({ type: "game.ack" });
+        // The replaced tab still watches the match.
+        expect(await next[0]()).toMatchObject({ type: "game.updated" });
       });
     });
   });
