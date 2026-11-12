@@ -156,6 +156,7 @@ export function registerFriendRoutes(
         summary: "친구·받은 요청·보낸 요청 조회",
         response: {
           200: {
+            description: "친구 목록과 받은·보낸 요청",
             type: "object",
             properties: {
               friends: { type: "array", items: acceptedItem },
