@@ -96,6 +96,10 @@ export interface GameWsClientHandlers {
   onPhaseChange?: (phase: WsConnectionPhase, reconnectAttempt: number) => void;
   onAuthOk?: (payload: WsAuthOkPayload) => void;
   onAuthFailed?: (reason: string) => void;
+  /** 인증 후 친구의 온라인 변경을 전달하며, 목록 재조회 계기로 사용합니다. */
+  onPresence?: (payload: { userId: number; online: boolean }) => void;
+  /** 인증 후 친구 관계 변경을 알려 목록 재조회를 요청합니다. */
+  onFriendsChanged?: () => void;
   onQueueJoined?: (payload: { gameType: GameType }) => void;
   onQueueLeft?: () => void;
   onQueueMatched?: (payload: WsQueueMatchedPayload) => void;
@@ -134,7 +138,9 @@ export interface GameWsClient {
   leaveQueue(): boolean;
   subscribeMatch(matchId: MatchId): boolean;
   unsubscribeMatch(matchId: MatchId): boolean;
-  sendGameCommand(command: GameCommand | GomokuCommand | OthelloCommand): boolean;
+  sendGameCommand(
+    command: GameCommand | GomokuCommand | OthelloCommand,
+  ): boolean;
   sendPing(): boolean;
 }
 
@@ -205,9 +211,7 @@ export function isOthelloSnapshotPayload(
 /**
  * 수신된 객체가 서버가 확정한 대국 스냅샷(GomokuSnapshot 또는 OthelloSnapshot)인지 검증합니다.
  */
-export function isGameSnapshotPayload(
-  value: unknown,
-): value is GameSnapshot {
+export function isGameSnapshotPayload(value: unknown): value is GameSnapshot {
   return isGomokuSnapshotPayload(value) || isOthelloSnapshotPayload(value);
 }
 
@@ -226,7 +230,8 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
     options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS;
   const createSocket: WebSocketFactory =
     options.createWebSocket ??
-    ((url: string) => new globalThis.WebSocket(url) as unknown as MinimalWebSocket);
+    ((url: string) =>
+      new globalThis.WebSocket(url) as unknown as MinimalWebSocket);
 
   let socket: MinimalWebSocket | null = null;
   let phase: WsConnectionPhase = "disconnected";
@@ -363,7 +368,9 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
       }
     }
     setPhase("disconnected", reconnectAttempt);
-    options.handlers?.onAuthFailed?.("인증 세션이 만료되었습니다. 다시 로그인해 주세요.");
+    options.handlers?.onAuthFailed?.(
+      "인증 세션이 만료되었습니다. 다시 로그인해 주세요.",
+    );
   }
 
   function handleMessage(rawData: string) {
@@ -406,9 +413,37 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
         break;
       }
 
+      case "presence": {
+        if (
+          phase === "connected" &&
+          !Array.isArray(payload) &&
+          typeof payload.userId === "number" &&
+          Number.isSafeInteger(payload.userId) &&
+          payload.userId > 0 &&
+          typeof payload.online === "boolean"
+        ) {
+          options.handlers?.onPresence?.({
+            userId: payload.userId,
+            online: payload.online,
+          });
+        }
+        break;
+      }
+
+      case "friends.changed": {
+        if (
+          phase === "connected" &&
+          typeof parsed.payload === "object" &&
+          parsed.payload !== null &&
+          !Array.isArray(parsed.payload)
+        ) {
+          options.handlers?.onFriendsChanged?.();
+        }
+        break;
+      }
+
       case "queue.joined": {
-        const gameType =
-          payload.gameType === "othello" ? "othello" : "gomoku";
+        const gameType = payload.gameType === "othello" ? "othello" : "gomoku";
         options.handlers?.onQueueJoined?.({ gameType });
         break;
       }

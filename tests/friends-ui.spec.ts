@@ -2,6 +2,79 @@ import { expect, test } from "@playwright/test";
 import { installFriendsFixture } from "./helpers/friends-fixture.ts";
 
 test.describe("friends contract UI — synthetic REST/auth/WS, not server integration", () => {
+  test("온라인 알림은 목록을 다시 읽고 조회 중 겹친 알림과 삭제를 반영한다", async ({
+    page,
+  }) => {
+    const fixture = await installFriendsFixture(page);
+    await page.goto("/friends");
+    const friends = page.getByRole("list", { name: "친구 목록", exact: true });
+    await expect(friends.getByText("온라인", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/온라인 상태는 마지막 목록 조회 시점 기준/),
+    ).toBeVisible();
+
+    fixture.setOnline(201, null);
+    fixture.notify("presence", { userId: 201, online: false });
+    await expect(friends.getByText("확인 불가", { exact: true })).toBeVisible();
+    fixture.setOnline(201, false);
+    // 알림 payload를 직접 적용하지 않고 현재 REST 값을 사용합니다.
+    fixture.notify("presence", { userId: 201, online: true });
+    await expect(friends.getByText("오프라인", { exact: true })).toBeVisible();
+
+    const baseline = fixture.getReads();
+    const held = fixture.holdNextRead();
+    await page.getByRole("button", { name: "목록 새로고침" }).click();
+    await held.didStart;
+    fixture.setOnline(201, true);
+    fixture.notify("presence", { userId: 201, online: false });
+    fixture.notify("friends.changed", {});
+    // 무효화가 화면에 전달된 뒤 이전 조회를 완료합니다.
+    await expect(
+      page.getByRole("button", { name: "목록 새로고침" }),
+    ).toBeDisabled();
+    held.release();
+    await expect(friends.getByText("온라인", { exact: true })).toBeVisible();
+    await expect.poll(fixture.getReads).toBe(baseline + 2);
+
+    fixture.removeFriend(201);
+    fixture.notify("friends.changed", {});
+    await expect(
+      page.getByText("아직 친구가 없습니다.", { exact: true }),
+    ).toBeVisible();
+    const removedReads = fixture.getReads();
+    fixture.notify("presence", { userId: 201, online: true });
+    await expect.poll(fixture.getReads).toBeGreaterThan(removedReads);
+    await expect(
+      page.getByRole("button", { name: "온라인친구 프로필 보기" }),
+    ).toHaveCount(0);
+  });
+
+  test("멈춘 목록은 timeout 후 오류로 남고 새 조회로 복구한다", async ({
+    page,
+  }) => {
+    test.setTimeout(45_000);
+    const fixture = await installFriendsFixture(page);
+    await page.goto("/friends");
+    const friend = page.getByRole("button", { name: "온라인친구 프로필 보기" });
+    await expect(friend).toBeVisible();
+    const held = fixture.holdNextRead();
+    await page.getByRole("button", { name: "목록 새로고침" }).click();
+    await held.didStart;
+    await expect(page.getByRole("alert")).toContainText("응답 시간이 초과", {
+      timeout: 20_000,
+    });
+    const reload = page.getByRole("button", { name: "목록 새로고침" });
+    await expect(reload).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "친구 삭제" }),
+    ).toBeDisabled();
+    await expect(friend).toBeVisible();
+    await reload.click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "친구 삭제" })).toBeEnabled();
+    held.release();
+  });
+
   test("requests, confirmation keyboard flow, reload failure and profile navigation", async ({
     page,
   }, testInfo) => {

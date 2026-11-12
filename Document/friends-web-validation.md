@@ -1,70 +1,74 @@
-# 친구 REST 화면 구현 및 검증
+# 친구 화면 검토 반영 및 연동 검증
 
-추적: [#80](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/80). 실행일: 2026-11-09 KST.
+실행일: 2026-11-12 JST. 추적: [#90](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/90), [#80](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/80).
 
-기준: PR #79의 `8b93fb5`, 작업 브랜치 `feat/web-friends`. 친구 API는 E의 #69, 온라인·관계 변경 알림은 #38에서 계약 확인이 남아 있다. 이번 변경은 서버·DB migration을 추가하지 않는다.
+제품 기준은 #90의 `0f111a2`와 이번 변경분이다. 서버 계약은 #95 `758459e197bf23ee48682166656548b192f9c1a5`, 온라인 집계·알림은 #98 `07a4989e307f0fe6b7b8ecf3c016a06b077c763d`의 소스·리뷰와 대조했다. 두 서버 PR은 검증 당시 미병합이다. #90에 서버 코드·migration·새 의존성을 추가하지 않는다.
 
-## 구현 범위와 계약 가정
+## 반영 내용
 
-- 로그인 전용 `/friends`, 로비·계정 메뉴 진입, 상대 프로필에서 닉네임 검색, 직접 접근·새로고침·뒤로가기.
-- 닉네임 접두사 검색, 친구·받은 요청·보낸 요청, 요청·수락·거절·친구 삭제와 상대 프로필 이동.
-- 거절 정책을 안내하는 확인 대화상자와 별도 삭제 확인. 기본 취소 포커스, native modal 키보드 순환, Escape, 닫힌 뒤 포커스 복귀.
-- 모바일에서 긴 닉네임이 헤더의 로고·온라인 표시를 밀어 여러 줄로 꺾이는 현상을 보정했다. 좁은 화면의 브랜드 이름은 보조 기술에 유지하고 닉네임은 말줄임으로 표시한다. 브라우저 시나리오에 31자 닉네임으로 헤더 경계를 확인하는 검증을 포함한다.
-- 서버 응답 전에는 관계를 변경하지 않는다. 변경 성공 이후 목록 재조회에 실패하면 성공 안내와 목록 오류를 함께 표시하고, 이전 목록의 변경 버튼을 막는다.
-- 없는 API·잘못된 JSON·네트워크 오류를 빈 목록이나 오프라인으로 표시하지 않는다. 연결 복구 후 목록을 다시 읽으며 연결이 끊긴 동안 온라인 상태는 확인 불가로 표시한다.
-- 조회 직렬화·중복 갱신 병합, 검색 응답 역전·계정 변경·화면 이탈 뒤 늦은 응답 폐기, 최신 요청 ID 확인, 중복 변경 방지, 충돌 후 재조회.
+- 목록·검색·변경 요청은 각각 15초로 제한한다. timeout이면 개별 fetch를 취소하고 처리 결과 미확정을 알린다. 공유 인증 refresh는 취소하지 않으며, 지연된 refresh가 끝나도 timeout된 변경 요청을 새로 전송하거나 재시도하지 않는다.
+- 변경 성공과 후속 조회 실패를 구분한다. timeout·404·409 이후에는 목록을 다시 읽고, 최신 목록을 확인하기 전까지 오래된 목록의 변경 버튼을 막는다. 변경 요청 자체는 자동 재전송하지 않는다.
+- 온라인 상태가 마지막 목록 조회 시점의 값임을 화면에 안내한다. 현재 #95의 `online`은 boolean이며 집계가 연결되지 않으면 503이다. B 검토안의 명시적 `null`도 확인 불가로 보존한다. 누락·잘못된 타입·503을 오프라인으로 바꾸지 않는다.
+- 현재 인증된 WS의 `presence { userId, online }`, `friends.changed {}`는 목록 재조회 계기로만 사용한다. 알림 payload로 관계·온라인 값을 직접 덮지 않는다. 겹친 조회는 기존 controller로 병합하며 이전 계정·화면·소켓의 응답을 폐기한다. 연결 복구·화면 진입·수동 새로고침도 REST를 다시 읽는다.
+- 요청·수락·거절·삭제, 상대 프로필 이동, URL 방문 기록, 확인 대화상자의 취소 포커스·Tab·Escape·포커스 복귀를 유지한다. 초대·채팅·회원 탈퇴는 범위 밖이다.
 
-목록·요청 DTO는 PR #68의 `a14ba86` 기준 SDS 2.10.29를 따른다. 검색 endpoint의 JSON 구조는 미확정이다. 클라이언트의 임시 읽기 형식은 기존 공개 프로필과 같은 `{ id, nickname, avatarUrl }[]`이며, 내부에서 `{ userId, nickname, avatarUrl }`로 바꾼다. 이 가정은 **B·E 확인 및 실제 #69 API와의 대조가 필요**하다. 형태가 다르면 데이터 대신 오류를 표시한다. 검색 입력은 1~32자의 접두사를 사용한다.
+## 계약 대조
 
-현재 `presence`나 친구 관계 변경 이벤트를 새로 정의·구현하지 않았다. 단일 화면의 변경 후 재조회, 수동 새로고침, WS 인증 연결 복구 재조회가 제공된다. 상대방·다른 탭의 즉시 갱신과 실제 연결 집계의 정확성은 통합 대기다. 초대·재대국·채팅도 범위 밖이다.
+| 항목      | 검증한 계약                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 검색      | `GET /api/users?nickname=접두사` → `{ id, nickname, avatarUrl }[]`, 최대 20명, 본인 제외. 입력은 trim한 1~32자. 내부에서는 `userId`로 변환한다.                      |
+| 목록      | `GET /api/friends` → `friends/incoming/outgoing`. 친구는 `userId/nickname/avatarUrl/online`, pending 요청은 `requestId/createdAt`도 포함한다.                        |
+| 변경      | 요청 생성은 `userId`, 수락·거절은 `requestId`, 친구 삭제는 `userId`를 사용한다. 생성 201 또는 맞요청 수락 200, 수락 200, 거절·삭제 204.                              |
+| 경합·권한 | 삭제된 친구·이전 요청 ID는 404, 본인이 보낸 요청의 수락은 403, 충돌은 409. #95의 거절 후 재요청은 409 `REQUEST_DECLINED`이며, B 검토안의 403도 같은 코드로 안내한다. |
 
-## 검증의 구분
+## 검증의 구분과 결과
 
-| 검증                        | 실제 대상·대체 범위                                                                                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `friends-api.test.ts`       | 인증 클라이언트를 사용하되 fetch 응답을 대체한다. DTO·경로·요청 ID·JSON boolean·오류 분기·검색 임시 형식을 검증한다.                                            |
-| `friends-state.test.ts`     | 지연·실패를 제어하는 API 대체물로 조회 순서, 중복, 화면 수명, 변경 성공과 조회 실패를 검증한다.                                                                 |
-| `friends-ui.spec.ts`        | 실제 Chromium·React UI에서 **친구 REST·인증·프로필·WS 응답을 모두 대체**한다. 실제 친구 서버·DB 통합 결과가 아니다.                                             |
-| 기존 `profile.spec.ts` 후속 | 실제 계정·API·WS·PostgreSQL에서 프로필·전적 공개 회귀 후 `/api/friends` 미제공 응답을 오류로 표시하는지 확인한다. 친구의 정상 CRUD 통합을 검증하는 것은 아니다. |
-| 기존 오목·오델로·약관 E2E   | 기존 실제 API·WS·PostgreSQL 시나리오를 유지한다.                                                                                                                |
+환경: macOS / Node.js 26 / PostgreSQL 17 / Playwright 1.63 / 설치된 Chrome 157. 검증은 HTTP·WS loopback에서 수행했다. Chromium 다운로드 캐시 대신 임시 Playwright config로 기존 두 project의 `channel: "chrome"`만 지정했다. 해당 config와 실행 산출물은 커밋하지 않는다.
 
-친구 UI 시나리오는 데스크톱·모바일에서 요청 처리 중 상태 유지, 거절 대화상자의 키보드·Escape·포커스, 변경 성공 후 재조회 실패와 읽기 재시도, 수락·삭제·프로필 이동·새로고침·방문 기록을 확인한다. 별도 시나리오에서 비로그인 접근을 막고, 이전 계정의 목록 응답을 다음 계정 진입 후 전달해 화면에 남지 않는지 확인한다. 합성 사용자 데이터만 사용하며 실제 소셜 계정을 생성하지 않는다.
+| 실행              | 대상과 결과                                                                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 전체 단위·DB      | 별도 `_test` PostgreSQL DB, 37개 파일·401개 통과, skip 없음. auth refresh·지연 취소·DTO·controller·WS 인증 경계 포함.                                                                                                           |
+| 친구 UI           | `friends-ui.spec.ts`: REST·인증·프로필·WS를 대체한 합성 fixture. desktop/mobile 8개 통과. 실제 15초 timeout·재조회 복구·알림 병합·null 표시·키보드·계정 전환 포함. #95의 409로 fixture를 맞춘 뒤 해당 흐름 2개도 다시 통과했다. |
+| 실제 두 계정 연동 | 아래 미공개 서버 후보와 실제 REST·WS·PostgreSQL을 사용한 `friends-integration.spec.ts`, desktop/mobile 2개 통과. 친구 응답을 대체하지 않았다.                                                                                   |
+| 기존 화면 회귀    | 실제 API·WS·DB 및 기존 라우팅 fixture로 인증 8개, 홈·약관·OAuth·오목·오델로 32개, 프로필·전적 공개 2개 통과. 기존 모바일 전체 대국 2개는 의도적 skip.                                                                           |
+| 정적 검증         | 타입 검사·Vite build, 변경 소스·검증 기록 Prettier와 전체 diff 공백 검사 통과. 독립 읽기 전용 검토에서 새 P1/P2 없음.                                                                                                           |
+
+실제 두 계정 시나리오는 검색→요청→상대 자동 갱신→수락→양쪽 친구 표시, 한 탭 종료 시 온라인 유지·마지막 탭 종료 시 오프라인·재접속 시 온라인, 삭제와 두 번째 삭제의 404, 거절 후 재요청 차단, 역방향 새 요청 ID, 이전 요청 ID의 404·발신자 수락의 403, 상대 프로필 이동을 확인했다. 이는 두 PC나 운영 환경의 인수 검증 결과가 아니다.
+
+2026-11-09 최초 합성 UI 검증 기록은 [변경 전 문서](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/0f111a28b498c3280bcf80b9b51410b89c6fd068/Document/friends-web-validation.md)에 보존돼 있다.
+
+## 미공개 서버 후보의 범위
+
+별도 worktree에서 #90 제품 코드에 다음 서버 소스를 연결했다. 이 후보를 #90에 병합하거나 push하지 않았다.
+
+- #95: `db/schema/friendships.ts`, `services/friend-service.ts`, `api/friend-routes.ts` 원본.
+- #98: `services/connection-registry.ts`, `services/presence.ts` 원본. WS에는 인증 완료 직전 사용자 집계 등록 단계만 적용했다.
+- 임시 app 연결: 기존 경기 엔진·게임 서비스·세션 폐기를 유지하며 친구 서비스에 온라인 조회를 주입했다. presence 수신자는 accepted 친구에서 조회하고, 성공한 변경 트랜잭션이 반환된 뒤 양쪽 사용자에게 `friends.changed`를 보냈다. 알림 실패는 REST 성공을 취소하지 않는다.
+- 기존 #90 migration을 적용한 새 전용 DB에 #95의 `0004_friendships.sql`만 한 번 bootstrap했다. migration·journal·snapshot은 변경하지 않았다. **정식 migration 통합 순서를 검증한 것이 아니다.**
+
+DB는 `codex_friends90_20261112_test`와 `codex_friends90_20261112_e2e`, API/Vite는 전용 포트를 사용했다. #85 작업의 DB·포트·worktree를 변경하지 않았다. 단위 테스트의 테이블 초기화는 `_test` DB에서만 수행했다.
 
 ## 재현
 
-```powershell
-npm.cmd ci
-npx.cmd playwright install chromium
-npm.cmd test -- apps/web/src
-npm.cmd run build
+```sh
+npm ci
+npx playwright install chromium
+npm test -- apps/web/src
+npm run build
+npm run test:e2e -- tests/friends-ui.spec.ts --workers=1 --retries=0
 ```
 
-전체 브라우저 실행에는 별도 PostgreSQL 검증 DB와 API 환경이 필요하다. 실행 방법은 [직전 E2E 환경 설정](profile-records-privacy-validation.md#재현)을 따른다. 실제 서버·전적 공개 회귀를 포함하므로 migration `0004`까지 적용한다.
+전체 DB 테스트에는 별도 폐기 가능한 `_test` DB의 URL을 `TEST_DATABASE_URL`로 지정한다. 브라우저 DB는 별도로 만들고 제품 migration을 적용한다. 환경 설정은 [프로필 검증의 재현 절차](profile-records-privacy-validation.md#재현)를 따른다. 여러 브라우저 실행은 순서대로 진행하고 인증 rate limit을 바꾸지 않은 새 API 인스턴스로 실행했다. 프로필을 desktop/mobile 연속 실행했을 때 두 번째 project에서 refresh 429가 발생한 것을 trace로 확인했다. 새 API 인스턴스로 모바일만 분리한 실행은 통과했으며 제품 제한이나 테스트 재시도 횟수는 변경하지 않았다.
 
-```powershell
-npm.cmd run test:e2e -- tests/friends-ui.spec.ts --workers=1 --retries=0 --reporter=line
-npm.cmd run test:e2e -- --workers=1 --retries=0 --reporter=line
+실제 친구 연동 테스트는 기본적으로 skip한다. 위 후보 또는 해당 계약과 app 연결이 통합된 서버·전용 DB를 준비한 뒤 실행한다. `E2E_BASE_URL`은 선택 사항이며, 지정하지 않으면 기존 Playwright 설정이 로컬 API·Vite를 시작한다.
+
+```sh
+E2E_FRIENDS_INTEGRATION=1 npm run test:e2e -- tests/friends-integration.spec.ts --workers=1 --retries=0
 ```
 
-E2E가 끝난 뒤 다른 일회용 PostgreSQL DB를 `TEST_DATABASE_URL`로 지정해 전체 단위·DB 회귀를 실행한다. `_test`로 끝나는 실제 DB 이름을 확인하고 migration·테이블 초기화를 수행하는 기존 도우미를 사용한다.
+## 병합·출시 전 남은 조건
 
-## 실행 결과
-
-환경: Windows / Node.js 26.13.0 / PostgreSQL 17.11 / Playwright 1.63.0 / Chromium 153. 기존 개발 DB·`.env`를 사용하지 않고 임시 loopback PostgreSQL의 `cafe_e2e_test`·`cafe_privacy_test`와 임시 아바타 경로를 사용했다. 검증 대상은 `8b93fb5` 이후 작업 변경분이다.
-
-| 실행                | 결과                                                              |
-| ------------------- | ----------------------------------------------------------------- |
-| 웹 단위 테스트      | 8개 파일·71개 통과                                                |
-| 친구 UI 브라우저    | 최종 전체 실행에 포함한 데스크톱·모바일 4개 모두 통과 (응답 대체) |
-| 전체 브라우저 회귀  | 총 18개: 16개 통과·기존 모바일 대국 2개 의도적 skip (55.3초)      |
-| 전체 단위·DB 통합   | 34개 파일·336개 모두 통과, skip 없음 (56.18초)                    |
-| 타입 검사           | 통과                                                              |
-| Vite 빌드·포맷·공백 | 최종 변경분 통과                                                  |
-
-첫 브라우저 실행은 테스트 fixture가 Vite의 `/src/api/*.ts`까지 가로채 화면을 읽지 못했다. 대체 범위를 실제 `/api/` 경로로 한정해 수정했다. 실제 친구 API가 제공됐다는 근거로 이 fixture를 사용하지 않는다.
-
-후속 실행에서 로그인 필수 항목 레이블과 닉네임·온라인 문구가 붙어 중복되는 테스트 선택자를 수정했다. 제품 코드에서는 모달의 Shift+Tab 순환을 보완하고 모바일 헤더를 보정했다. 단위·DB 회귀는 브라우저 실행과 분리해서 실행했으며 기존 heartbeat 코드나 시간 제한은 변경하지 않았다.
-
-최종 브라우저 실행 뒤 데스크톱·모바일 스크린샷을 확인했다. 친구 합성 데이터의 개요 스크린샷은 각 Playwright 결과 폴더의 `friends-overview.png`에 저장한다. 실제 친구 서버·DB의 증거 사진이 아니다. 검증용 API·Vite는 Playwright 종료와 함께 정리했고 임시 PostgreSQL은 마지막 검사 후 중지했다. 임시 바이너리·DB·브라우저·아바타·실행 결과는 저장소에 포함하지 않는다.
-
-남은 항목: B·E의 검색 JSON·응답·오류 계약 확인, #69 실제 친구 API·DB·권한 검증, D·E의 온라인 집계·이벤트 계약 및 두 계정·다중 탭 실제 통합. HTTPS/WSS·실제 두 PC·성능 부하·비작성자 재현은 미실행이다.
+- [#98 변경 요청](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98#pullrequestreview-5839536279): 지연된 친구 수신자 조회 뒤 관계가 삭제되면 이전 친구에게 presence가 갈 수 있다. 클라이언트의 REST 재조회는 서버의 정보 노출을 해결하지 않는다. #98에서 수정·검증해야 한다.
+- [#95 후속 검토](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95#pullrequestreview-5866981308): #89 탈퇴 계약에 맞춘 `deleted_at` 검색·요청 대상 필터, 사용자 잠금·관계 삭제 경합 처리가 필요하다. #89→#95→#79 migration 충돌도 정식 통합 시 해결·검증해야 한다. 적용된 migration을 단순 이름 변경하지 않는다.
+- 온라인 registry 주입과 변경 후 `friends.changed` 발행은 서버 통합에 들어가야 한다. 미연결 #95의 503을 프런트에서 빈 목록·오프라인으로 숨기지 않는다.
+- #85 병합 시 공용 `App.tsx`·`auth-client.ts` 변경을 함께 검토한다. 탈퇴·아바타 파일 삭제·HTTPS/WSS·두 PC·부하·비작성자 재현·#88 최종 인수는 이번 결과에 포함하지 않는다. #80 종료와 운영 배포 완료를 주장하지 않는다.

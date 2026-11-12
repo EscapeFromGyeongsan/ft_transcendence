@@ -1,16 +1,16 @@
 import { authApi, type RequestOptions } from "./auth-client.ts";
 import { ApiError, getErrorMessage } from "./errors.ts";
 
-/** SDS 2.10.29의 친구·요청 공통 사용자 정보입니다. 이메일은 표시하지 않습니다. */
+/** PR #95 친구·요청 공통 사용자 정보입니다. 이메일은 표시하지 않습니다. */
 export interface FriendUser {
   userId: number;
   nickname: string;
   avatarUrl: string | null;
 }
 
-/** 목록에서 서버가 확인한 온라인 상태를 포함합니다. 연결 단절 시 화면은 이를 확정하지 않습니다. */
+/** 마지막 조회 시점의 온라인 상태이며, null은 B 검토안의 집계 불가 값으로 보존합니다. */
 export interface FriendEntry extends FriendUser {
-  online: boolean;
+  online: boolean | null;
 }
 
 /** 받은/보낸 pending 요청입니다. 수락·거절은 userId 대신 이 요청의 ID를 사용합니다. */
@@ -26,7 +26,7 @@ export interface FriendsList {
   outgoing: FriendRequest[];
 }
 
-/** 요청 생성·맞요청 수락·명시적 수락의 확인 응답 초안입니다. */
+/** 요청 생성·맞요청 수락·명시적 수락의 확인 응답입니다. */
 export interface FriendRequestResult extends FriendUser {
   requestId: number;
   status: "pending" | "accepted";
@@ -72,6 +72,8 @@ export function getFriendsErrorMessage(error: unknown): string {
       "친구 관계가 변경되었습니다. 목록을 다시 확인해 주세요.",
     FRIENDS_INVALID_RESPONSE:
       "친구 정보를 확인할 수 없습니다. 목록을 다시 불러와 주세요.",
+    FRIENDS_TIMEOUT:
+      "응답 시간이 초과되어 처리 결과를 확인하지 못했습니다. 최신 목록을 확인해 주세요.",
   };
   if (messages[error.code]) return messages[error.code];
   if (error.status === 404)
@@ -83,11 +85,41 @@ export function getFriendsErrorMessage(error: unknown): string {
 }
 
 /**
- * 친구 REST 초안 클라이언트를 만듭니다. #69 서버 통합과 B·E 계약 확인은 별도입니다.
- * 검색만 기존 공개 프로필의 `{ id, nickname, avatarUrl }[]`를 임시 읽기 형식으로 사용합니다.
- * 형식이 다르면 오류로 처리하며, 이 가정은 서버 계약 확정을 뜻하지 않습니다.
+ * PR #95의 친구 REST 응답을 검증하고 각 요청의 대기를 15초로 제한합니다.
+ *
+ * @remarks
+ * 제한 시간이 지나면 처리 결과를 확정하지 않습니다. 공유 refresh는 유지하되 취소된 요청은 재전송하지 않습니다.
+ * 현재 #95는 온라인 집계 미연결 시 503을 반환하며, null 호환 처리가 이를 성공 응답으로 바꾸지는 않습니다.
  */
-export function createFriendsApi(request: RequestFn) {
+export function createFriendsApi(send: RequestFn) {
+  async function request<T>(
+    path: string,
+    options?: RequestOptions,
+  ): Promise<T> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        const error = new ApiError(
+          408,
+          "FRIENDS_TIMEOUT",
+          "Friends request timed out.",
+        );
+        controller.abort(error);
+        reject(error);
+      }, 15_000);
+    });
+    try {
+      // 공유 refresh는 취소하지 않고, 친구 요청의 대기와 후속 fetch만 종료합니다.
+      return await Promise.race([
+        send<T>(path, { ...options, signal: controller.signal }),
+        timeout,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function requestResult(path: string, body?: { userId: number }) {
     const value = await request<unknown>(path, { method: "POST", body });
     if (
@@ -113,7 +145,11 @@ export function createFriendsApi(request: RequestFn) {
       )
         return invalid();
       const friends = value.friends.map((entry) => {
-        if (!user(entry) || typeof entry.online !== "boolean") return invalid();
+        if (
+          !user(entry) ||
+          (typeof entry.online !== "boolean" && entry.online !== null)
+        )
+          return invalid();
         return { ...pickUser(entry), online: entry.online };
       });
       const requests = (entries: unknown[]): FriendRequest[] =>

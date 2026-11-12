@@ -284,6 +284,7 @@ export function App() {
   // 프로필 화면에서 조회 중인 사용자 (본인 또는 다른 사용자)
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
   const [friendsQuery, setFriendsQuery] = useState("");
+  const [friendsRefreshVersion, setFriendsRefreshVersion] = useState(0);
 
   // Realtime Gomoku & Matchmaking state
   const wsClientRef = useRef<GameWsClient | null>(null);
@@ -613,6 +614,12 @@ export function App() {
         return pair.accessToken;
       },
       handlers: {
+        onPresence() {
+          setFriendsRefreshVersion((version) => version + 1);
+        },
+        onFriendsChanged() {
+          setFriendsRefreshVersion((version) => version + 1);
+        },
         onPhaseChange(phase, reconnectAttempt) {
           setGomokuState((prev) =>
             applyConnectionPhase(prev, phase, reconnectAttempt),
@@ -2249,6 +2256,7 @@ export function App() {
             key={currentUser.id}
             currentUserId={currentUser.id}
             connected={gomokuState.connectionPhase === "connected"}
+            refreshVersion={friendsRefreshVersion}
             initialQuery={friendsQuery}
             onOpenProfile={openProfile}
             onBack={() => switchView("lobby")}

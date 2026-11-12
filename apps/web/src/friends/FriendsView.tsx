@@ -17,6 +17,8 @@ import { createFriendsController, type FriendAction } from "./friends-state.ts";
 interface FriendsViewProps {
   currentUserId: number;
   connected: boolean;
+  /** 인증된 친구·온라인 알림을 받으면 증가하며, 알림 값 대신 목록을 다시 조회합니다. */
+  refreshVersion?: number;
   initialQuery?: string;
   onOpenProfile: (userId: number) => void;
   onBack: () => void;
@@ -32,6 +34,7 @@ interface Confirmation {
 export function FriendsView({
   currentUserId,
   connected,
+  refreshVersion = 0,
   initialQuery = "",
   onOpenProfile,
   onBack,
@@ -49,6 +52,7 @@ export function FriendsView({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const activeRef = useRef(false);
+  const refreshVersionRef = useRef(refreshVersion);
   const cannotAct =
     state.pending !== null || state.loading || state.stale || !state.data;
 
@@ -64,6 +68,11 @@ export function FriendsView({
   useEffect(() => {
     controller.setConnected(connected);
   }, [controller, connected]);
+  useEffect(() => {
+    if (refreshVersionRef.current === refreshVersion) return;
+    refreshVersionRef.current = refreshVersion;
+    void controller.refresh();
+  }, [controller, refreshVersion]);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!confirmation || !dialog) return;
@@ -157,11 +166,13 @@ export function FriendsView({
     event.preventDefault();
     void controller.search();
   }
-  const onlineLabel = (online: boolean) =>
+  const onlineLabel = (online: boolean | null) =>
     state.onlineFresh && !state.stale && state.connected
-      ? online
-        ? "온라인"
-        : "오프라인"
+      ? online === null
+        ? "확인 불가"
+        : online
+          ? "온라인"
+          : "오프라인"
       : state.loading
         ? "확인 중"
         : "확인 불가";
@@ -301,6 +312,10 @@ export function FriendsView({
           <h2 className="cbc-profile-section-title" id="friends-list-title">
             친구 목록
           </h2>
+          <p className="cbc-profile-hint">
+            온라인 상태는 마지막 목록 조회 시점 기준입니다. 목록 새로고침으로
+            다시 확인할 수 있습니다.
+          </p>
           {state.data ? (
             state.data.friends.length === 0 ? (
               <p>아직 친구가 없습니다.</p>

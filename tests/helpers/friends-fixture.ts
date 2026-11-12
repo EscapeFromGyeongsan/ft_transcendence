@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 import type { AuthUser } from "../../apps/web/src/api/auth-client.ts";
 import type { FriendsList } from "../../apps/web/src/api/friends-api.ts";
 
@@ -34,6 +34,8 @@ export async function installFriendsFixture(page: Page, signedIn = true) {
   let nextRead: ReturnType<typeof barrier> | null = null;
   let nextWrite: ReturnType<typeof barrier> | null = null;
   let writes = 0;
+  let reads = 0;
+  const sockets = new Set<WebSocketRoute>();
   const pair = {
     accessToken: "contract-access",
     refreshToken: "contract-refresh",
@@ -54,6 +56,8 @@ export async function installFriendsFixture(page: Page, signedIn = true) {
       }
     });
   await page.routeWebSocket("**/api/ws", (socket) => {
+    sockets.add(socket);
+    socket.onClose(() => sockets.delete(socket));
     socket.onMessage((raw) => {
       const message = JSON.parse(String(raw));
       if (message.type === "auth")
@@ -89,6 +93,7 @@ export async function installFriendsFixture(page: Page, signedIn = true) {
     if (path === "/api/auth/refresh") return route.fulfill({ json: pair });
     if (path === "/api/auth/logout") return route.fulfill({ status: 204 });
     if (path === "/api/friends" && req.method() === "GET") {
+      reads++;
       const snapshot = structuredClone(
         account.id === 502 ? { friends: [], incoming: [], outgoing: [] } : list,
       );
@@ -190,6 +195,20 @@ export async function installFriendsFixture(page: Page, signedIn = true) {
   });
   return {
     getWrites: () => writes,
+    getReads: () => reads,
+    setOnline(userId: number, online: boolean | null) {
+      list.friends.find((person) => person.userId === userId)!.online = online;
+    },
+    removeFriend(userId: number) {
+      list.friends = list.friends.filter((person) => person.userId !== userId);
+    },
+    notify(
+      type: "presence" | "friends.changed",
+      payload: Record<string, unknown>,
+    ) {
+      for (const socket of sockets)
+        socket.send(JSON.stringify({ type, payload }));
+    },
     failNextRead: () => {
       failRead = true;
     },

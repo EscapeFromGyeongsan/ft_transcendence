@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/errors.ts";
-import type { FriendsApi, FriendsList } from "../api/friends-api.ts";
+import {
+  createFriendsApi,
+  type FriendsApi,
+  type FriendsList,
+} from "../api/friends-api.ts";
 import { createFriendsController } from "./friends-state.ts";
 
 const person = { userId: 2, nickname: "player2", avatarUrl: null };
@@ -43,7 +47,126 @@ function setup(data = incoming()) {
   return { api, controller, ready };
 }
 
+afterEach(() => vi.useRealTimers());
+
 describe("friends screen request lifecycle", () => {
+  it("삭제 404와 요청 충돌 뒤 목록만 다시 읽고 변경 요청을 재전송하지 않는다", async () => {
+    const { api, controller, ready } = setup({
+      ...empty(),
+      friends: [{ ...person, online: true }],
+    });
+    controller.start(true);
+    await ready();
+    api.removeFriend.mockRejectedValueOnce(
+      new ApiError(404, "NOT_FOUND", "gone"),
+    );
+    api.getFriends.mockResolvedValueOnce(empty());
+    expect(await controller.perform({ kind: "remove", userId: 2 })).toBe(false);
+    expect(api.removeFriend).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot()).toMatchObject({
+      pending: null,
+      data: empty(),
+      stale: false,
+      notice: null,
+    });
+    expect(controller.getSnapshot().actionError).toContain("찾을 수 없습니다");
+    api.sendRequest.mockRejectedValueOnce(
+      new ApiError(409, "FRIEND_REQUEST_CONFLICT", "conflict"),
+    );
+    expect(await controller.perform({ kind: "request", userId: 2 })).toBe(
+      false,
+    );
+    expect(api.sendRequest).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().actionError).toContain("관계가 변경");
+    expect(api.getFriends).toHaveBeenCalledTimes(3);
+    controller.stop();
+  });
+  it("releases a stalled list and search so a fresh read can recover", async () => {
+    vi.useFakeTimers();
+    const request = vi.fn<Parameters<typeof createFriendsApi>[0]>();
+    const stalledList = deferred<FriendsList>();
+    const stalledSearch = deferred<(typeof person)[]>();
+    request
+      .mockReturnValueOnce(stalledList.promise)
+      .mockReturnValueOnce(stalledSearch.promise);
+    const controller = createFriendsController(
+      createFriendsApi(request as Parameters<typeof createFriendsApi>[0]),
+      1,
+    );
+    controller.start(true);
+    controller.setQuery("player");
+    const search = controller.search();
+    await vi.advanceTimersByTimeAsync(15_000);
+    await search;
+    expect(controller.getSnapshot()).toMatchObject({
+      loading: false,
+      searching: false,
+      stale: true,
+    });
+    expect(controller.getSnapshot().listError).toContain("초과");
+    expect(controller.getSnapshot().searchError).toContain("초과");
+    stalledList.resolve(incoming());
+    stalledSearch.reject(new Error("late failure"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().data).toBeNull();
+    request.mockResolvedValueOnce(empty());
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      loading: false,
+      stale: false,
+      data: empty(),
+      listError: null,
+    });
+    controller.stop();
+  });
+
+  it("keeps a timed-out mutation unconfirmed and blocks writes until a successful list read", async () => {
+    vi.useFakeTimers();
+    const request = vi.fn<Parameters<typeof createFriendsApi>[0]>();
+    const stalledWrite = deferred<void>();
+    const stalledRead = deferred<FriendsList>();
+    request
+      .mockResolvedValueOnce(incoming())
+      .mockReturnValueOnce(stalledWrite.promise)
+      .mockReturnValueOnce(stalledRead.promise);
+    const controller = createFriendsController(
+      createFriendsApi(request as Parameters<typeof createFriendsApi>[0]),
+      1,
+    );
+    controller.start(true);
+    await vi.advanceTimersByTimeAsync(0);
+    const action = { kind: "decline" as const, userId: 2, requestId: 18 };
+    const done = controller.perform(action);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(controller.getSnapshot().pending).toEqual(action);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await done).toBe(false);
+    expect(controller.getSnapshot()).toMatchObject({
+      pending: null,
+      stale: true,
+      notice: null,
+    });
+    expect(controller.getSnapshot().actionError).toContain("처리 결과");
+    expect(controller.getSnapshot().listError).toContain("초과");
+    expect(await controller.perform(action)).toBe(false);
+    stalledWrite.resolve();
+    stalledRead.resolve(empty());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().data).toEqual(incoming());
+    request.mockResolvedValueOnce(empty());
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      pending: null,
+      loading: false,
+      stale: false,
+      data: empty(),
+    });
+    expect(
+      request.mock.calls.filter(([, options]) => options?.method === "POST"),
+    ).toHaveLength(1);
+    controller.stop();
+  });
+
   it("distinguishes an unavailable API from a successful empty list", async () => {
     const { api, controller, ready } = setup(empty());
     api.getFriends.mockRejectedValueOnce(
