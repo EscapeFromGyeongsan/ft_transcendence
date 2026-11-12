@@ -1062,7 +1062,7 @@ Close code:
 
 - 세션 폐기 시 해당 세션으로 인증된 연결을 close 4401 `Session ended.`로 닫는다. 연결마다 `sessionId`를 들고 있다.
   - 로그아웃: 로그아웃 처리 후 연결 관리(D)가 닫는다(#41, master 병합).
-  - refresh token 재사용 감지: `refresh()` 트랜잭션 안에서 일어나므로 `createAuthService`의 `onSessionRevoked(sessionId)` 콜백을 제공한다(#51, master 병합). 현재 master의 `buildApp()`은 이 콜백을 주입하지 않으므로 refresh 재사용 후 열린 WS 종료 연결은 실시간 스택 통합 시 확인해야 한다.
+  - refresh token 재사용 감지: `refresh()` 트랜잭션 안에서 일어나므로 `createAuthService`의 `onSessionRevoked(sessionId)` 콜백(#51)으로 commit 후에 알리고, `buildApp()`이 이를 연결 목록의 `closeSession()`에 연결해 그 세션의 연결을 4401로 닫는다(#86, master 병합).
 - access token(30분)은 연결할 때만 확인한다. 경기 중에 만료돼도 연결은 유지한다. access token 만료 자체는 연결을 종료하지 않으며 세션 폐기·전송 오류·heartbeat 등은 별도 종료 사유다.
 - 같은 경기의 명령은 행 잠금으로 순서가 정해지지만 `apply()` 결과가 돌아오는 순서는 보장되지 않는다. 서버는 경기마다 마지막으로 보낸 `stateVersion`을 기억하고, 같은 경기에서 이미 보낸 `stateVersion` 이하의 갱신은 보내지 않는다(#43).
 - 같은 사용자의 연결이 여러 개(탭·기기)여도 경기 명령을 보낼 수 있는 연결은 하나다(FR-MATCH-02). 마지막으로 `match.subscribe`한 연결이 제어권을 가진다. 이전 연결은 `session.replaced`를 받고 입력을 비활성화한다. 이 연결이 보낸 `game.command`는 거절한다. 두 연결 모두 같은 사용자이므로 이탈 시간은 연결이 하나라도 있으면 흐르지 않는다.
@@ -1136,6 +1136,7 @@ sequenceDiagram
         Note over A,DB: 탈취로 간주
         A->>DB: sessions.revoked_at = now(), COMMIT
         A-->>W: 401 (같은 세션의 모든 토큰 무효)
+        Note over A: commit 후 그 세션의 WS 연결을 4401로 닫음
     else 만료 또는 세션 폐기
         A-->>W: 401 UNAUTHENTICATED
     else 정상
