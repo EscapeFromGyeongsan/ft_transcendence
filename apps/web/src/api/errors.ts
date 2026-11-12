@@ -1,5 +1,5 @@
 /**
- * 서버가 반환하는 표준 오류 응답 본문 형식입니다.
+ * 서버 검증 오류의 필드 경로와 메시지를 나타내는 단일 항목입니다.
  */
 export interface ValidationIssue {
   path: string;

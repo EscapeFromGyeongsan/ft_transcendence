@@ -22,6 +22,7 @@ import {
 import {
   parseCommand,
   parseEnvelope,
+  wsRateLimit,
   type RealtimeConfig,
 } from "./ws-routes.ts";
 import {
@@ -213,6 +214,17 @@ describe("/api/ws without a database", () => {
     const close = closed(socket);
     sendJson(socket, { type: "auth", payload: { accessToken: validToken } });
     expect((await close).code).toBe(1011);
+  });
+
+  test("upgrades over the per-IP limit are refused with 429", async () => {
+    app = await buildApp({}, undefined, { jwtSecret });
+    await app.ready();
+    const sockets: WebSocket[] = [];
+    for (let i = 0; i < wsRateLimit.rateLimit.max; i++) {
+      sockets.push(await app.injectWS("/api/ws"));
+    }
+    await expect(app.injectWS("/api/ws")).rejects.toThrow(/429/);
+    for (const socket of sockets) socket.terminate();
   });
 
   test("closes 1011 when authentication is unavailable", async () => {

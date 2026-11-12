@@ -2,7 +2,9 @@
 
 검증 대상: #28 / PR #40 실행 환경. 실행일: 2026-11-01 KST.
 
-## 현재 결과
+> 이 문서와 소스 overlay는 미병합 PR #50의 `3dd6be2`를 사용한 2026-11-01 검증 기록입니다. 당시 결과는 현재 `master` 또는 최신 #50의 동작과 다를 수 있습니다. 예를 들어 무응답 종료는 당시 약 30초였고, 후속 #50 검증에서 약 20초로 확인됐습니다. 현재 실행 환경의 인수는 #50 병합 뒤 최신 `master`에서 다시 확인합니다. [후속 검증](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/28#issuecomment-6656678142) · [D의 #10 재현](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/10#pullrequestreview-5837834275)
+
+## 2026-11-01 검증 결과
 
 - 실제 Nginx를 경유한 WSS 기능 검사 **14개 통과**.
 - 별도 테스트 DB의 기존 테스트 **17개 파일·162개 통과**, 타입 검사·웹 빌드 통과.

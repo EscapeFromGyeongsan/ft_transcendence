@@ -434,6 +434,10 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 2026-10-28 Swagger 출력을 기준으로, 2026-11-09 [#78](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/78)의 전적 공개 설정과 조회 권한을 반영했다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
 
+IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두고 브라우저 저장소에 기록하지 않는다. refresh token은 `cbc.auth.refreshToken` 키에 보관하며, 로그인 상태 유지를 선택하면 `localStorage`, 해제하면 `sessionStorage`를 쓴다. 새로고침 뒤 보호 API를 호출하기 전에 refresh로 access token을 복원한다. 동시 갱신은 같은 Promise를 공유하고, 이전 access token의 401이 늦게 도착하면 이미 교체된 토큰으로 한 번 재시도한다. 갱신 실패·갱신 후 401·로그아웃 시 보관 토큰을 지운다. 기존 `cyber_board_cafe.auth.tokens` 값은 refresh token만 이전한 뒤 삭제하고 access token은 복원하지 않는다. 저장소 접근·쓰기가 차단되면 현재 페이지 메모리만 사용하므로 다음 페이지 로드의 로그인 유지가 보장되지 않는다.
+
+`localStorage`를 공유하는 여러 탭의 갱신은 [Web Locks](https://w3c.github.io/web-locks/)의 origin 단위 배타 잠금(`cbc.auth.refresh`)으로 직렬화한다. 잠금 획득 후 최신 refresh token을 다시 읽고, 새 토큰 저장까지 잠금을 유지한다. 비밀이 아닌 로그인 표식 `cbc.auth.sessionId`를 같은 저장소에 두어 토큰 회전과 다른 로그인·로그아웃을 구별한다. 표식이 바뀐 이전 요청·갱신 응답은 폐기하며 새 로그인을 덮어쓰거나 지우지 않는다. 로그인 유지 해제 시 토큰과 표식은 탭별 `sessionStorage`에만 있다. Web Locks를 제공하는 Chrome의 HTTPS·localhost 환경에서 탭 간 갱신을 지원한다. Web Locks 미지원 환경은 같은 탭의 중복 요청만 합치므로 공유 토큰의 여러 탭 동시 갱신은 지원하지 않는다.
+
 ### 11.1 오류 응답 형식
 
 ```json
@@ -511,3 +515,41 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 - 내 프로필 토글은 저장 응답을 확인한 뒤 반영한다. 실패 시 기존 값을 유지하며 오류를 표시한다. 타인 프로필에서 `RECORDS_PRIVATE`를 받으면 통계·업적·최근 대국 대신 비공개 안내를 표시하고 이전 조회 데이터를 비운다.
 
 SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 별도다. 실제 PostgreSQL·두 세션 브라우저 검증은 [검증 기록](profile-records-privacy-validation.md)을 따른다.
+
+## 12. WebSocket `/api/ws` (IF-03)
+
+REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 연결 거절·close code·메시지를 기록한다. 이 경로는 HTTP 응답 본문이 없는 upgrade라 Swagger(`/docs`)에서 숨긴다(`schema.hide`). 여기 적힌 내용은 #41 기준이며, 경기 구독·명령·매칭·재접속 메시지는 #42·#43·#49·#50이 이 장에 이어서 추가한다.
+
+### 12.1 연결과 인증
+
+1. 클라이언트는 `GET /api/ws`로 연결한다. access token은 URL·헤더에 넣지 않는다(프록시·접근 로그에 남지 않게 하기 위함).
+2. 연결 후 5초 안에 첫 메시지로 `auth`를 보낸다. 서버는 JWT와 서버 세션을 함께 확인하고 `auth.ok`로 답한다.
+3. `auth.ok`를 받기 전에는 다른 메시지를 보내지 않는다. 인증 처리 중 들어온 메시지는 4401로 닫는다.
+4. 인증은 연결 시점에만 한다. 연결 중 access token이 만료돼도 연결은 유지되고, 세션 폐기(로그아웃)만 연결을 닫는다.
+
+### 12.2 메시지 형식
+
+모든 메시지는 텍스트 프레임의 JSON `{ type, requestId?, payload }`이다. `payload`는 객체, `requestId`는 1~64자 문자열이다. 요청에 `requestId`가 있으면 그 요청의 응답·오류에 같은 값을 돌려준다.
+
+| 방향 | `type` | `payload` | 설명 |
+|---|---|---|---|
+| C → S | `auth` | `{ accessToken }` | 연결 후 첫 메시지 |
+| S → C | `auth.ok` | `{ userId }` | 인증 성공 |
+| C → S | `ping` | `{}` | 앱 레벨 연결 확인 |
+| S → C | `pong` | `{}` | `ping` 응답 |
+| S → C | `error` | `{ code, message }` | 연결을 유지하는 오류. 지원하지 않는 `type`이면 `UNSUPPORTED_MESSAGE` |
+
+### 12.3 연결 거절과 close code
+
+| 상황 | 결과 |
+|---|---|
+| 같은 IP에서 1분에 30번을 넘는 연결 요청 | upgrade 없이 HTTP 429 `RATE_LIMITED` |
+| 5초 안에 `auth`가 오지 않음 | 4401 `Authentication timed out.` |
+| 첫 메시지가 `auth`가 아니거나 `accessToken`이 없음, 인증 중 다른 메시지 | 4401 `Authenticate first.` |
+| 토큰 무효·만료, 폐기된 세션 | 4401 `Invalid or expired token.` |
+| 로그아웃으로 세션 폐기 | 그 세션의 모든 연결을 4401 `Session ended.` |
+| JSON이 아니거나 envelope 형식이 틀림, binary 프레임 | 4400 `Malformed message.` |
+| 16 KiB를 넘는 메시지 | 1009 (`ws`의 `maxPayload`) |
+| 인증 중 DB·인증 서비스 장애 | 1011 `Service unavailable.` |
+
+4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 갱신도 실패하면 로그인 화면으로 보낸다. 4400·1009는 클라이언트 버그이므로 같은 메시지로 재시도하지 않는다.

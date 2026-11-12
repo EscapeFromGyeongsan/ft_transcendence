@@ -41,7 +41,14 @@ export async function findProfile(db: Executor, userId: number) {
   return profile;
 }
 
-// Locks the user row so concurrent avatar changes see each other's file.
+/**
+ * 사용자의 현재 아바타 URL을 읽고 행을 잠급니다(`FOR UPDATE`).
+ *
+ * @returns 사용자가 없으면 `undefined`
+ *
+ * @remarks
+ * 동시에 들어온 아바타 변경이 서로의 파일을 보도록 직렬화합니다. 트랜잭션 안에서 호출해야 합니다.
+ */
 export async function findAvatarForUpdate(db: Executor, userId: number) {
   const [user] = await db
     .select({ avatarUrl: users.avatarUrl })
@@ -51,6 +58,11 @@ export async function findAvatarForUpdate(db: Executor, userId: number) {
   return user;
 }
 
+/**
+ * 사용자의 아바타 URL을 바꿉니다. `null`이면 아바타를 지웁니다.
+ *
+ * @returns 바뀐 계정 정보. 사용자가 없으면 `undefined`
+ */
 export async function updateAvatarUrl(
   db: Executor,
   userId: number,
