@@ -479,6 +479,21 @@ describe.skipIf(!testDatabaseUrl)("game command persistence", () => {
     });
   });
 
+  test("disconnect timeout finishes a paused match", async () => {
+    // The real flow: D pauses the match first, then the budget runs out.
+    expect(await service.setStatus(matchId, "playing", "paused")).toBe(true);
+    expect(await timeout([white], 0)).toEqual({
+      status: "finished",
+      stateVersion: 1,
+    });
+    expect((await service.getMatch(matchId))?.game).toMatchObject({
+      status: "finished",
+      outcome: "win",
+      resultReason: "disconnect_timeout",
+      winnerUserId: black,
+    });
+  });
+
   test("setStatus changes nothing when the status already moved on", async () => {
     expect(await service.setStatus(matchId, "paused", "playing")).toBe(false);
     await service.apply({

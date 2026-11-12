@@ -91,6 +91,12 @@ export type SystemFinish = {
   expectedVersion: number;
 };
 
+/**
+ * `finishBySystem()`의 결과입니다.
+ *
+ * @remarks
+ * `skipped`는 아무것도 바꾸지 않았다는 뜻입니다. 경기가 없거나, 이미 끝났거나, `stateVersion`이 `expectedVersion`과 달라진 경우입니다.
+ */
 export type SystemFinishResult =
   { status: "finished"; stateVersion: number } | { status: "skipped" };
 
@@ -372,8 +378,7 @@ export function createGameCommandService(
      *
      * @remarks
      * 경기 진행 계층(D)이 호출합니다. `apply()`와 같은 경기 잠금을 쓰므로 먼저 commit된 착수·종료로 버전이나 종료 상태가 바뀌면 `skipped`입니다.
-     * 복귀의 `setStatus()`는 버전을 올리지 않으며 이 함수는 `playing`과 `paused`를 모두 허용합니다.
-     * 따라서 복귀만으로 오래된 이탈 종료 요청을 자동으로 무시하지 않습니다. D가 호출 전에 현재 부재자를 다시 확인하고 복귀 시 이탈 타이머를 취소해야 합니다.
+     * 결과는 예산 만료 순간에 확정됩니다(DEC-03). D는 만료 순간의 부재자를 넘기고, 만료 뒤 복귀해도 이 종료는 취소되지 않습니다.
      */
     finishBySystem(input: SystemFinish): Promise<SystemFinishResult> {
       return db.transaction(async (tx) => {
