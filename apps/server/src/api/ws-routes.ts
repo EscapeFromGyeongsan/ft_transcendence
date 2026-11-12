@@ -260,11 +260,15 @@ export function registerRealtimeRoutes(
 ) {
   const authTimeoutMs = config.authTimeoutMs ?? 5000;
   // Game type of each match a socket has subscribed to, for command checks.
+  // Kept after the match finishes, so a resent final command still gets its
+  // duplicate ack and a new one gets GAME_FINISHED; dropped once nobody
+  // watches the match.
   const matchGameTypes = new Map<number, GameType>();
 
-  function forgetMatch(matchId: number) {
-    connections.forgetMatch(matchId);
-    matchGameTypes.delete(matchId);
+  function dropUnwatched(matchIds: Iterable<number>) {
+    for (const matchId of matchIds) {
+      if (!connections.hasSubscribers(matchId)) matchGameTypes.delete(matchId);
+    }
   }
 
   const matchmaking = createMatchmaking({
@@ -358,7 +362,9 @@ export function registerRealtimeRoutes(
     }
     // On failure undo only this request, not an earlier subscription.
     const undo = () => {
-      if (!wasSubscribed) connections.unsubscribe(matchId, socket);
+      if (wasSubscribed) return;
+      connections.unsubscribe(matchId, socket);
+      dropUnwatched([matchId]);
     };
     let snapshot: GameSnapshot | undefined;
     try {
@@ -385,6 +391,7 @@ export function registerRealtimeRoutes(
       return;
     }
     connections.unsubscribe(matchId, socket);
+    dropUnwatched([matchId]);
     send(socket, "match.unsubscribed", { matchId }, requestId);
   }
 
@@ -470,7 +477,7 @@ export function registerRealtimeRoutes(
       type: "game.updated",
       payload: snapshot,
     });
-    if (snapshot.status === "finished") forgetMatch(matchId);
+    if (snapshot.status === "finished") connections.forgetMatch(matchId);
   }
 
   // The access token arrives in the first message, never in the URL, so it
@@ -492,7 +499,7 @@ export function registerRealtimeRoutes(
         clearTimeout(authTimer);
         matchmaking.removeSocket(socket);
         if (registeredSession) {
-          connections.remove(registeredSession, socket);
+          dropUnwatched(connections.remove(registeredSession, socket));
         }
       });
 
