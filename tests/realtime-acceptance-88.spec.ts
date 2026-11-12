@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { expect, test } from "@playwright/test";
-import type { GomokuSnapshot } from "@cafe/game-contracts";
+import type {
+  GameSnapshot,
+  GameType,
+  GomokuSnapshot,
+} from "@cafe/game-contracts";
+import type {
+  GameStats,
+  LeaderboardEntry,
+  MatchPage,
+} from "../apps/web/src/api/profile-api.ts";
 import WebSocket from "ws";
 
 type Message = {
@@ -72,22 +81,30 @@ async function connect(baseURL: string, accessToken: string, autoPong = true) {
 
 type Client = Awaited<ReturnType<typeof connect>>;
 
-async function pair(first: Client, second: Client) {
+async function pair(
+  first: Client,
+  second: Client,
+  gameType: GameType = "gomoku",
+) {
+  const offsets = [first.messages.length, second.messages.length];
   for (const client of [first, second]) {
-    const joined = await client.request("queue.join", { gameType: "gomoku" });
+    const joined = await client.request("queue.join", { gameType });
     expect(joined.type).toBe("queue.joined");
   }
   const matched = await Promise.all([
-    first.wait("queue.matched"),
-    second.wait("queue.matched"),
+    first.wait("queue.matched", () => true, offsets[0]),
+    second.wait("queue.matched", () => true, offsets[1]),
   ]);
   const matchId = matched[0].payload.matchId as number;
   expect(matched[1].payload.matchId).toBe(matchId);
+  for (const message of matched)
+    expect(message.payload.gameType).toBe(gameType);
   const snapshots = await Promise.all(
     [first, second].map(async (client) => {
       const response = await client.request("match.subscribe", { matchId });
       expect(response.type).toBe("match.snapshot");
-      return response.payload as unknown as GomokuSnapshot;
+      expect(response.payload.gameType).toBe(gameType);
+      return response.payload as unknown as GameSnapshot;
     }),
   );
   expect(snapshots[0].stateVersion).toBe(0);
@@ -104,6 +121,437 @@ function place(matchId: number, row: number, col: number) {
     action: { type: "place", row, col },
   };
 }
+
+test("AT-09: simultaneous Gomoku and Othello matches isolate queues, commands and updates", async ({
+  request,
+  baseURL,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "One real matchmaking cohort");
+  const accounts: { id: number }[] = [];
+  const clients: Client[] = [];
+  try {
+    for (let index = 0; index < 4; index++) {
+      const nickname = `mix88_${randomUUID().slice(0, 8)}`;
+      const credentials = {
+        email: `${nickname}@example.test`,
+        password: `Test-${randomUUID()}`,
+      };
+      const registered = await request.post("/api/auth/register", {
+        data: { ...credentials, nickname },
+      });
+      expect(registered.status()).toBe(201);
+      accounts.push(await registered.json());
+      const login = await request.post("/api/auth/login", {
+        data: credentials,
+      });
+      expect(login.status()).toBe(200);
+      const { accessToken } = await login.json();
+      clients.push(await connect(baseURL!, accessToken));
+    }
+    const matches = await Promise.all([
+      pair(clients[0], clients[1], "gomoku"),
+      pair(clients[2], clients[3], "othello"),
+    ]);
+    expect(matches[0].matchId).not.toBe(matches[1].matchId);
+    const blackClients = matches.map(
+      ({ snapshot }) =>
+        clients[
+          accounts.findIndex((account) => account.id === snapshot.players.black)
+        ],
+    );
+    for (const [index, match] of matches.entries()) {
+      const denied = await blackClients[index].request("match.subscribe", {
+        matchId: matches[1 - index].matchId,
+      });
+      expect(denied.type).toBe("error");
+      expect(denied.payload.code).toBe("NOT_PARTICIPANT");
+      const mismatch = await blackClients[index].request("game.command", {
+        ...place(match.matchId, 2, 3),
+        gameType: matches[1 - index].snapshot.gameType,
+      });
+      expect(mismatch.type).toBe("error");
+      expect(mismatch.payload.code).toBe("INVALID_MESSAGE");
+    }
+    const acknowledgements = await Promise.all(
+      matches.map((match, index) =>
+        blackClients[index].request("game.command", {
+          ...place(match.matchId, index === 0 ? 7 : 2, index === 0 ? 7 : 3),
+          gameType: match.snapshot.gameType,
+        }),
+      ),
+    );
+    for (const ack of acknowledgements) {
+      expect(ack.type).toBe("game.ack");
+      expect(ack.payload).toMatchObject({ stateVersion: 1, duplicate: false });
+    }
+    for (const [index, client] of clients.entries()) {
+      const match = matches[index < 2 ? 0 : 1];
+      const updated = await client.wait(
+        "game.updated",
+        (message) =>
+          message.payload.matchId === match.matchId &&
+          message.payload.stateVersion === 1,
+      );
+      const snapshot = updated.payload as unknown as GameSnapshot;
+      expect(snapshot.gameType).toBe(index < 2 ? "gomoku" : "othello");
+      expect(snapshot.board).toHaveLength(index < 2 ? 15 : 8);
+      if (index < 2) expect(snapshot.board[7][7]).toBe("black");
+      else {
+        expect(snapshot.board[2][3]).toBe("black");
+        expect(snapshot.board[3][3]).toBe("black");
+        expect(
+          snapshot.board.flat().filter((cell) => cell === "black"),
+        ).toHaveLength(4);
+        expect(
+          snapshot.board.flat().filter((cell) => cell === "white"),
+        ).toHaveLength(1);
+      }
+    }
+    await Promise.all(
+      matches.map(async (match, index) => {
+        const response = await blackClients[index].request("game.command", {
+          matchId: match.matchId,
+          gameType: match.snapshot.gameType,
+          commandId: randomUUID(),
+          expectedVersion: 1,
+          action: { type: "resign" },
+        });
+        expect(response.type).toBe("game.ack");
+      }),
+    );
+    for (const [index, client] of clients.entries()) {
+      const match = matches[index < 2 ? 0 : 1];
+      const terminal = await client.wait(
+        "game.updated",
+        (message) =>
+          message.payload.matchId === match.matchId &&
+          message.payload.status === "finished",
+      );
+      expect(terminal.payload).toMatchObject({
+        gameType: match.snapshot.gameType,
+        stateVersion: 2,
+        result: {
+          outcome: "win",
+          reason: "resign",
+          winnerId: match.snapshot.players.white,
+        },
+      });
+      expect(
+        client.messages
+          .filter((m) => m.type === "game.updated")
+          .every((m) => m.payload.matchId === match.matchId),
+      ).toBe(true);
+      expect(client.errors).toEqual([]);
+    }
+    await testInfo.attach("actual-mixed-games-summary", {
+      body: JSON.stringify({
+        accountIds: accounts.map((account) => account.id),
+        matches: matches.map((match) => ({
+          matchId: match.matchId,
+          gameType: match.snapshot.gameType,
+          players: match.snapshot.players,
+        })),
+        checks: [
+          "concurrent queues",
+          "foreign subscription denied",
+          "wrong gameType denied",
+          "real place/flip",
+          "only own updates",
+          "both matches finished",
+        ],
+      }),
+      contentType: "application/json",
+    });
+  } finally {
+    for (const client of clients) client.socket.terminate();
+  }
+});
+
+test("AT-08: actual matches persist first-win, 10-match progress, history and deterministic leaderboard ties", async ({
+  request,
+  page,
+  baseURL,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "One real matchmaking cohort");
+  test.setTimeout(120_000);
+  const accounts: {
+    id: number;
+    nickname: string;
+    email: string;
+    password: string;
+    accessToken: string;
+  }[] = [];
+  const clients: Client[] = [];
+  const matches: {
+    matchId: number;
+    black: number;
+    white: number;
+    winnerId: number;
+    reason: string;
+  }[] = [];
+  const checkpoints: { played: number; stats: GameStats[] }[] = [];
+  const histories: { userId: number; records: MatchPage["matches"] }[] = [];
+  const get = async <T>(path: string): Promise<T> => {
+    const response = await request.get(path, {
+      headers: { authorization: `Bearer ${accounts[0].accessToken}` },
+    });
+    expect(response.status(), path).toBe(200);
+    return response.json();
+  };
+  const stats = (index: number, gameType = "gomoku") =>
+    get<GameStats>(
+      `/api/users/${accounts[index].id}/stats?gameType=${gameType}`,
+    );
+  const verifyStats = async (index: number, wins: number, losses: number) => {
+    const result = await stats(index);
+    const played = wins + losses;
+    expect(result).toEqual({
+      userId: accounts[index].id,
+      gameType: "gomoku",
+      wins,
+      losses,
+      draws: 0,
+      played,
+      winRate: played ? wins / played : 0,
+      achievements: { firstWin: wins > 0 },
+      progress: { current: Math.min(played, 10), target: 10 },
+    });
+    return result;
+  };
+  const finish = async (
+    first: number,
+    second: number,
+    winner: number,
+    normalWin = false,
+  ) => {
+    const { matchId, snapshot: initial } = await pair(
+      clients[first],
+      clients[second],
+    );
+    let snapshot = initial;
+    while (snapshot.status !== "finished") {
+      const version = snapshot.stateVersion;
+      const actor = normalWin
+        ? accounts.findIndex(
+            (account) => account.id === snapshot.currentPlayerId,
+          )
+        : winner === first
+          ? second
+          : first;
+      const winningMove = actor === winner;
+      const reply = await clients[actor].request("game.command", {
+        matchId,
+        gameType: "gomoku",
+        commandId: randomUUID(),
+        expectedVersion: version,
+        action: normalWin
+          ? {
+              type: "place",
+              row: winningMove ? 7 : 0,
+              col: Math.floor(version / 2) * (winningMove ? 1 : 2),
+            }
+          : { type: "resign" },
+      });
+      expect(reply.type).toBe("game.ack");
+      expect(reply.payload).toMatchObject({
+        stateVersion: version + 1,
+        duplicate: false,
+      });
+      const updates = await Promise.all(
+        [first, second].map((index) =>
+          clients[index].wait(
+            "game.updated",
+            (message) =>
+              message.payload.matchId === matchId &&
+              message.payload.stateVersion === version + 1,
+          ),
+        ),
+      );
+      expect(updates[0].payload).toEqual(updates[1].payload);
+      snapshot = updates[0].payload as unknown as GomokuSnapshot;
+      expect(snapshot.stateVersion).toBeLessThanOrEqual(normalWin ? 10 : 1);
+    }
+    const reason = normalWin ? "five_in_row" : "resign";
+    expect(snapshot.result).toEqual({
+      outcome: "win",
+      winnerId: accounts[winner].id,
+      reason,
+    });
+    matches.push({
+      matchId,
+      ...snapshot.players,
+      winnerId: accounts[winner].id,
+      reason,
+    });
+  };
+  const leaderboard = async () => {
+    const entries = await get<LeaderboardEntry[]>(
+      "/api/leaderboard?gameType=gomoku&limit=100",
+    );
+    expect(entries.map((entry) => entry.rank)).toEqual(
+      entries.map((_, index) => index + 1),
+    );
+    expect(entries).toEqual(
+      [...entries].sort(
+        (a, b) =>
+          b.wins - a.wins || b.winRate - a.winRate || a.userId - b.userId,
+      ),
+    );
+    return entries.filter((entry) =>
+      accounts.some((a) => a.id === entry.userId),
+    );
+  };
+  try {
+    // ID와 닉네임 순서를 반대로 만들어 닉네임 정렬 회귀도 검출합니다.
+    for (const letter of ["z", "y", "b", "a"]) {
+      const nickname = `s88_${letter}_${randomUUID().slice(0, 8)}`;
+      const credentials = {
+        email: `${nickname}@example.test`,
+        password: `Test-${randomUUID()}`,
+      };
+      const registered = await request.post("/api/auth/register", {
+        data: { ...credentials, nickname },
+      });
+      expect(registered.status()).toBe(201);
+      const { id } = await registered.json();
+      const login = await request.post("/api/auth/login", {
+        data: credentials,
+      });
+      expect(login.status()).toBe(200);
+      const { accessToken } = await login.json();
+      accounts.push({ id, nickname, ...credentials, accessToken });
+      clients.push(await connect(baseURL!, accessToken));
+    }
+    await verifyStats(0, 0, 0);
+    await verifyStats(1, 0, 0);
+    for (let round = 1; round <= 10; round++) {
+      await finish(0, 1, round <= 6 ? 0 : 1, round === 1);
+      if ([1, 4, 10].includes(round)) {
+        checkpoints.push({
+          played: round,
+          stats: await Promise.all([
+            verifyStats(0, Math.min(round, 6), Math.max(0, round - 6)),
+            verifyStats(1, Math.max(0, round - 6), Math.min(round, 6)),
+          ]),
+        });
+      }
+    }
+    for (let round = 1; round <= 10; round++) {
+      await finish(2, 3, round <= 4 ? 2 : 3);
+      if (round === 4) {
+        const entries = await leaderboard();
+        const b = entries.find((entry) => entry.userId === accounts[1].id)!;
+        const c = entries.find((entry) => entry.userId === accounts[2].id)!;
+        expect(b).toMatchObject({ wins: 4, played: 10, winRate: 0.4 });
+        expect(c).toMatchObject({ wins: 4, played: 4, winRate: 1 });
+        expect(c.rank).toBeLessThan(b.rank);
+      }
+    }
+    const tiedLeaderboard = await leaderboard();
+    expect(tiedLeaderboard.map((entry) => entry.userId)).toEqual(
+      [0, 3, 1, 2].map((index) => accounts[index].id),
+    );
+    for (const [index, wins] of [6, 4, 4, 6].entries()) {
+      await verifyStats(index, wins, 10 - wins);
+    }
+    await finish(0, 1, 0);
+    await verifyStats(0, 7, 4);
+    await verifyStats(1, 4, 7);
+    for (let index = 0; index < accounts.length; index++) {
+      expect(await stats(index, "othello")).toMatchObject({
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        played: 0,
+        achievements: { firstWin: false },
+        progress: { current: 0, target: 10 },
+      });
+      const records: MatchPage["matches"] = [];
+      let before: number | null = null;
+      do {
+        const result: MatchPage = await get(
+          `/api/users/${accounts[index].id}/matches?gameType=gomoku&limit=4${before === null ? "" : `&before=${before}`}`,
+        );
+        expect(result.matches.length).toBeGreaterThan(0);
+        expect(result.matches.length).toBeLessThanOrEqual(4);
+        records.push(...result.matches);
+        expect(records.length).toBeLessThanOrEqual(11);
+        before = result.nextBefore;
+      } while (before !== null);
+      const expected = matches
+        .filter((match) =>
+          [match.black, match.white].includes(accounts[index].id),
+        )
+        .reverse();
+      expect(records.map((record) => record.matchId)).toEqual(
+        expected.map((match) => match.matchId),
+      );
+      for (const [position, record] of records.entries()) {
+        const match = expected[position];
+        const opponentId =
+          match.black === accounts[index].id ? match.white : match.black;
+        expect(record).toMatchObject({
+          gameType: "gomoku",
+          result: match.winnerId === accounts[index].id ? "win" : "loss",
+          reason: match.reason,
+          seat: match.black === accounts[index].id ? "black" : "white",
+          opponent: {
+            id: opponentId,
+            nickname: accounts.find((a) => a.id === opponentId)!.nickname,
+            deleted: false,
+          },
+        });
+        expect(Number.isFinite(Date.parse(record.finishedAt))).toBe(true);
+      }
+      histories.push({ userId: accounts[index].id, records });
+    }
+    await page.goto("/");
+    await page.locator("#emailInput").fill(accounts[0].email);
+    await page.locator("#passwordInput").fill(accounts[0].password);
+    await page.getByRole("button", { name: "로그인", exact: true }).click();
+    await expect(page.getByTestId("lobby-view")).toBeVisible();
+    await page
+      .getByTestId("lobby-view")
+      .getByRole("button", { name: "내 프로필", exact: true })
+      .click();
+    for (let read = 0; read < 2; read++) {
+      await expect(
+        page.locator('.cbc-profile-game-card[data-game="gomoku"]'),
+      ).toContainText("참여 진행도 10 / 10");
+      await expect(page.locator(".cbc-profile-total")).toContainText(
+        "총 11전 7승 4패 0무",
+      );
+      for (const name of ["첫 승리", "10경기 참여"]) {
+        await expect(
+          page
+            .locator(".cbc-achievements li")
+            .filter({ has: page.getByText(name, { exact: true }) }),
+        ).toHaveClass("is-done");
+      }
+      await verifyStats(0, 7, 4);
+      if (read === 0) await page.reload();
+    }
+    await testInfo.attach("actual-stats-summary", {
+      body: JSON.stringify(
+        {
+          accountIds: accounts.map((account) => account.id),
+          matches,
+          checkpoints,
+          histories,
+          tiedLeaderboard,
+          totalFinished: matches.length,
+          ui: "Chrome profile, first-win and 10-match achievements persist after reload; 11 played caps progress at 10",
+        },
+        null,
+        2,
+      ),
+      contentType: "application/json",
+    });
+    for (const client of clients) expect(client.errors).toEqual([]);
+  } finally {
+    for (const client of clients) client.socket.terminate();
+  }
+});
 
 test("AT-06/09: actual concurrent WSS matches stay isolated and consume a cumulative 60-second absence budget", async ({
   request,
