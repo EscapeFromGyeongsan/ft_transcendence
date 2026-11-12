@@ -19,7 +19,12 @@ import {
   createGameCommandService,
   type RegisteredRules,
 } from "../services/game-command-service.ts";
-import { parseCommand, parseEnvelope, wsRateLimit } from "./ws-routes.ts";
+import {
+  MAX_PENDING_MESSAGES,
+  parseCommand,
+  parseEnvelope,
+  wsRateLimit,
+} from "./ws-routes.ts";
 import {
   openTestDatabase,
   resetTestDatabase,
@@ -302,6 +307,19 @@ describe.skipIf(!testDatabaseUrl)("/api/ws with PostgreSQL", () => {
       payload: { code: "UNSUPPORTED_MESSAGE" },
     });
     socket.terminate();
+  });
+
+  test("a client that floods messages without waiting is closed with 1008", async () => {
+    const { socket } = await authenticated(await loginToken());
+    const close = closed(socket);
+    // Each subscribe waits for the DB, so these pile up in the queue.
+    for (let i = 0; i <= MAX_PENDING_MESSAGES; i++) {
+      sendJson(socket, { type: "match.subscribe", payload: { matchId: 1 } });
+    }
+    expect(await close).toEqual({
+      code: 1008,
+      reason: "Too many pending messages.",
+    });
   });
 
   test("a second message while authenticating is closed with 4401", async () => {

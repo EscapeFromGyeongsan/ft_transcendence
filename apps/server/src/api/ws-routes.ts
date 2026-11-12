@@ -35,13 +35,23 @@ export type Envelope = {
  * - `internalError`(1011): 인증 서비스 장애 등 서버 내부 오류
  * - `messageTooLarge`(1009): 16 KiB를 넘는 메시지. 서버 코드가 아니라 `ws`
  *   라이브러리가 `maxPayload` 설정에 따라 닫습니다.
+ * - `tooManyPending`(1008): 처리를 기다리는 메시지가
+ *   {@link MAX_PENDING_MESSAGES}개를 넘음
  */
 export const closeCodes = {
   internalError: 1011,
+  tooManyPending: 1008,
   messageTooLarge: 1009,
   malformedMessage: 4400,
   unauthenticated: 4401,
 } as const;
+
+/**
+ * 한 연결에서 처리를 기다릴 수 있는 메시지 수입니다. 메시지는 연결마다
+ * 순서대로 하나씩 처리하므로, DB 응답보다 빠르게 보내면 대기열이 늘어납니다.
+ * 정상 클라이언트는 응답을 기다리며 보내므로 넘지 않는 값입니다.
+ */
+export const MAX_PENDING_MESSAGES = 32;
 
 /**
  * `/api/ws` 연결 요청의 IP별 제한입니다. 인증 전 소켓은 최대 5초 유지되고
@@ -429,6 +439,7 @@ export function registerRealtimeRoutes(
       // Messages of one socket are handled one at a time in arrival order,
       // so e.g. a match.unsubscribe never overtakes an earlier subscribe.
       let pending = Promise.resolve();
+      let pendingCount = 0;
       let firstMessage = true;
       socket.on("message", (data, isBinary) => {
         // Only the auth message may come before auth.ok; anything else sent
@@ -438,14 +449,24 @@ export function registerRealtimeRoutes(
           return;
         }
         firstMessage = false;
+        // A client that does not wait for replies would grow the queue and
+        // its DB reads without bound.
+        if (pendingCount >= MAX_PENDING_MESSAGES) {
+          socket.close(closeCodes.tooManyPending, "Too many pending messages.");
+          return;
+        }
+        pendingCount++;
         pending = pending
           .then(() => handleMessage(data, isBinary))
           .catch((error) =>
             request.log.error({ err: error }, "WebSocket message failed."),
-          );
+          )
+          .finally(() => pendingCount--);
       });
 
       async function handleMessage(data: RawData, isBinary: boolean) {
+        // Messages still queued when the socket closed are dropped.
+        if (socket.readyState !== socket.OPEN) return;
         const message = isBinary ? null : parseEnvelope(data.toString());
         if (!message) {
           socket.close(closeCodes.malformedMessage, "Malformed message.");
