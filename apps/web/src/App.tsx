@@ -328,6 +328,11 @@ export function App() {
   const matchmakingStateRef = useRef(matchmakingState);
   matchmakingStateRef.current = matchmakingState;
   const lobbyGameError = gomokuState.gameError ?? othelloState.gameError;
+  const activeLobbyMatch = [gomokuState, othelloState]
+    .map(({ matchId, snapshot }) =>
+      snapshot?.matchId === matchId ? snapshot : null,
+    )
+    .find((snapshot) => snapshot !== null && snapshot.status !== "finished");
 
   function updateCurrentUser(user: AuthUser) {
     setCurrentUser((previous) =>
@@ -2681,6 +2686,26 @@ export function App() {
               </div>
             )}
 
+            {activeLobbyMatch && (
+              <section
+                aria-label="진행 중인 대국"
+                className="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 sm:p-5"
+              >
+                <button
+                  type="button"
+                  className="cbc-btn-primary sm:w-auto"
+                  data-testid={
+                    activeLobbyMatch.gameType === "gomoku"
+                      ? "return-active-match-btn"
+                      : "return-active-othello-match-btn"
+                  }
+                  onClick={() => switchView(activeLobbyMatch.gameType)}
+                >
+                  {`진행 중인 ${getGameCatalogEntry(activeLobbyMatch.gameType).shortTitle} 대국(#${activeLobbyMatch.matchId}) 복귀`}
+                </button>
+              </section>
+            )}
+
             <section className="cbc-welcome-banner">
               <div>
                 <span
@@ -2851,58 +2876,30 @@ export function App() {
                         )}
                       </div>
 
-                      {entry.gameType === "othello" &&
-                        othelloState.matchId !== null &&
-                        othelloState.snapshot?.gameType === "othello" &&
-                        othelloState.snapshot.status !== "finished" && (
-                          <button
-                            type="button"
-                            className="cbc-btn-primary"
-                            data-testid="return-active-othello-match-btn"
-                            onClick={() => switchView("othello")}
-                          >
-                            진행 중인 오델로 대국(#{othelloState.matchId}) 복귀
-                          </button>
-                        )}
-
                       {entry.gameType === "gomoku" && (
-                        <>
-                          {gomokuState.matchId !== null &&
-                            gomokuState.snapshot?.status !== "finished" && (
-                              <button
-                                type="button"
-                                className="cbc-btn-primary"
-                                data-testid="return-active-match-btn"
-                                onClick={() => switchView("gomoku")}
-                              >
-                                진행 중인 오목 대국(#{gomokuState.matchId}) 복귀
-                              </button>
-                            )}
-
-                          <form
-                            className="cbc-match-join-form"
-                            onSubmit={handleSubscribeByMatchId}
+                        <form
+                          className="cbc-match-join-form"
+                          onSubmit={handleSubscribeByMatchId}
+                        >
+                          <label htmlFor="matchIdInput" className="sr-only">
+                            대국 번호(matchId) 입력
+                          </label>
+                          <input
+                            id="matchIdInput"
+                            type="number"
+                            min={1}
+                            placeholder="대국 번호 (matchId) 입력"
+                            value={matchIdInput}
+                            onChange={(e) => setMatchIdInput(e.target.value)}
+                            className="cbc-input cbc-match-join-input"
+                          />
+                          <button
+                            type="submit"
+                            className="cbc-btn-secondary cbc-match-join-btn"
                           >
-                            <label htmlFor="matchIdInput" className="sr-only">
-                              대국 번호(matchId) 입력
-                            </label>
-                            <input
-                              id="matchIdInput"
-                              type="number"
-                              min={1}
-                              placeholder="대국 번호 (matchId) 입력"
-                              value={matchIdInput}
-                              onChange={(e) => setMatchIdInput(e.target.value)}
-                              className="cbc-input cbc-match-join-input"
-                            />
-                            <button
-                              type="submit"
-                              className="cbc-btn-secondary cbc-match-join-btn"
-                            >
-                              대국실 입장
-                            </button>
-                          </form>
-                        </>
+                            대국실 입장
+                          </button>
+                        </form>
                       )}
                     </div>
                   </article>
