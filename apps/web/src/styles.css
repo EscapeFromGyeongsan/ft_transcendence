@@ -61,12 +61,9 @@ input {
 
 /* App Shell */
 .cbc-shell {
-  min-height: 100vh;
+  @apply flex min-h-screen flex-col justify-between;
   /* Decorative glows must not enlarge the mobile page's scrollable width. */
   overflow-x: clip;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   background-color: var(--surface);
   color: var(--on-surface);
 }
@@ -84,14 +81,7 @@ input {
 }
 
 .cbc-header-inner {
-  height: 4rem;
-  max-width: 80rem;
-  margin: 0 auto;
-  padding: 0 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  @apply mx-auto my-0 flex h-16 max-w-7xl items-center justify-between gap-4 px-6 py-0;
 }
 
 @media (min-width: 1024px) {
@@ -174,13 +164,9 @@ input {
 
 /* Main Content */
 .cbc-main {
-  width: 100%;
+  @apply flex w-full flex-col items-center justify-center;
   flex: 1;
   padding: 5.5rem 1rem 3rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
 }
 
 @media (min-width: 640px) {
@@ -190,12 +176,7 @@ input {
 }
 
 .cbc-stage {
-  position: relative;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  @apply relative flex w-full flex-col items-center justify-center;
 }
 
 .cbc-glow-left {
@@ -224,16 +205,12 @@ input {
 
 /* Login Card (01_login) */
 .cbc-login-card {
-  position: relative;
-  z-index: 10;
-  width: 100%;
+  @apply relative z-10 w-full rounded-xl p-8;
   max-width: 480px;
   background-color: var(--surface-container-lowest);
-  border-radius: 0.75rem;
   box-shadow:
     0 4px 24px -4px rgba(43, 38, 33, 0.06),
     0 12px 40px -8px rgba(43, 38, 33, 0.08);
-  padding: 2rem;
 }
 
 @media (min-width: 640px) {
@@ -431,18 +408,12 @@ input {
 }
 
 .cbc-input-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
+  @apply relative flex items-center;
 }
 
 .cbc-input-icon-left {
-  position: absolute;
-  left: 0.875rem;
-  display: flex;
-  align-items: center;
+  @apply pointer-events-none absolute left-3.5 flex items-center;
   color: var(--outline);
-  pointer-events: none;
 }
 
 .cbc-input-icon-left.is-error {
@@ -450,9 +421,7 @@ input {
 }
 
 .cbc-input {
-  width: 100%;
-  padding: 0.75rem 2.75rem 0.75rem 1rem;
-  border-radius: 0.5rem;
+  @apply w-full rounded-lg py-3 pr-11 pl-4;
   background-color: var(--surface-container-lowest);
   color: var(--on-surface);
   font-size: 16px;
@@ -616,9 +585,7 @@ input {
 
 /* Buttons */
 .cbc-btn-primary {
-  width: 100%;
-  padding: 0.875rem 1.5rem;
-  border-radius: 0.5rem;
+  @apply inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-6 py-3.5;
   border: none;
   background-color: var(--primary-container);
   color: var(--on-primary);
@@ -626,11 +593,6 @@ input {
   font-size: 18px;
   line-height: 26px;
   font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transition:
     background-color 0.15s ease,
@@ -653,20 +615,13 @@ input {
 }
 
 .cbc-btn-42 {
-  width: 100%;
-  padding: 0.875rem 1.5rem;
-  border-radius: 0.5rem;
+  @apply inline-flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg px-6 py-3.5;
   border: none;
   background-color: var(--inverse-surface);
   color: var(--inverse-on-surface);
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
@@ -781,14 +736,9 @@ input {
 }
 
 .cbc-game-card {
+  @apply flex flex-col justify-between gap-4 rounded-xl p-6;
   background-color: var(--surface-container-lowest);
-  border-radius: 0.75rem;
   border: 1px solid var(--surface-container-high);
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 1rem;
   box-shadow: 0 2px 8px -2px rgba(42, 42, 38, 0.05);
 }
 
@@ -923,30 +873,18 @@ input {
 
 /* Logout Confirmation Modal (20_logout_modal) */
 .cbc-modal-backdrop {
-  position: fixed;
-  inset: 0;
+  @apply fixed inset-0 z-100 flex items-center justify-center p-6;
   background-color: rgba(49, 49, 44, 0.38);
   backdrop-filter: blur(3px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  z-index: 100;
 }
 
 .cbc-modal-dialog {
-  width: 100%;
+  @apply flex w-full flex-col items-center rounded-xl px-8 py-9 text-center;
   max-width: 440px;
   background-color: var(--surface-container-lowest);
-  border-radius: 0.75rem;
-  padding: 2.25rem 2rem;
   box-shadow:
     0 16px 36px -6px rgba(43, 38, 33, 0.18),
     0 4px 12px -2px rgba(43, 38, 33, 0.08);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
 }
 
 .cbc-modal-alert-icon {
@@ -962,23 +900,17 @@ input {
 }
 
 .cbc-modal-actions {
-  display: grid;
+  @apply mt-7 grid w-full gap-3;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
-  width: 100%;
-  margin-top: 1.75rem;
 }
 
 .cbc-btn-secondary {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  @apply w-full cursor-pointer rounded-lg px-4 py-3;
   border: 1px solid var(--surface-container-highest);
   background-color: var(--surface-container-high);
   color: var(--on-surface-variant);
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
   transition:
     background-color 0.15s ease,
     color 0.15s ease;
@@ -990,19 +922,12 @@ input {
 }
 
 .cbc-btn-danger {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  @apply inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg px-4 py-3;
   border: none;
   background-color: var(--error);
   color: var(--on-error);
   font-size: 14px;
   font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  cursor: pointer;
   transition: opacity 0.15s ease;
 }
 
@@ -1427,10 +1352,9 @@ input {
 }
 
 .cbc-player-card {
+  @apply rounded-xl px-4.5 py-4;
   background-color: var(--surface-container-lowest);
   border: 1.5px solid var(--surface-container-high);
-  border-radius: 0.75rem;
-  padding: 1rem 1.125rem;
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -1503,13 +1427,9 @@ input {
 }
 
 .cbc-match-info-card {
+  @apply flex flex-col gap-4 rounded-xl p-5;
   background-color: var(--surface-container-lowest);
   border: 1px solid var(--surface-container-high);
-  border-radius: 0.75rem;
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
 }
 
 .cbc-match-info-heading {
@@ -1876,10 +1796,9 @@ input {
 }
 
 .cbc-profile-card {
+  @apply rounded-xl p-6;
   background-color: var(--surface-container-lowest);
   border: 1px solid var(--surface-container-high);
-  border-radius: 0.75rem;
-  padding: 1.5rem;
   box-shadow: 0 2px 8px -2px rgba(42, 42, 38, 0.05);
 }
 
