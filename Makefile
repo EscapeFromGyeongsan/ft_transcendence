@@ -1,16 +1,19 @@
 # Full application (web, API, PostgreSQL behind HTTPS Nginx) in containers.
-# `make` prepares missing secrets and the local certificate, then starts it.
+# `make` prepares missing secrets and certificates, then starts it on this
+# computer's IP so another computer can join (HOST=<IP> picks the address).
+# `make local` starts it on https://localhost only.
 COMPOSE = docker compose --env-file .env.full --project-directory . \
 	-p cyber-board-cafe-full -f infra/compose.full.yaml
 
-.PHONY: all up prepare down logs ps
+.PHONY: all up local prepare down logs ps
 
 all: up
 
-up: prepare
-	$(COMPOSE) up --build -d --wait
-	@port=$$(sed -n 's/^HTTPS_PORT=//p' .env.full | tail -n 1); \
-	echo "Running: https://localhost:$${port:-8443}/"
+up:
+	@sh infra/start-full.sh lan "$(HOST)"
+
+local:
+	@sh infra/start-full.sh local
 
 prepare:
 	@sh infra/prepare-full.sh
