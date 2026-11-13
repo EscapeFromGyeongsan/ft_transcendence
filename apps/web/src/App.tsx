@@ -12,6 +12,7 @@ import {
   isTransientError,
   type AuthFieldErrors,
 } from "./api/errors.ts";
+import { NICKNAME_PATTERN, validateNickname } from "./api/profile-format.ts";
 import { GomokuMatchView } from "./game/GomokuMatchView.tsx";
 import { MatchmakingView } from "./game/MatchmakingView.tsx";
 import { OthelloMatchView } from "./game/OthelloMatchView.tsx";
@@ -1208,6 +1209,13 @@ export function App() {
     event.preventDefault();
     resetMessages();
 
+    const trimmedNickname = regNickname.trim();
+    const nicknameProblem = validateNickname(trimmedNickname);
+    if (nicknameProblem) {
+      setFieldErrors({ nickname: nicknameProblem });
+      return;
+    }
+
     if (!agreeTerms) {
       setErrorMessage("이용약관 및 개인정보처리방침에 동의해 주세요.");
       return;
@@ -1215,7 +1223,6 @@ export function App() {
 
     setSubmitting(true);
     const trimmedEmail = regEmail.trim();
-    const trimmedNickname = regNickname.trim();
 
     try {
       const registeredUser = await authApi.register({
@@ -2151,6 +2158,9 @@ export function App() {
                         name="nickname"
                         type="text"
                         required
+                        minLength={2}
+                        maxLength={32}
+                        pattern={NICKNAME_PATTERN}
                         placeholder="닉네임을 입력하세요"
                         value={regNickname}
                         onChange={(e) => {

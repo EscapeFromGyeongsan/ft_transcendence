@@ -12,6 +12,8 @@ import {
   formatWinRate,
   sumStats,
   validateAvatarFile,
+  validateNickname,
+  validateTwoFactorCode,
 } from "./profile-format.ts";
 
 function memoryStorage(initial: StoredTokens | null): TokenStorage {
@@ -191,5 +193,47 @@ describe("profile formatting helpers", () => {
     expect(
       validateAvatarFile({ type: "image/png", size: 2 * 1024 * 1024 + 1 }),
     ).toMatch(/2MB/);
+  });
+});
+
+describe("validateNickname", () => {
+  it("accepts what the server nicknameSchema accepts", () => {
+    for (const nickname of ["ab", "가나", "player_01", "a-b", "x".repeat(32)]) {
+      expect(validateNickname(nickname)).toBeNull();
+    }
+  });
+
+  it("rejects what the server would reject with 422", () => {
+    for (const nickname of [
+      "",
+      "a",
+      "x".repeat(33),
+      "<b>71d3d0</b>",
+      "a b",
+      "' OR 1=1 --",
+      "😀😀",
+    ]) {
+      expect(validateNickname(nickname)).toMatch(/2~32자/);
+    }
+  });
+});
+
+describe("validateTwoFactorCode", () => {
+  it("accepts a TOTP code or a recovery code", () => {
+    for (const code of [
+      "123456",
+      "ABCD-EFGH",
+      "abcd-efgh",
+      "ABCDEFGH",
+      "ABCD EFGH",
+    ]) {
+      expect(validateTwoFactorCode(code)).toBeNull();
+    }
+  });
+
+  it("rejects other formats", () => {
+    for (const code of ["", "12345", "1234567", "ABCD-EFG1", "<script>"]) {
+      expect(validateTwoFactorCode(code)).toMatch(/6자리 인증 코드/);
+    }
   });
 });

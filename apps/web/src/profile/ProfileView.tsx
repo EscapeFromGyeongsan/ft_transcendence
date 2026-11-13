@@ -27,11 +27,14 @@ import {
 } from "../api/profile-api.ts";
 import {
   GAME_LABELS,
+  NICKNAME_PATTERN,
   RESULT_LABELS,
   formatMatchDate,
   formatWinRate,
   sumStats,
   validateAvatarFile,
+  validateNickname,
+  validateTwoFactorCode,
 } from "../api/profile-format.ts";
 import { Avatar } from "./Avatar.tsx";
 import { DeleteAccountDialog } from "./DeleteAccountDialog.tsx";
@@ -404,6 +407,11 @@ export function ProfileView({
       setNicknameError("현재 닉네임과 동일합니다.");
       return;
     }
+    const nicknameProblem = validateNickname(nickname);
+    if (nicknameProblem) {
+      setNicknameError(nicknameProblem);
+      return;
+    }
     setBusy("nickname");
     try {
       const user = await api.updateNickname(nickname);
@@ -513,10 +521,9 @@ export function ProfileView({
     event.preventDefault();
     setDisableModalError(null);
     const trimmed = disableCodeInput.trim();
-    if (trimmed.length < 6) {
-      setDisableModalError(
-        "현재 6자리 인증 코드 또는 복구 코드(ABCD-EFGH)를 입력해 주세요.",
-      );
+    const codeProblem = validateTwoFactorCode(trimmed);
+    if (codeProblem) {
+      setDisableModalError(codeProblem);
       return;
     }
     setBusy("twoFactorDisable");
@@ -671,6 +678,9 @@ export function ProfileView({
                       <input
                         id="profile-nickname"
                         className={`cbc-input ${nicknameError ? "is-error" : ""}`}
+                        minLength={2}
+                        maxLength={32}
+                        pattern={NICKNAME_PATTERN}
                         value={nicknameInput}
                         onChange={(e) => {
                           setNicknameInput(e.target.value);
