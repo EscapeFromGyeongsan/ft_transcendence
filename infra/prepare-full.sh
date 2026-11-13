@@ -50,8 +50,9 @@ password_file="$(value_of POSTGRES_PASSWORD_FILE)"
 password_file="${password_file:-./infra/secrets/postgres-password}"
 # The API and migration containers read the password file as the non-root
 # node user, so it must be readable by others. Only a file this script creates
-# in a directory other users cannot enter is widened; existing files keep
-# their mode and get a hint instead.
+# in a directory that neither group nor other users can enter is widened.
+# Existing files keep their mode, and a new file in any other directory
+# (including one whose mode cannot be checked) stays 0600; both get a hint.
 password_hint() {
   echo "Note: $password_file is not readable by other users. The api and" >&2
   echo "migration containers read it as the non-root node user; make it" >&2
@@ -65,7 +66,7 @@ if [ ! -e "$password_file" ]; then
   openssl rand -hex 32 > "$password_file"
   echo "Generated $password_file."
   if [ -n "${new_dir:-}" ] ||
-    [ -z "$(find "$password_dir" -prune -perm -001)" ]; then
+    [ -n "$(find "$password_dir" -prune ! -perm -010 ! -perm -001)" ]; then
     chmod 444 "$password_file"
   else
     password_hint
