@@ -39,7 +39,7 @@ The [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md) contain curren
 ## Technical stack and architecture
 
 - Node.js `>=22.12.0` (package engine requirement), TypeScript, npm workspaces; recent implementation reports use Node.js `26.13.0`.
-- Frontend: React, Vite, History API routing and shared CSS custom properties.
+- Frontend: React, Vite, History API routing and Tailwind CSS v4 (utility classes in components, wired in `apps/web/vite.config.ts` and `apps/web/src/index.css`, PR #119), with screen-specific rules and design tokens in `apps/web/src/styles.css`.
 - Backend: Fastify, JSON Schema validation and Swagger UI.
 - Database: PostgreSQL 17, Drizzle ORM, Drizzle Kit migrations and `pg`.
 - Security: Argon2id passwords, signed access tokens, rotating opaque refresh tokens and encrypted TOTP secrets.

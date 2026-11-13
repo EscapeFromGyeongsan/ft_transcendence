@@ -241,7 +241,7 @@ PR #58 엔진은 `master` `5db96b1` 기준 구현됐으며 위 웹 브랜치와 
 ```mermaid
 flowchart TD
     subgraph SPA["React SPA (apps/web/src)"]
-        Main["main.tsx: 엔트리 및 전역 스타일(styles.css) 로드"]
+        Main["main.tsx: 엔트리 및 전역 스타일(index.css: Tailwind + styles.css) 로드"]
         Router["App.tsx: History API 화면 라우팅, 전역 헤더·모달·배너 제어"]
         subgraph Views["화면 컴포넌트"]
             AuthViews["인증 화면: 로그인 / 회원가입 / 2FA 로그인 / OAuth callback / 2FA 설정"]
@@ -281,9 +281,11 @@ flowchart TD
 - **실시간 WebSocket 클라이언트 (`apps/web/src/game/ws-client.ts`, `gomoku-state.ts`)**:
   - 연결 직후 첫 메시지로 `auth` (`{ accessToken }`)를 보내고 `auth.ok` (`{ userId, activeMatchId }`)를 받은 뒤에만 대기열·구독·게임 명령을 전송한다.
   - 비정상 종료 시 지수 백오프(`500ms × 2^attempt`, 최대 `8,000ms`)로 자동 재연결하며, close code `4401`(토큰 만료·무효)일 때는 `refreshAccessToken()`으로 새 `accessToken`을 발급받아 재연결한다.
-- **CSS 도구와 공통 스타일 위치 (`apps/web/src/styles.css`)**:
-  - 별도 CSS-in-JS 런타임 없이 표준 CSS Custom Properties와 `.cbc-*` 네임스페이스 클래스를 `apps/web/src/styles.css` 한 곳에서 관리하고 `main.tsx`에서 로드한다.
-  - Stitch `DESIGN.md`("Warm Meeple & Roast") 토큰을 그대로 사용한다: 배경 `#15120e`(Surface) / `#221e19`(Card) / `#2c2720`(Container High), 본문 `#eae1d8`, 보조 `#d4c3b5`, 주 강조 `#ff7a00`(Warm Amber) ~ `#e05200`(Terracotta), 보조 청록 `#54c7ec`, 위험 `#ffb4ab` / `#93000a`, 제목·수치 폰트 `Space Grotesk` / 본문 `Plus Jakarta Sans`(`Pretendard`·`Noto Sans KR` 폴백) / 좌표·코드 `JetBrains Mono`.
+- **CSS 도구와 공통 스타일 위치 (`apps/web/src/index.css`, `styles.css`, #119)**:
+  - 스타일링 도구는 Tailwind CSS v4(`tailwindcss`, `@tailwindcss/vite` `4.3.3`)다. `vite.config.ts`의 `tailwindcss()` plugin이 빌드에 연결하고, `main.tsx`가 진입점 `index.css`를 로드한다.
+  - `index.css`는 cascade layer 순서를 Tailwind theme → `styles.css`(components) → Tailwind utilities로 둔다. Tailwind preflight(전역 reset)는 `styles.css`의 base 규칙과 겹쳐 넣지 않는다.
+  - 공통 폼(`flex flex-col gap-5` 등), 라벨, 부제, 프로필 레이아웃(`lg:grid-cols-[340px_1fr]`)은 컴포넌트의 Tailwind utility class로 쓴다. 게임판·버튼·카드처럼 화면별 규칙이 많은 스타일은 `styles.css`의 `.cbc-*` 클래스로 유지한다.
+  - 디자인 토큰은 `styles.css` `:root`의 CSS 변수이고, `index.css`의 `@theme inline`이 Tailwind 색·글꼴 이름(`text-on-surface-variant`, `font-display` 등)으로 연결한다. 주요 값: 배경 `--surface` `#fcf9f2`, 본문 `--on-surface` `#1c1c18`, 보조 문구 `--on-surface-variant` `#41493a`, 주 강조 `--primary` `#2f6c00`·`--primary-container` `#70b644`, 오류 `--error` `#ba1a1a`, 제목 글꼴 `Epilogue`, 본문 글꼴 `Plus Jakarta Sans`(`Pretendard`·`Apple SD Gothic Neo` 폴백).
 - **게임 목록·플레이 가능 상태 및 사전 규칙 안내 (`FR-CAT-01`, `FR-CAT-02`)**:
   - `game/matchmaking-state.ts`의 `GAME_CATALOG`를 로비·매칭 화면이 공유한다. #66 브랜치에서는 두 종목 모두 `playable: true`이며 실행 서버 등록 여부는 통합 검증에서 따로 확인한다.
   - 홈·로비(`/`)의 게임 카탈로그에 **오목(Gomoku)**과 **오델로(Othello)** 두 게임을 표시하고, 각 카드에 현재 플레이 가능 상태 배지(예: `플레이 가능`, 엔진 미연결 시 `준비 중` 및 매칭 버튼 비활성)를 명시한다.
@@ -2173,7 +2175,7 @@ flowchart TD
 | 결정 | 선택 | 이유 | 상태 |
 |---|---|---|---|
 | Backend framework | Fastify 5 | JSON Schema 검증과 Swagger 생성이 내장돼 상태 코드 선언 규칙을 지키기 쉬움 | `구현됨` |
-| Frontend framework | React + Vite | 팀 합의, SPA 라우팅과 표준 CSS Custom Properties(`apps/web/src/styles.css`) 조합 | `구현됨` (#21, #22, #24) |
+| Frontend framework | React + Vite + Tailwind CSS | 팀 합의, SPA 라우팅과 Tailwind CSS utility(`apps/web/src/index.css`, #119) 및 화면별 CSS(`apps/web/src/styles.css`) 조합 | `구현됨` (#21, #22, #24) |
 | Database | PostgreSQL 17 | 행 잠금, UNIQUE·CHECK 제약, 트랜잭션 | `구현됨` |
 | ORM / migration | Drizzle ORM + Drizzle Kit + pg | TypeScript 스키마와 검토 가능한 SQL migration | `구현됨` |
 | ID | BIGINT identity (세션·challenge는 UUID) | 단순·순서 보장. 외부 JSON의 matchId도 number (`Number.MAX_SAFE_INTEGER` 이하) | `구현됨` |
@@ -2317,7 +2319,7 @@ flowchart TD
 | `NFR-UX-01` | 최신 안정 Google Chrome에서 주요 흐름이 동작해야 한다. | 2.2.2 | `apps/web/src/`, `config/playwright.config.ts` | 웹 #55·#56·#57·#63·#71~#73; 브라우저 #77 | `AT-11`, `T00`~`T09`, Chrome 버전·콘솔 기록 | 화면 브랜치 구현; 최신 안정 Chrome의 전체 주요 흐름·콘솔 인수 별도 |
 | `NFR-UX-02` | 화면은 다양한 기기 크기에서 명확하고 반응형이며 접근 가능해야 한다. | 2.2.2 | `apps/web/src/game/GomokuMatchView.tsx`, `game/OthelloMatchView.tsx`, `profile/ProfileView.tsx`, `App.tsx`, `styles.css` | 이슈 #22, #64 / PR #71 (`c404491`), #65 / PR #72 (`e28c223`), #66 / PR #73 (`3d06126`) | `AT-11`, `T09` 키보드·라벨·포커스 및 360×800·768×1024·1440×900 제안 크기 | 키보드·반응형·모달 포커스 브랜치 구현; 전체 화면의 실제 브라우저 인수 별도 |
 | `NFR-UX-03` | 사용자 작업에는 처리 중·성공·실패·빈 상태를 구별하는 피드백이 있어야 한다. | 2.2.2 | `apps/web/src/App.tsx`, `api/errors.ts`, `game/GomokuMatchView.tsx`, `profile/ProfileView.tsx`, `profile/LeaderboardView.tsx` | 웹 #55·#56·#57·#63·#71~#73 | `AT-11`, `T01`, `T02`, `T04`, `T09` 로딩·성공·실패·빈 상태 | 피드백 UI 브랜치 구현; 오류 원문 비노출·재시도 안내 및 화면별 실제 인수 별도 |
-| `NFR-UX-04` | CSS 프레임워크 또는 스타일링 솔루션을 사용해야 한다. | 2.2.2, `cyber_board_cafe_stitch_2026-10-28/DESIGN.md` | `apps/web/src/styles.css` | 이슈 #21 (`b431f05`), #22 (`98218d9`), #24 (`bb3bcdf`) | `AT-11`, `T09` | `구현됨` (#21, #22, #24) |
+| `NFR-UX-04` | CSS 프레임워크 또는 스타일링 솔루션을 사용해야 한다. | 2.2.2, `cyber_board_cafe_stitch_2026-10-28/DESIGN.md` | `apps/web/vite.config.ts`, `apps/web/src/index.css`, `App.tsx`·`profile/ProfileView.tsx`의 Tailwind class, `styles.css` | 이슈 #116 / PR #119 (`45a6351`) | `AT-11`, `T09` | PR #119 리뷰 중. 표준 CSS만으로는 평가표 미충족(#116) |
 | `NFR-CONC-01` | 여러 사용자의 동시 로그인·행동을 충돌이나 데이터 손상 없이 처리해야 한다. | 2.6 (정상 착수), 2.8 (명령·동시성), 2.8 (결과 확정), 2.10.20 | `apps/server/src/services/game-command-service.ts`, `repositories/game-repository.ts`, `apps/web/src/game/GomokuMatchView.tsx`(`pendingCommand`) | PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-09`, `game-command-service.test.ts`, `T04`, `T05`, `B-IT-06`, `B-IT-07`, `B-IT-09` | `구현됨` |
 | `NFR-PERF-01` | 승인된 기준 부하에서 일반 요청과 실시간 상태 전달이 지연 목표를 만족해야 한다. | 4.3.2 | 통합 API·WS 실행 환경, 부하 측정 스크립트(계획) | SRS `349e9e4`, `DEC-10` 승인 확인 필요 | `AT-10`, `T05`와 구분한 4.3.2 부하 측정 | SRS 수치는 제안이며 승인 전 합격 기준 아님; 측정 미실행 |
 | `NFR-REC-01` | 네트워크 지연·일시 단절에서도 잘못된 확정 상태를 만들지 않아야 한다. | 2.2.2, 2.5.9, 2.6.13, 2.8 (명령·동시성) | `apps/server/src/api/ws-routes.ts`, `services/game-command-service.ts`, `apps/web/src/App.tsx`, `game/ws-client.ts` | PR #11 (`29d5a3e`), PR #41(병합)·#42·#43·#49·#50(병합 전), 웹 #55·#56 | `AT-06`, `T01`, `T04` | `구현됨` (병합 전) |
