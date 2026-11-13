@@ -1565,7 +1565,7 @@ flowchart TD
     H -->|예| L["127.0.0.1:PORT listen, SIGINT/SIGTERM에 정상 종료"]
 ```
 
-`TWO_FACTOR_KEY`가 없으면 2FA route만 503이고, `FT_OAUTH_*`가 없으면 OAuth route만 503이다. 나머지 기능은 동작한다.
+`TWO_FACTOR_KEY`가 없으면 2FA route만 503(`Two-factor is not configured.`)이고, `FT_OAUTH_*`가 없으면 OAuth route만 503(`42 login is not configured.`)이다. 나머지 기능은 동작한다.
 
 #### 2.10.24 QA 계정 준비 `npm run qa:accounts`
 

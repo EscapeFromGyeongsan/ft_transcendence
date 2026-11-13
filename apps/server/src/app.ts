@@ -14,6 +14,7 @@ import { errorBody } from "./schemas/errors.ts";
 import {
   createAuthService,
   ServiceUnavailableError,
+  TWO_FACTOR_NOT_CONFIGURED,
   type AuthConfig,
   type AuthService,
 } from "./services/auth-service.ts";
@@ -117,8 +118,13 @@ export async function buildApp(
           createSecretBox(authConfig.twoFactorKey),
         )
       : undefined;
+  // Without a DB the default message applies; with one, only the key is missing.
   const getTwoFactor = (): TwoFactorService => {
-    if (!twoFactor) throw new ServiceUnavailableError();
+    if (!twoFactor) {
+      throw new ServiceUnavailableError(
+        database ? TWO_FACTOR_NOT_CONFIGURED : undefined,
+      );
+    }
     return twoFactor;
   };
   const connections = createConnectionRegistry();
@@ -163,7 +169,11 @@ export async function buildApp(
         )
       : undefined;
   const getOAuth = (): OAuthService => {
-    if (!oauth) throw new ServiceUnavailableError();
+    if (!oauth) {
+      throw new ServiceUnavailableError(
+        auth ? "42 login is not configured." : undefined,
+      );
+    }
     return oauth;
   };
   const users = database ? createUserService(database.db) : undefined;
@@ -236,10 +246,13 @@ export async function buildApp(
         .send(errorBody("OAUTH_PROVIDER_ERROR", "42 login is unavailable."));
     }
     if (isDatabaseUnavailable(error)) {
-      request.log.error("Database is unavailable.");
-      return reply
-        .code(503)
-        .send(errorBody("SERVICE_UNAVAILABLE", "Database is unavailable."));
+      // A missing setting names itself; DB failures keep the generic message.
+      const message =
+        error instanceof ServiceUnavailableError
+          ? error.message
+          : "Database is unavailable.";
+      request.log.error(message);
+      return reply.code(503).send(errorBody("SERVICE_UNAVAILABLE", message));
     }
     request.log.error({ err: error }, "Unhandled error.");
     return reply
