@@ -1,3 +1,5 @@
+import { NICKNAME_RULE_MESSAGE } from "./profile-format.ts";
+
 /**
  * 서버 검증 오류의 필드 경로와 메시지를 나타내는 단일 항목입니다.
  */
@@ -118,7 +120,7 @@ function getValidationIssueMessage(path: string): string | undefined {
     return "비밀번호는 8자 이상 128자 이하로 입력해 주세요.";
   }
   if (path.includes("nickname")) {
-    return "닉네임은 2~32자의 문자, 숫자, 밑줄(_), 하이픈(-)만 사용할 수 있습니다.";
+    return NICKNAME_RULE_MESSAGE;
   }
   return undefined;
 }

@@ -84,3 +84,31 @@ export function validateAvatarFile(file: {
   }
   return null;
 }
+
+/** 서버 `nicknameSchema`(`apps/server/src/api/auth-routes.ts`)와 같은 규칙입니다. */
+export const NICKNAME_PATTERN = "[\\p{L}\\p{N}_\\-]{2,32}";
+export const NICKNAME_RULE_MESSAGE =
+  "닉네임은 2~32자의 문자, 숫자, 밑줄(_), 하이픈(-)만 사용할 수 있습니다.";
+
+/**
+ * 닉네임을 보내기 전에 서버와 같은 규칙으로 확인하고 문제가 있으면 안내 문구를 반환합니다.
+ * 중복 여부는 서버가 판정합니다.
+ */
+export function validateNickname(nickname: string): string | null {
+  return new RegExp(`^${NICKNAME_PATTERN}$`, "v").test(nickname)
+    ? null
+    : NICKNAME_RULE_MESSAGE;
+}
+
+/**
+ * 2FA 코드가 인증 앱의 6자리 숫자나 복구 코드(`ABCD-EFGH`) 형식인지 확인합니다.
+ * 코드가 맞는지는 서버가 판정합니다.
+ *
+ * @remarks 서버와 같은 기준입니다. 정확히 6자리 숫자면 인증 앱 코드, 그 밖에는 16자 이하에서 공백·하이픈을 모두 지우고 대소문자를 무시한 복구 코드로 봅니다.
+ */
+export function validateTwoFactorCode(code: string): string | null {
+  return /^\d{6}$/.test(code) ||
+    (code.length <= 16 && /^[A-Z2-7]{8}$/i.test(code.replace(/[\s-]/g, "")))
+    ? null
+    : "현재 6자리 인증 코드 또는 복구 코드(ABCD-EFGH)를 입력해 주세요.";
+}
