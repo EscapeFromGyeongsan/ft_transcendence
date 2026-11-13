@@ -189,9 +189,7 @@ test.describe("#136 UI regressions — synthetic HTTP/WS contracts", () => {
             .length,
       )
       .toBe(1);
-    await page
-      .getByRole("button", { name: "이전 화면으로 돌아가기", exact: true })
-      .click();
+    await page.getByTestId("legal-back-btn").click();
     await expect(page.getByTestId("lobby-view")).toBeVisible();
     await page.evaluate(() => history.pushState(null, "", "/matching"));
     await page.goBack();
