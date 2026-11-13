@@ -19,12 +19,8 @@ if [ ! -e "$env_file" ]; then
 fi
 chmod 600 "$env_file"
 
-# Prints the value of KEY in the env file (empty if unset), without the quotes
-# Compose allows around it.
-value_of() {
-  sed -n "s/^$1=//p" "$env_file" | tail -n 1 |
-    sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\\1/"
-}
+# value_of KEY: the environment first, then the env file, read like Compose.
+. infra/env-value.sh
 
 # Fills KEY only when it is empty or missing: with VALUE if given, otherwise
 # with a random secret.

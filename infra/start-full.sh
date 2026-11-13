@@ -18,20 +18,17 @@ compose() {
     -p cyber-board-cafe-full -f infra/compose.full.yaml "$@"
 }
 
-# Values exactly as Compose resolves them: the environment first, then the env
-# file with its quotes and comments removed. Compose before `config
-# --environment` existed: the environment, then the env file without quotes.
+# Values exactly as Compose resolves them. Compose before `config
+# --environment` existed: the same rules from infra/env-value.sh.
 resolved="$(compose config --environment 2>/dev/null || true)"
+. infra/env-value.sh
 
 # Prints the resolved value of KEY (empty if unset).
-value_of() {
-  if [ -n "$resolved" ]; then
+if [ -n "$resolved" ]; then
+  value_of() {
     printf '%s\n' "$resolved" | sed -n "s/^$1=//p" | tail -n 1
-  else
-    printenv "$1" || sed -n "s/^$1=//p" "$env_file" | tail -n 1 |
-      sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\\1/"
-  fi
-}
+  }
+fi
 
 # Prints this computer's first IPv4 address (empty if none is found).
 detect_host() {
