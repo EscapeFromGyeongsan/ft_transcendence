@@ -458,7 +458,7 @@ IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두�
 | 404 | `NOT_FOUND` | 없는 경로, 또는 경로는 있지만 그 메서드가 없음 (`Route not found.`) |
 | 413 | `PAYLOAD_TOO_LARGE` | 본문 크기 제한 초과 (JSON 1 MiB, 아바타 2 MiB) |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type. multipart는 `PUT /api/users/me/avatar`만 받는다 |
-| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패 |
+| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패. 경로 파라미터가 100자를 넘거나 `%` 인코딩이 잘못된 경우도 포함(`Invalid path parameter.`, #150) |
 | 429 | `RATE_LIMITED` | 요청 횟수 제한 초과 |
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | DB 미설정·연결 실패 등 의존 서비스 장애 |
@@ -494,7 +494,13 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 | `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |
 | `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
 | `DELETE /api/users/me/avatar` (PR #15) | 204 | 400, 401, 413, 415, 500, 503 |
-| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
+| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users?nickname=` (#95) | 200 | 401, 422, 429, 500, 503 |
+| `GET /api/friends` (#95) | 200 | 401, 500, 503 |
+| `POST /api/friends/requests` (#95) | 201 (새 요청), 200 (맞요청 수락) | 400, 401, 404 (`USER_NOT_FOUND`), 409 (`ALREADY_FRIENDS`, `REQUEST_PENDING`, `REQUEST_DECLINED`, `FRIEND_REQUEST_CONFLICT`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/accept` (#95) | 200 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/decline` (#95) | 204 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `DELETE /api/friends/{userId}` (#95) | 204 | 400, 401, 404 (`NOT_FOUND`), 413, 415, 422, 429, 500, 503 |
 
 - 새 닉네임 입력은 NFC로 정규화해 저장하고, 대소문자나 Unicode 조합 형태만 다른 닉네임도 중복(409 `NICKNAME_TAKEN`)으로 본다. 가입·`PATCH /api/users/me`·42 첫 로그인에 같이 적용된다. `0007_case_insensitive_nickname.sql` 다음 `0008_normalized_nickname.sql`이 `lower(normalize(nickname, NFC))` UNIQUE index를 적용하므로 이전 버전에서 NFD로 저장된 닉네임도 비교 대상이다. 기존 데이터에 이미 같은 비교 키가 둘 이상 있으면 migration은 실패하고 트랜잭션이 롤백된다. 계정이나 닉네임을 자동 삭제·개명하지 않으며, 배포 전에 충돌을 확인하고 담당자가 해결해야 한다.
 - 42 이메일이 없거나 254자를 넘으면 계정을 만들지 않고 422 `OAUTH_EMAIL_MISSING`으로 답한다.
@@ -526,22 +532,29 @@ SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 �
 
 프로필 변경·아바타 응답은 기본 DTO이므로 웹은 같은 사용자 ID의 갱신 결과를 기존 본인 정보에 병합해 인증 수단 표시를 보존한다. 새로고침 시 본인 계정 조회로 다시 확인한다.
 
-### 11.5 친구 웹 클라이언트 (#80·#90, 서버 PR 통합 대기)
+### 11.5 친구 웹 클라이언트 (#80·#90)
 
-친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 PR은 미병합이다. 이 절은 #90이 소비하는 계약이며 master에 구현된 서버 API의 상태 코드 표(11.3)를 확장하지 않는다.
+친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 기능은 #147 통합 후보에 포함됐고 상태 코드는 11.3 표를 따른다(#158). 이 절은 #90이 소비하는 클라이언트 계약이다.
 
 | 클라이언트 동작 | 대조한 #95 계약 |
 |---|---|
 | 목록 | `GET /api/friends` → `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }`. 두 요청 목록에는 `requestId`, `createdAt`이 필요하다. |
-| 검색 | `GET /api/users?nickname=접두사` → `{ id, nickname, avatarUrl }[]`, 최대 20명·본인 제외. trim한 1~32자 접두사를 사용하며 `userId`로 정규화한다. |
+| 검색 | `GET /api/users?nickname=접두사` → `{ id, nickname, avatarUrl }[]`, 최대 20명·본인 제외. trim한 1~32자 접두사를 사용하며 `userId`로 정규화한다. 접두사와 닉네임은 NFC로 맞춰 대소문자 없이 비교하므로 이전 버전에서 NFD로 저장된 닉네임도 찾는다(#157). |
 | 요청 | `POST /api/friends/requests { userId }` → 공통 사용자 정보와 `requestId`, `status: pending 또는 accepted` |
 | 수락 | `POST /api/friends/requests/{requestId}/accept` → 해당 요청 ID의 `accepted` 결과 |
 | 거절 | `POST /api/friends/requests/{requestId}/decline` → 204 |
 | 친구 삭제 | `DELETE /api/friends/{userId}` → 204 |
 
-목록·검색·성공 응답은 클라이언트에서 형태를 확인하며 누락된 `online`을 false로 채우지 않는다. 현재 #95는 boolean 또는 집계 미연결 시 503이며, B 검토안의 명시적 null도 확인 불가로 보존한다. 부적합한 성공 응답은 로컬 `FRIENDS_INVALID_RESPONSE`, 15초 초과는 로컬 `FRIENDS_TIMEOUT`으로 표시한다. 두 코드는 서버 오류 계약이 아니다. timeout이면 개별 요청을 취소하고 결과 미확정을 안내한다. 공유 refresh는 유지하지만 취소된 변경 요청은 뒤늦게 전송하지 않는다. #95의 `REQUEST_DECLINED`는 409이며 B 검토안의 403도 같은 안내로 처리한다. 404·409 후에는 목록을 다시 확인하고 변경 요청을 자동 재전송하지 않는다.
+서버 규칙(#95):
 
-서버 성공 이후 재조회가 실패하면 성공 안내를 유지하면서 목록 실패를 별도로 표시한다. 새 조회가 확인될 때까지 이전 목록의 변경 동작과 온라인 표시를 확정하지 않는다. 온라인은 마지막 목록 조회 시점의 값이다. WS 인증 연결 복구와 인증 후 `presence { userId, online }`·`friends.changed {}`는 REST 재조회를 유발하며, 이벤트 값으로 목록을 직접 덮지 않는다. 서버의 registry 주입·변경 후 알림 발행 및 #98의 삭제 후 수신자 경합 해결은 병합·출시 조건이다.
+- 수락·거절은 요청을 받은 사용자만 할 수 있다. 보낸 사용자가 시도하면 403 `FORBIDDEN`이다.
+- 거절된 요청의 보낸 사용자가 다시 요청하면 409 `REQUEST_DECLINED`다. 거절한 사용자가 반대 방향으로 요청하면 거절된 행을 지우고 새 `requestId`로 201을 돌려준다. 이전 `requestId`의 수락·거절은 404 `NOT_FOUND`다.
+- 받은 요청이 대기 중일 때 반대 방향으로 요청하면 새 행을 만들지 않고 그 요청을 수락해 200을 돌려준다.
+- 같은 두 사용자의 요청 삽입이 동시에 겹치면 서버가 다시 조회하며 삽입을 최대 3번 시도하고, 그래도 결과가 정해지지 않으면 409 `FRIEND_REQUEST_CONFLICT`다.
+
+목록·검색·성공 응답은 클라이언트에서 형태를 확인하며 누락된 `online`을 false로 채우지 않는다. 통합 앱은 `online`에 인증 완료 WS 연결이 하나 이상인지를 boolean으로 넣는다(`connections.isUserOnline`). 집계를 연결하지 않은 서비스는 목록 조회를 503으로 거절하며, 클라이언트는 명시적 null도 확인 불가로 보존한다. 부적합한 성공 응답은 로컬 `FRIENDS_INVALID_RESPONSE`, 15초 초과는 로컬 `FRIENDS_TIMEOUT`으로 표시한다. 두 코드는 서버 오류 계약이 아니다. timeout이면 개별 요청을 취소하고 결과 미확정을 안내한다. 공유 refresh는 유지하지만 취소된 변경 요청은 뒤늦게 전송하지 않는다. #95의 `REQUEST_DECLINED`는 409이며 B 검토안의 403도 같은 안내로 처리한다. 404·409 후에는 목록을 다시 확인하고 변경 요청을 자동 재전송하지 않는다.
+
+서버 성공 이후 재조회가 실패하면 성공 안내를 유지하면서 목록 실패를 별도로 표시한다. 새 조회가 확인될 때까지 이전 목록의 변경 동작과 온라인 표시를 확정하지 않는다. 온라인은 마지막 목록 조회 시점의 값이다. WS 인증 연결 복구와 인증 후 `presence { userId, online }`·`friends.changed {}`는 REST 재조회를 유발하며, 이벤트 값으로 목록을 직접 덮지 않는다. 서버는 연결 registry를 친구 서비스에 주입하고, 친구 변경이 DB에 반영된 뒤 `friends.changed`를, 연결 수가 0 ↔ 1 이상으로 바뀔 때 `presence`를 보낸다(12.8절).
 
 응답 대체 검증과 미공개 서버 후보의 실제 두 계정 API·WS·DB 검증, #89 탈퇴·migration 선행 조건은 [친구 화면 검증 기록](friends-web-validation.md)에서 구분한다.
 

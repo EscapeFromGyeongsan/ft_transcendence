@@ -100,6 +100,34 @@ export function validateNickname(nickname: string): string | null {
     : NICKNAME_RULE_MESSAGE;
 }
 
+// 서버 JSON Schema `format: "email"`(ajv-formats full 모드)과 같은 식입니다.
+const EMAIL_PATTERN =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+
+/**
+ * 로그인·가입 이메일을 보내기 전에 서버와 같은 규칙(이메일 형식, 254자 이하)으로 확인합니다.
+ * 가입 여부와 중복은 서버가 판정합니다.
+ */
+export function validateEmail(email: string): string | null {
+  if (email === "") return "이메일을 입력해 주세요.";
+  return email.length <= 254 && EMAIL_PATTERN.test(email)
+    ? null
+    : "올바른 이메일 주소를 입력해 주세요. (예: name@example.com)";
+}
+
+/**
+ * 비밀번호 길이를 서버와 같은 규칙(8~128자)으로 확인합니다. 맞는지는 서버가 판정합니다.
+ *
+ * @remarks 서버 JSON Schema의 `minLength`·`maxLength`처럼 UTF-16 단위가 아니라 문자(code point) 수로 셉니다.
+ */
+export function validatePassword(password: string): string | null {
+  const length = [...password].length;
+  if (length === 0) return "비밀번호를 입력해 주세요.";
+  return length >= 8 && length <= 128
+    ? null
+    : "비밀번호는 8~128자로 입력해 주세요.";
+}
+
 /**
  * 2FA 코드가 인증 앱의 6자리 숫자나 복구 코드(`ABCD-EFGH`) 형식인지 확인합니다.
  * 코드가 맞는지는 서버가 판정합니다.

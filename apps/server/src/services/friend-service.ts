@@ -309,7 +309,8 @@ export function createFriendService(
   ): Promise<
     Array<{ id: number; nickname: string; avatarUrl: string | null }>
   > {
-    const prefix = nickname.trim();
+    // Compare in NFC like the nickname unique index, so legacy NFD nicknames match too.
+    const prefix = nickname.trim().normalize("NFC");
     if (!prefix) return [];
     return db
       .select(profileFields)
@@ -318,7 +319,7 @@ export function createFriendService(
         and(
           ne(users.id, actorId),
           isNull(users.deletedAt),
-          sql`left(lower(${users.nickname}), char_length(${prefix})) = lower(${prefix})`,
+          sql`left(lower(normalize(${users.nickname}, NFC)), char_length(${prefix})) = lower(${prefix})`,
         ),
       )
       .orderBy(asc(users.nickname), asc(users.id))

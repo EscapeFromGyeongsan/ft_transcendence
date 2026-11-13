@@ -320,6 +320,20 @@ describe.skipIf(!testDatabaseUrl)("friend REST with PostgreSQL", () => {
       [],
     );
     expect((await call(1, "GET", "/api/users?nickname=")).statusCode).toBe(422);
+    // Nicknames saved before NFC normalization may still be in NFD (#157).
+    await database.db.execute(
+      sql`INSERT INTO users (email, nickname) VALUES ('nfd@example.com', ${"한글".normalize("NFD")})`,
+    );
+    for (const query of ["한", "한".normalize("NFD")]) {
+      const found = await call(
+        1,
+        "GET",
+        `/api/users?nickname=${encodeURIComponent(query)}`,
+      );
+      expect(found.json()).toEqual([
+        { id: 4, nickname: "한글".normalize("NFD"), avatarUrl: null },
+      ]);
+    }
     expect(
       (await app.inject({ method: "GET", url: "/api/friends" })).statusCode,
     ).toBe(401);

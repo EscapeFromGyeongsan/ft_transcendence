@@ -69,6 +69,20 @@ export async function findUserById(
   return user;
 }
 
+/**
+ * 탈퇴하지 않은 사용자 행을 `FOR SHARE`로 잠그고 있는지 확인합니다.
+ *
+ * @remarks 탈퇴는 같은 행을 `FOR UPDATE`로 잠그므로, 세션 생성과 탈퇴가 겹치면 한쪽이 끝날 때까지 기다립니다.
+ */
+export async function lockActiveUser(db: Executor, userId: number) {
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+    .for("share");
+  return user !== undefined;
+}
+
 export async function insertSession(
   db: Executor,
   values: { userId: number; expiresAt: Date },
