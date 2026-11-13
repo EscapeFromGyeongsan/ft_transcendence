@@ -44,8 +44,12 @@ const listenOptions = readListenOptions();
 // peer is a trusted proxy. Default: loopback (local dev proxy). Behind the
 // Docker Nginx set TRUST_PROXY=uniquelocal (private network addresses).
 const trustProxy = process.env.TRUST_PROXY || "loopback";
+// Errors (500, 503, lost DB pool) go to stdout for `make logs`. The default
+// "warn" leaves out per-request lines, which would carry URLs such as the 42
+// callback query.
+const logger = { level: process.env.LOG_LEVEL || "warn" };
 const app = await buildApp(
-  { trustProxy },
+  { trustProxy, logger },
   process.env.DATABASE_URL,
   { jwtSecret, twoFactorKey, oauth42 },
   process.env.AVATAR_DIR || "data/avatars",

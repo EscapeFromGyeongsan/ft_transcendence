@@ -74,6 +74,16 @@ docker compose --env-file .env.full --project-directory . \
 
 `make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID`, `FT_OAUTH_CLIENT_SECRET` and `FT_OAUTH_REDIRECT_URI` are set in `.env.full`. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
 
+The `db`, `api` and `web` containers restart after a crash or a Docker restart; `make down` stops them. Server errors (500, 503, lost database connection) appear in `make logs`.
+
+If `make` stops with `service "migrate" didn't complete successfully: exit 1` and `make logs` shows `password authentication failed`, this computer still has a database volume created with an earlier password (for example from a previous clone). When that data is not needed, remove the old volumes and run `make` again. This deletes the accounts, matches and avatars stored in them:
+
+```sh
+make down
+docker volume rm cyber-board-cafe-full_postgres_data cyber-board-cafe-full_avatars
+make
+```
+
 Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
 
 The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. WebSocket upgrade forwarding is prepared under `/api/`; actual WSS validation requires the real endpoint. See [the validation record](Document/runtime-validation.md).
