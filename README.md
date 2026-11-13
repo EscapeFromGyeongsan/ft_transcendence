@@ -297,7 +297,7 @@ Commits and PRs record individual contributions. The [roadmap](Document/roadmap.
 
 ### Individual Contributions
 
-The entry below records A's implementation work and challenges evidenced by PRs. The other members' entries and the final combined section are tracked in [#125](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/125). The referenced feature and integration PRs remain separate from the code in this documentation checkout.
+Each entry below is based on the member's own write-up in [#125](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/125). B's entry is still tracked there. The referenced feature and integration PRs remain separate from the code in this documentation checkout.
 
 #### jyoo (A) — Frontend developer, UI/UX and documentation
 
@@ -313,6 +313,49 @@ Implementation challenges and how they were addressed:
 3. **Keeping navigation consistent with matchmaking and authentication.** Back/Forward, legal-page navigation and late queue events could leave stale matching state; OAuth failures and busy dialogs also needed explicit recovery. #144 coordinates queue cancellation with navigation, ignores canceled queue responses, restores a valid session after callback failure, and adds dialog/menu keyboard and focus handling. Its validation record distinguishes mocked browser scenarios from actual HTTPS/WSS gameplay.
 
 Suggested evaluation walkthrough: trace a board click from the React board through the command's `stateVersion` to the server snapshot, then demonstrate two-tab takeover and recovery. The source and executed checks are documented in [the #136 validation record](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/c4ef0e4968b06cbe3f7d60db8e75b65f48bdf34f/Document/evaluation-136-validation.md); this is supporting evidence, and each member must still explain their own implementation during evaluation.
+
+#### yoshin (C, gdtknight) - Game engine developer
+
+- **Role:** Developer (game engine and rules).
+- **Othello 8×8 game engine** (`packages/game-engine/src/othello`, [#58](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/58)), the module C will explain during evaluation: implemented 8-directional sandwich flipping with multi-direction flips (`findFlippableDiscs`), automatic pass when there is no legal move (`hasLegalMoves`), and wipeout and disc-count/draw results (`disc_count` / `draw`). Wrote 30 unit tests, including input deep-freeze immutability and early wipeout edge cases.
+- **Gomoku board snapshot restore and registration interface** (`gomoku.board(moves)`, [#45](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/45)): on top of the existing Gomoku rules, restored the 15×15 board from the DB move history (`restoreState`) and implemented the `{ version, rules, board }` registration contract (`IF-04`).
+- **Game rules document and contract sync** (`Document/GAME_RULES.md`, [#70](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/70)): detailed Othello rules, the engine rejection codes (`INVALID_ACTION`, `GAME_FINISHED`), the DEC-03 60-second cumulative absence budget per match, and the resume condition when both players return.
+- **Cross-area integration and E2E review:** reviewed and approved [#33](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/33) (server contract integration), [#61](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/61) (engine registration in the running server and two-browser real-time E2E), [#63](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/63) (web matchmaking queue) and [#94](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/94) (TSDoc).
+
+Challenges and how they were addressed:
+
+1. **Replaying Othello history correctly after automatic passes.** Unlike Gomoku, Othello lets one player move twice in a row when the opponent has no legal move, so deriving the turn from `index % 2` during replay corrupts the board after a pass. `restoreState` advances by each persisted move's `move.stone` color and checks `move.stone === state.currentPlayerColor` at every move, so the board is restored deterministically however many passes occurred.
+2. **Five in a row versus draw on Gomoku's 225th move.** A five completed by the move that fills the board risked being recorded as a draw because no empty cells remain. Move handling checks five in a row (`hasFive`) first and only then counts empty cells to end the game as `draw`.
+3. **Keeping the pure engine separate from server and network errors (`IF-01` / `IF-04`).** Disconnects, turn violations, version conflicts and concurrency locks could leak into what should be pure engine functions. Engine results are limited to the two rule codes `INVALID_ACTION` and `GAME_FINISHED`; pause (`paused`), resignation (`resign`), `VERSION_CONFLICT` and the 60-second cumulative absence forfeit are handled by the server (`GameCommandService`).
+
+#### sipyeon (D, sypyeon) - Real-time developer
+
+- **Role:** Developer (real-time communication). Owns the `/api/ws` WebSocket server and the matchmaking, game delivery and reconnection built on it. Evidence owner for the Real-time features (major, 2) and Remote players (major, 2) modules.
+- **Disconnect detection and reconnection** ([#50](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/50)), the feature D will explain during evaluation: the server finds unresponsive connections with ping, closes them, notifies the opponent and pauses the match. A player who returns within the match's 60-second cumulative budget continues from the latest snapshot; after that, the opponent wins if one player is gone, and the match is invalidated if both are.
+- WebSocket connection with first-message authentication, and closing connections on logout or session revocation ([#41](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/41)).
+- Match subscribe/unsubscribe with per-match message isolation; among several tabs of one account, the last tab controls the match ([#42](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/42)).
+- Game command handling: broadcast after the DB commit, version ordering, and handling of a resent `commandId` ([#43](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/43)).
+- Per-game automatic matchmaking queue and match creation ([#49](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/49)).
+- Gomoku and Othello engine registration in the running server ([#61](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/61)) and friend online status (presence, [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/98)).
+
+Challenges and how they were addressed:
+
+1. **A logout committed during token verification left a connection open that should have been closed.** The connection is now registered on the session first and the session is checked once more, so the connection closes whenever the logout happens ([#41](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/41)).
+2. **Commands arriving after a match ended got the wrong error (`INVALID_MESSAGE`).** B wrote a reproduction test in review. The cause was that ending a match also cleared its game type; it is now kept until every subscriber leaves, and the test was added ([#43](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/43)).
+3. **A queue request waiting on a DB lookup in one tab still entered the queue after another tab canceled it, even though the cancel had been acknowledged.** A cancel now marks the pending request, which then stays out of the queue, and both tabs are told it was canceled ([#49](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/49)).
+
+#### uersnmae (E) - PM and social developer
+
+- **Role:** PM and social developer. Owned the runtime environment and HTTPS deployment, and carried out the friends API and remote-play integration checks.
+- **Full-stack Docker Compose deployment** ([#10](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/10), [#40](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/40)), the feature E will explain during evaluation: configured the web, API and PostgreSQL Docker Compose deployment and the Nginx HTTPS/WSS connection, including the DB ready → Drizzle migration → API/web start order and the avatar storage volume.
+- Friend relationship schema and the search, list, request, accept, decline and remove REST API, with concurrent requests verified on a real PostgreSQL ([#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/95)).
+- In a verification environment combining the deployment, server and web PRs, checked Gomoku auto-matching, disconnect and return, and both players' records after a match, and wrote the E2E tests and reproduction steps ([#67](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/67), [#28](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/28)).
+
+Challenges and how they were addressed:
+
+1. **The deployment settings and the game server's startup code conflicted in `index.ts`.** Kept both the container's `API_HOST`/`PORT` settings and the game engine registration, then verified HTTPS play and reconnection in Chrome on a Windows PC and a MacBook ([#67](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/67), [#28](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/28)).
+2. **Avatars had to survive replacing the API container, and the API runs as a non-root user that needs write access.** Mounted a Docker named volume at `/data/avatars`, set the directory ownership in the image, and confirmed the same avatar file could be read before and after recreating the container ([#40](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/40), [#67](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/67)).
+3. **Two users sending each other a friend request at the same time had to end up with one relationship.** Added a uniqueness constraint on the user pair; when the insert conflicts, the transaction re-reads the relationship and accepts the opposite request. Verified concurrent requests and lock waits on a real PostgreSQL ([#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/95)).
 
 ### Modules (16 points)
 
