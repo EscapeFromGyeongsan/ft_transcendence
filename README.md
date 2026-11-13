@@ -297,7 +297,7 @@ Commits and PRs record individual contributions. The [roadmap](Document/roadmap.
 
 ### Individual Contributions
 
-Each entry below is based on the member's own write-up in [#125](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/125). B's entry is still tracked there. The referenced feature and integration PRs remain separate from the code in this documentation checkout.
+Each entry below is based on the member's own write-up in [#125](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/125). The referenced feature and integration PRs remain separate from the code in this documentation checkout.
 
 #### jyoo (A) — Frontend developer, UI/UX and documentation
 
@@ -313,6 +313,20 @@ Implementation challenges and how they were addressed:
 3. **Keeping navigation consistent with matchmaking and authentication.** Back/Forward, legal-page navigation and late queue events could leave stale matching state; OAuth failures and busy dialogs also needed explicit recovery. #144 coordinates queue cancellation with navigation, ignores canceled queue responses, restores a valid session after callback failure, and adds dialog/menu keyboard and focus handling. Its validation record distinguishes mocked browser scenarios from actual HTTPS/WSS gameplay.
 
 Suggested evaluation walkthrough: trace a board click from the React board through the command's `stateVersion` to the server snapshot, then demonstrate two-tab takeover and recovery. The source and executed checks are documented in [the #136 validation record](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/c4ef0e4968b06cbe3f7d60db8e75b65f48bdf34f/Document/evaluation-136-validation.md); this is supporting evidence, and each member must still explain their own implementation during evaluation.
+
+#### yunhpark (B, nini4746) - Technical lead
+
+- **Role:** Technical lead for authentication, the database, command persistence/concurrency, statistics and integration support.
+- **Authentication, 42 OAuth/2FA, match persistence and per-game statistics server APIs** ([#11](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/11)), the feature B will explain during evaluation.
+- Avatar upload, deletion and file serving API ([#15](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/15)).
+- Unified game contract types, `getSnapshot` and the REST status-code document ([#33](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/33)); system finish on absence expiry, `finishBySystem` ([#32](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/32)); match pause status transitions and session revocation notices ([#51](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/51)).
+- WebSocket 4401 close when a reused refresh token revokes the session ([#97](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/97)); error response and status-code fixes ([#93](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/93), [#103](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/103), [#107](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/107)).
+- One-command full-application deployment with `make` ([#123](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/123), [#131](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/131), [#134](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/134)).
+- Initial code skeleton and DB connection ([#2](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/2)), TSDoc convention ([#46](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/46)), issue/PR templates and collaboration rules ([#48](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/48)).
+
+Challenges and how they were addressed:
+
+1. **Working apart from each other.** Team members found it hard to come to the cluster together and mostly worked from separate places, so problems could not simply be settled face to face. We communicated by making active use of GitHub features (issues, PRs, reviews and comments) to keep the work moving.
 
 #### yoshin (C, gdtknight) - Game engine developer
 
