@@ -495,6 +495,12 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 | `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
 | `DELETE /api/users/me/avatar` (PR #15) | 204 | 400, 401, 413, 415, 500, 503 |
 | `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users?nickname=` (#95) | 200 | 401, 422, 429, 500, 503 |
+| `GET /api/friends` (#95) | 200 | 401, 500, 503 |
+| `POST /api/friends/requests` (#95) | 201 (새 요청), 200 (맞요청 수락) | 400, 401, 404 (`USER_NOT_FOUND`), 409 (`ALREADY_FRIENDS`, `REQUEST_PENDING`, `REQUEST_DECLINED`, `FRIEND_REQUEST_CONFLICT`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/accept` (#95) | 200 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/decline` (#95) | 204 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `DELETE /api/friends/{userId}` (#95) | 204 | 400, 401, 404 (`NOT_FOUND`), 413, 415, 422, 429, 500, 503 |
 
 - 새 닉네임 입력은 NFC로 정규화해 저장하고, 대소문자나 Unicode 조합 형태만 다른 닉네임도 중복(409 `NICKNAME_TAKEN`)으로 본다. 가입·`PATCH /api/users/me`·42 첫 로그인에 같이 적용된다. `0007_case_insensitive_nickname.sql` 다음 `0008_normalized_nickname.sql`이 `lower(normalize(nickname, NFC))` UNIQUE index를 적용하므로 이전 버전에서 NFD로 저장된 닉네임도 비교 대상이다. 기존 데이터에 이미 같은 비교 키가 둘 이상 있으면 migration은 실패하고 트랜잭션이 롤백된다. 계정이나 닉네임을 자동 삭제·개명하지 않으며, 배포 전에 충돌을 확인하고 담당자가 해결해야 한다.
 - 42 이메일이 없거나 254자를 넘으면 계정을 만들지 않고 422 `OAUTH_EMAIL_MISSING`으로 답한다.
@@ -526,14 +532,14 @@ SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 �
 
 프로필 변경·아바타 응답은 기본 DTO이므로 웹은 같은 사용자 ID의 갱신 결과를 기존 본인 정보에 병합해 인증 수단 표시를 보존한다. 새로고침 시 본인 계정 조회로 다시 확인한다.
 
-### 11.5 친구 웹 클라이언트 (#80·#90, 서버 PR 통합 대기)
+### 11.5 친구 웹 클라이언트 (#80·#90)
 
-친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 PR은 미병합이다. 이 절은 #90이 소비하는 계약이며 master에 구현된 서버 API의 상태 코드 표(11.3)를 확장하지 않는다.
+친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 기능은 #147 통합 후보에 포함됐고 상태 코드는 11.3 표를 따른다(#158). 이 절은 #90이 소비하는 클라이언트 계약이다.
 
 | 클라이언트 동작 | 대조한 #95 계약 |
 |---|---|
 | 목록 | `GET /api/friends` → `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }`. 두 요청 목록에는 `requestId`, `createdAt`이 필요하다. |
-| 검색 | `GET /api/users?nickname=접두사` → `{ id, nickname, avatarUrl }[]`, 최대 20명·본인 제외. trim한 1~32자 접두사를 사용하며 `userId`로 정규화한다. |
+| 검색 | `GET /api/users?nickname=접두사` → `{ id, nickname, avatarUrl }[]`, 최대 20명·본인 제외. trim한 1~32자 접두사를 사용하며 `userId`로 정규화한다. 접두사와 닉네임은 NFC로 맞춰 대소문자 없이 비교하므로 이전 버전에서 NFD로 저장된 닉네임도 찾는다(#157). |
 | 요청 | `POST /api/friends/requests { userId }` → 공통 사용자 정보와 `requestId`, `status: pending 또는 accepted` |
 | 수락 | `POST /api/friends/requests/{requestId}/accept` → 해당 요청 ID의 `accepted` 결과 |
 | 거절 | `POST /api/friends/requests/{requestId}/decline` → 204 |
