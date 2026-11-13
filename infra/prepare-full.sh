@@ -26,30 +26,37 @@ value_of() {
     sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\\1/"
 }
 
-# Fills KEY with a random value only when it is empty or missing.
-fill_secret() {
+# Fills KEY only when it is empty or missing: with VALUE if given, otherwise
+# with a random secret.
+fill_value() {
   if [ -n "$(value_of "$1")" ]; then
     return
   fi
-  secret="$(openssl rand -hex 32)"
+  value="${2:-$(openssl rand -hex 32)}"
   temporary="$(mktemp "$env_file.XXXXXX")"
   if grep -q "^$1=" "$env_file"; then
-    awk -v key="$1" -v value="$secret" \
+    awk -v key="$1" -v value="$value" \
       'index($0, key "=") == 1 { print key "=" value; next } { print }' \
       "$env_file" > "$temporary"
   else
     cat "$env_file" > "$temporary"
-    echo "$1=$secret" >> "$temporary"
+    echo "$1=$value" >> "$temporary"
   fi
   mv "$temporary" "$env_file"
-  echo "Generated $1 in $env_file."
+  if [ -n "${2:-}" ]; then
+    echo "Set $1=$2 in $env_file."
+  else
+    echo "Generated $1 in $env_file."
+  fi
 }
 
-fill_secret JWT_SECRET
-fill_secret TWO_FACTOR_KEY
+fill_value JWT_SECRET
+fill_value TWO_FACTOR_KEY
+# Compose requires both paths; an empty one gets the default.
+fill_value POSTGRES_PASSWORD_FILE ./infra/secrets/postgres-password
+fill_value CERT_DIR ./infra/certs
 
 password_file="$(value_of POSTGRES_PASSWORD_FILE)"
-password_file="${password_file:-./infra/secrets/postgres-password}"
 # The API and migration containers read the password file as the non-root
 # node user, so it must be readable by others. Only a file this script creates
 # in a directory that neither group nor other users can enter is widened.
@@ -78,7 +85,6 @@ elif [ -z "$(find "$password_file" -prune -perm -004)" ]; then
 fi
 
 cert_dir="$(value_of CERT_DIR)"
-cert_dir="${cert_dir:-./infra/certs}"
 if [ ! -e "$cert_dir/server.crt" ] && [ ! -e "$cert_dir/server.key" ]; then
   sh infra/generate-local-cert.sh "$cert_dir"
 elif [ ! -e "$cert_dir/server.crt" ] || [ ! -e "$cert_dir/server.key" ]; then
