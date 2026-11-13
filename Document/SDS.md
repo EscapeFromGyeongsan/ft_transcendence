@@ -64,7 +64,7 @@
 | 토큰 위조 | JWT HS256, 헤더를 고정값으로만 허용 (`alg: none`·알고리즘 바꿔치기 거절) | `구현됨` | FR-AUTH-03 |
 | 로그아웃 후 토큰 재사용 | 모든 보호 요청에서 서버 세션의 소유자·만료·폐기를 DB로 확인 | `구현됨` | FR-AUTH-03, 07 |
 | refresh token 탈취 | 해시만 저장, 사용할 때마다 교체. 이미 교체된 token이 다시 오면 세션 전체 폐기 | `구현됨` | FR-AUTH-07 |
-| 무차별 대입 | 가입·로그인·갱신·2FA·OAuth callback에 IP당 분당 10회 제한(429). 2FA challenge는 5회 실패 시 폐기. 프록시 뒤에서는 `TRUST_PROXY`로 지정한 프록시의 `X-Forwarded-For`만 믿어 실제 클라이언트 IP로 집계 | `구현됨` | NFR-SEC-05 |
+| 무차별 대입 | 가입·로그인·2FA·OAuth callback에 IP당 분당 10회 제한(429). 토큰 갱신은 화면을 열 때마다 호출되므로 IP당 분당 60회(#149). 2FA challenge는 5회 실패 시 폐기. 프록시 뒤에서는 `TRUST_PROXY`로 지정한 프록시의 `X-Forwarded-For`만 믿어 실제 클라이언트 IP로 집계 | `구현됨` | NFR-SEC-05 |
 | 2FA 비밀값 유출 | TOTP secret을 AES-256-GCM으로 암호화 저장. 키는 `TWO_FACTOR_KEY`에서 HKDF로 파생 | `구현됨` | DATA-05 |
 | OAuth 응답 위조·재사용·login CSRF | `state`를 해시로 저장, 10분·1회용. 시작 응답의 `flowToken`(브라우저 sessionStorage 보관)이 callback에서 일치해야 함(RFC 9700 4.7.1). 연결(link)은 시작한 세션이 callback 시점에도 살아 있어야 함. 같은 email이라는 이유로 기존 계정을 자동 연결하지 않음 | `구현됨` | FR-AUTH-05 |
 | 타인 권한 행사 | 사용자는 항상 토큰으로 식별. 경기 명령은 참가자 확인 후 처리 | `구현됨` | FR-AUTH-04 |
