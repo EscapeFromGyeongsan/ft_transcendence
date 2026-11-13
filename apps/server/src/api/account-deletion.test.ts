@@ -116,7 +116,8 @@ describe.skipIf(!testDatabaseUrl)("account deletion with PostgreSQL", () => {
     const tokens = await createAuthService(database.db, config).completeLogin(
       user.id,
     );
-    if (!("accessToken" in tokens)) throw new Error("unexpected 2FA");
+    if (!tokens || !("accessToken" in tokens))
+      throw new Error("unexpected 2FA");
     return { id: user.id, token: tokens.accessToken };
   }
 

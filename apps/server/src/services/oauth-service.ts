@@ -230,11 +230,10 @@ export function createOAuthService(
         userId = created.userId;
       }
       // Same 2FA policy as password login.
-      return {
-        ok: true,
-        mode: "login",
-        login: await auth.completeLogin(userId),
-      };
+      const login = await auth.completeLogin(userId);
+      // The account was deleted while this callback ran; the state is already used.
+      if (!login) return { ok: false, code: "OAUTH_STATE_INVALID" };
+      return { ok: true, mode: "login", login };
     },
   };
 }
