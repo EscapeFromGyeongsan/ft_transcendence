@@ -61,6 +61,7 @@ test("avatar routes declare every status code in Swagger", async () => {
   expect(codes(paths["/api/media/avatars/{name}"].get)).toEqual([
     "200",
     "404",
+    "422",
     "500",
     "503",
   ]);

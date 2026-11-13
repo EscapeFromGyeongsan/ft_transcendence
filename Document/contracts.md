@@ -458,7 +458,7 @@ IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두�
 | 404 | `NOT_FOUND` | 없는 경로, 또는 경로는 있지만 그 메서드가 없음 (`Route not found.`) |
 | 413 | `PAYLOAD_TOO_LARGE` | 본문 크기 제한 초과 (JSON 1 MiB, 아바타 2 MiB) |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type. multipart는 `PUT /api/users/me/avatar`만 받는다 |
-| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패 |
+| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패. 경로 파라미터가 100자를 넘거나 `%` 인코딩이 잘못된 경우도 포함(`Invalid path parameter.`, #150) |
 | 429 | `RATE_LIMITED` | 요청 횟수 제한 초과 |
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | DB 미설정·연결 실패 등 의존 서비스 장애 |
@@ -494,7 +494,7 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 | `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |
 | `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
 | `DELETE /api/users/me/avatar` (PR #15) | 204 | 400, 401, 413, 415, 500, 503 |
-| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
+| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 422, 500, 503 |
 
 - 새 닉네임 입력은 NFC로 정규화해 저장하고, 대소문자나 Unicode 조합 형태만 다른 닉네임도 중복(409 `NICKNAME_TAKEN`)으로 본다. 가입·`PATCH /api/users/me`·42 첫 로그인에 같이 적용된다. `0007_case_insensitive_nickname.sql` 다음 `0008_normalized_nickname.sql`이 `lower(normalize(nickname, NFC))` UNIQUE index를 적용하므로 이전 버전에서 NFD로 저장된 닉네임도 비교 대상이다. 기존 데이터에 이미 같은 비교 키가 둘 이상 있으면 migration은 실패하고 트랜잭션이 롤백된다. 계정이나 닉네임을 자동 삭제·개명하지 않으며, 배포 전에 충돌을 확인하고 담당자가 해결해야 한다.
 - 42 이메일이 없거나 254자를 넘으면 계정을 만들지 않고 422 `OAUTH_EMAIL_MISSING`으로 답한다.
