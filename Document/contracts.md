@@ -462,7 +462,7 @@ IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두�
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | DB 미설정·연결 실패 등 의존 서비스 장애 |
 
-본문을 받는 POST·PATCH는 본문이 없어도 보내면 해석하므로 400·413·415가 붙는다.
+본문을 받는 POST·PATCH·DELETE(`DELETE /api/users/me`)는 본문이 없어도 보내면 해석하므로 400·413·415가 붙는다.
 
 ### 11.3 엔드포인트별 상태 코드
 
@@ -503,6 +503,8 @@ IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두�
 ### 11.4 전적 공개 설정과 조회 권한 (FR-PRO-04, DEC-05)
 
 `users.records_public`은 `boolean NOT NULL DEFAULT true`다. 새 migration `0004_records_public.sql`이 기존 사용자도 공개 상태로 유지한다. 본인 계정 DTO(`id`, `email`, `nickname`, `avatarUrl`, `createdAt`)에 필수 boolean `recordsPublic`을 추가한다. 가입 응답의 `user`, `GET /api/users/me`, 프로필 변경 및 아바타 업로드 응답이 같은 DTO를 사용한다. 로그인·refresh 응답은 기존 토큰 형식을 유지한다.
+
+`GET /api/users/me`만 이 DTO에 필수 boolean `hasPassword`(비밀번호 로그인 가능 여부)를 더한다. 42로만 가입한 계정은 `false`이고, 탈퇴 화면이 본인 확인 입력란(비밀번호 또는 2FA 코드)을 고를 때 쓴다(#84).
 
 `PATCH /api/users/me`는 `nickname`과 `recordsPublic` 중 하나 이상을 받으며 두 필드를 함께 보낼 수 있다.
 
