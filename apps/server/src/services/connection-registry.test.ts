@@ -13,10 +13,14 @@ describe("connection registry", () => {
   test("a match broadcast reaches only that match's subscribers", () => {
     const registry = createConnectionRegistry();
     const [a1, a2, b1, idle] = [1, 2, 3, 4].map(fakeSocket);
-    registry.add("s1", a1, 1);
-    registry.add("s2", a2, 1);
-    registry.add("s3", b1, 1);
-    registry.add("s4", idle, 1);
+    registry.add("s1", a1);
+    registry.authenticate(a1, 1);
+    registry.add("s2", a2);
+    registry.authenticate(a2, 1);
+    registry.add("s3", b1);
+    registry.authenticate(b1, 1);
+    registry.add("s4", idle);
+    registry.authenticate(idle, 1);
     registry.subscribe(10, 1, a1);
     registry.subscribe(10, 2, a2);
     registry.subscribe(20, 3, b1);
@@ -82,7 +86,8 @@ describe("connection registry", () => {
     const registry = createConnectionRegistry();
     const [left, closed, stays] = [1, 2, 3].map(fakeSocket);
     for (const [i, socket] of [left, closed, stays].entries()) {
-      registry.add("s", socket, 1);
+      registry.add("s", socket);
+      registry.authenticate(socket, 1);
       registry.subscribe(10, i + 1, socket);
     }
     registry.subscribe(20, 2, closed);
@@ -106,9 +111,12 @@ describe("connection registry", () => {
   test("sendToUser reaches every connection of that user only", () => {
     const registry = createConnectionRegistry();
     const [tab1, tab2, other] = [1, 2, 3].map(fakeSocket);
-    registry.add("s1", tab1, 7);
-    registry.add("s2", tab2, 7);
-    registry.add("s3", other, 8);
+    registry.add("s1", tab1);
+    registry.authenticate(tab1, 7);
+    registry.add("s2", tab2);
+    registry.authenticate(tab2, 7);
+    registry.add("s3", other);
+    registry.authenticate(other, 8);
     registry.remove("s2", tab2);
 
     registry.sendToUser(7, { type: "queue.matched" });
@@ -120,14 +128,79 @@ describe("connection registry", () => {
   test("closeSession closes only that session's sockets", () => {
     const registry = createConnectionRegistry();
     const [tab1, tab2, other] = [1, 2, 3].map(fakeSocket);
-    registry.add("s1", tab1, 1);
-    registry.add("s1", tab2, 1);
-    registry.add("s2", other, 1);
+    registry.add("s1", tab1);
+    registry.authenticate(tab1, 1);
+    registry.add("s1", tab2);
+    registry.authenticate(tab2, 1);
+    registry.add("s2", other);
+    registry.authenticate(other, 1);
 
     registry.closeSession("s1", 4401, "Session ended.");
 
     expect(tab1.close).toHaveBeenCalledWith(4401, "Session ended.");
     expect(tab2.close).toHaveBeenCalledWith(4401, "Session ended.");
     expect(other.close).not.toHaveBeenCalled();
+  });
+
+  describe("online state (#82)", () => {
+    function setup() {
+      const changes: number[] = [];
+      const registry = createConnectionRegistry({
+        onPresenceChange: (userId) => changes.push(userId),
+      });
+      return { registry, changes };
+    }
+
+    test("a socket still being checked is neither online nor reachable", () => {
+      const { registry, changes } = setup();
+      const socket = fakeSocket();
+      registry.add("s1", socket);
+
+      expect(registry.isUserOnline(1)).toBe(false);
+      registry.sendToUser(1, { type: "queue.matched" });
+      expect(socket.send).not.toHaveBeenCalled();
+
+      // Refused at the second session check: closed without going online.
+      registry.remove("s1", socket);
+      expect(changes).toEqual([]);
+    });
+
+    test("only the first tab and the last closed tab change the state", () => {
+      const { registry, changes } = setup();
+      const [tab1, tab2] = [1, 2].map(fakeSocket);
+      for (const [session, tab] of [
+        ["s1", tab1],
+        ["s2", tab2],
+      ] as const) {
+        registry.add(session, tab);
+        registry.authenticate(tab, 1);
+      }
+      expect(registry.isUserOnline(1)).toBe(true);
+      expect(changes).toEqual([1]);
+
+      registry.remove("s1", tab1);
+      expect(registry.isUserOnline(1)).toBe(true);
+      expect(changes).toEqual([1]);
+
+      registry.remove("s2", tab2);
+      expect(registry.isUserOnline(1)).toBe(false);
+      expect(changes).toEqual([1, 1]);
+    });
+
+    test("a logout goes offline at once and the later close changes nothing", () => {
+      const { registry, changes } = setup();
+      const socket = fakeSocket();
+      registry.add("s1", socket);
+      registry.authenticate(socket, 1);
+
+      registry.closeSession("s1", 4401, "Session ended.");
+      expect(registry.isUserOnline(1)).toBe(false);
+      expect(changes).toEqual([1, 1]);
+
+      // The close event arrives after the close handshake.
+      registry.remove("s1", socket);
+      registry.remove("s1", socket);
+      expect(changes).toEqual([1, 1]);
+    });
   });
 });

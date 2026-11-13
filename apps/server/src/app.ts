@@ -44,6 +44,7 @@ import {
   type AvatarService,
 } from "./services/avatar-service.ts";
 import { createConnectionRegistry } from "./services/connection-registry.ts";
+import { createPresence, type Presence } from "./services/presence.ts";
 import {
   createGameCommandService,
   type GameCommandService,
@@ -104,6 +105,9 @@ export async function buildApp(
   // Game engines (C) by game type; a match of an unregistered type cannot be
   // created or shown.
   rulesByGameType: Partial<Record<GameType, RegisteredRules>> = {},
+  // Accepted friends of a user, for presence events (#82). Until the friend
+  // service (#69) is wired here, nobody has friends and none are sent.
+  friendIdsOf: (userId: number) => Promise<number[]> = async () => [],
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -127,7 +131,17 @@ export async function buildApp(
     }
     return twoFactor;
   };
-  const connections = createConnectionRegistry();
+  // The registry reports presence changes; presence reads the registry.
+  let presence: Presence | undefined;
+  const connections = createConnectionRegistry({
+    onPresenceChange: (userId) => void presence?.notifyPresence(userId),
+  });
+  presence = createPresence({
+    connections,
+    friendIdsOf,
+    onError: (error) =>
+      app.log.error({ err: error }, "Presence friend lookup failed."),
+  });
   // A session revoked for refresh token reuse also closes its WebSocket
   // connections, like logout does below.
   const auth =

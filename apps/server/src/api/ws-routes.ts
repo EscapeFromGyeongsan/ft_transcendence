@@ -265,6 +265,9 @@ const rejectMessages: Record<ErrorCode, string> = {
  * 이탈자가 돌아와도 예산은 다시 생기지 않습니다. `auth.ok`의 `activeMatchId`로
  * 클라이언트가 진행 중 경기를 찾습니다.
  *
+ * 온라인 상태(#82): `auth.ok`를 보내기 직전에 연결을 사용자에 등록해 그때부터
+ * 온라인으로 셉니다. 인증을 확인하는 중인 연결은 세지 않습니다.
+ *
  * 연결 요청(upgrade)은 IP마다 1분에 30번까지 받고({@link wsRateLimit}), 넘으면
  * upgrade 없이 HTTP 429 `RATE_LIMITED`로 응답합니다.
  */
@@ -724,7 +727,7 @@ export function registerRealtimeRoutes(
               // committed while the session was being checked found nothing
               // to close, so check the session once more.
               registeredSession = result.sessionId;
-              connections.add(registeredSession, socket, result.userId);
+              connections.add(registeredSession, socket);
               if (!(await getAuth().authenticate(token))) result = null;
             }
           } catch (error) {
@@ -757,6 +760,8 @@ export function registerRealtimeRoutes(
           if (socket.readyState !== socket.OPEN) return;
           clearTimeout(authTimer);
           claims = result;
+          // Counted as online only now, never while still being checked.
+          connections.authenticate(socket, claims.userId);
           send(
             socket,
             "auth.ok",

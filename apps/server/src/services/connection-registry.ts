@@ -20,8 +20,19 @@ function deleteFrom<K, V>(map: Map<K, Set<V>>, key: K, value: V) {
  * 경기별 목록은 경기 메시지를 그 경기를 구독한 연결에만 보내는 데 씁니다.
  * 경기·사용자별 입력 권한 연결과 경기별 마지막 전송 버전도 함께 관리합니다.
  * 메모리에만 있으며 API 인스턴스 1개를 전제합니다.
+ *
+ * 온라인 상태(#82)는 사용자별 **인증 완료** 연결 수로 정합니다. 연결은
+ * {@link add}로 세션에만 임시 등록되고, `auth.ok` 직전 {@link authenticate}로
+ * 사용자에 등록됩니다. 임시 등록된 연결은 온라인 집계와 `sendToUser()`
+ * 대상에서 빠집니다.
+ *
+ * @param options.onPresenceChange - 사용자의 인증 완료 연결 수가 0 ↔ 1 이상으로
+ *   바뀔 때 한 번 호출됩니다. 같은 연결이 여러 경로로 정리돼도 중복 호출되지
+ *   않습니다.
  */
-export function createConnectionRegistry() {
+export function createConnectionRegistry(
+  options: { onPresenceChange?: (userId: number) => void } = {},
+) {
   const bySession = new Map<string, Set<WebSocket>>();
   const byUser = new Map<number, Set<WebSocket>>();
   const userOf = new Map<WebSocket, number>();
@@ -32,6 +43,15 @@ export function createConnectionRegistry() {
   const controllers = new Map<number, Map<number, WebSocket>>();
   // Highest stateVersion broadcast per match, so updates never go backwards.
   const sentVersions = new Map<number, number>();
+
+  // Takes the socket out of its user's online count, once.
+  function detachUser(socket: WebSocket) {
+    const userId = userOf.get(socket);
+    if (userId === undefined) return;
+    userOf.delete(socket);
+    deleteFrom(byUser, userId, socket);
+    if (!byUser.has(userId)) options.onPresenceChange?.(userId);
+  }
 
   function unsubscribe(matchId: number, socket: WebSocket) {
     deleteFrom(byMatch, matchId, socket);
@@ -45,15 +65,33 @@ export function createConnectionRegistry() {
 
   return {
     /**
-     * 인증에 성공한 연결을 세션과 사용자에 등록합니다.
+     * 토큰 확인을 통과한 연결을 세션에 임시 등록합니다.
      *
-     * @param userId - 연결의 사용자. `sendToUser()`가 이 사용자의 모든 연결을
-     *   찾을 때 씁니다.
+     * @remarks
+     * 세션을 다시 확인하기 전에 등록해, 그 사이 로그아웃이 이 연결도 닫게
+     * 합니다. 아직 온라인으로 세지 않습니다.
      */
-    add(sessionId: string, socket: WebSocket, userId: number) {
+    add(sessionId: string, socket: WebSocket) {
       addTo(bySession, sessionId, socket);
+    },
+
+    /**
+     * 인증이 끝난 연결을 사용자에 등록합니다. `auth.ok`를 보내기 직전에
+     * 호출합니다.
+     *
+     * @param userId - 연결의 사용자. `sendToUser()`와 온라인 집계에 씁니다.
+     */
+    authenticate(socket: WebSocket, userId: number) {
+      if (userOf.has(socket)) return;
+      const wasOnline = byUser.has(userId);
       addTo(byUser, userId, socket);
       userOf.set(socket, userId);
+      if (!wasOnline) options.onPresenceChange?.(userId);
+    },
+
+    /** 사용자에게 인증 완료 연결이 하나라도 있는지 확인합니다. */
+    isUserOnline(userId: number) {
+      return byUser.has(userId);
     },
 
     /**
@@ -64,9 +102,7 @@ export function createConnectionRegistry() {
      */
     remove(sessionId: string, socket: WebSocket) {
       deleteFrom(bySession, sessionId, socket);
-      const userId = userOf.get(socket);
-      if (userId !== undefined) deleteFrom(byUser, userId, socket);
-      userOf.delete(socket);
+      detachUser(socket);
       const matchIds = [...(matchesOf.get(socket) ?? [])];
       for (const matchId of matchIds) unsubscribe(matchId, socket);
       return matchIds;
@@ -76,11 +112,19 @@ export function createConnectionRegistry() {
      * 세션의 연결을 모두 닫고 목록에서 지웁니다.
      *
      * @param code - WebSocket close code (로그아웃은 4401)
+     *
+     * @remarks
+     * 온라인 집계에서는 close 핸드셰이크가 끝나기를 기다리지 않고 바로
+     * 뺍니다. 뒤이은 `close` 이벤트의 {@link remove}는 집계를 다시 바꾸지
+     * 않습니다.
      */
     closeSession(sessionId: string, code: number, reason: string) {
       const sockets = bySession.get(sessionId);
       bySession.delete(sessionId);
-      for (const socket of sockets ?? []) socket.close(code, reason);
+      for (const socket of sockets ?? []) {
+        detachUser(socket);
+        socket.close(code, reason);
+      }
     },
 
     /**
