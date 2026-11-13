@@ -20,7 +20,8 @@
 - refresh token: 랜덤 32 bytes, DB에는 SHA-256 hash만 저장(`core/tokens.ts:92-99`, 테이블 `refresh_tokens`).
 - refresh할 때마다 새 토큰 발급, 이전 토큰은 `used_at` 기록. 7일(`auth-service.ts:84`).
 - 이미 쓴 토큰이 다시 오면 탈취로 보고 그 session 전체 revoke + 해당 session의 WebSocket 연결 종료.
-- 동시 refresh 경쟁은 `SELECT ... FOR UPDATE`로 막음.
+- 같은 토큰으로 refresh 두 개가 동시에 오면 토큰 행 잠금(`SELECT ... FOR UPDATE`, `auth-service.ts:259`)으로 하나씩 처리. 먼저 온 쪽이 회전하고, 뒤에 온 쪽은 이미 쓴 토큰(`:264`)이라 재사용으로 보고 세션을 폐기함. 둘 다 회전하는 일은 없지만 결과는 로그아웃(실행 확인).
+  - 질문 "탭 두 개가 동시에 갱신하면?": 웹은 Web Locks `cbc.auth.refresh`로 탭 사이 refresh를 한 번에 하나만 보냄(#115 `apps/web/src/api/auth-client.ts:554`). 서버는 같은 토큰의 두 번째 사용을 탈취와 구분할 수 없어 안전한 쪽(폐기)을 택함.
 - 위치: `auth-service.ts:244-275`, `repositories/auth-repository.ts:116-135`, `app.ts:127-135`(WS close), route `auth-routes.ts:192-227`
 
 ## 4. 2FA (TOTP)
@@ -46,6 +47,8 @@
 ## 7. 입력 검증 (backend)
 - Fastify JSON Schema, `additionalProperties: false`. 가입: email format·최대 254, password 8~128, nickname `^[\p{L}\p{N}_-]{2,32}$`. `api/auth-routes.ts:20-24`, `:49-52`, `:112-127`
 - 이메일은 소문자로 정규화(`auth-service.ts:155`, `:185`).
+- 알 수 없는 필드는 422가 아니라 조용히 제거됨. Fastify 기본 Ajv 옵션 `removeAdditional: true`(`node_modules/@fastify/ajv-compiler/lib/default-ajv-options.js:8`) 때문에 `additionalProperties: false`인 schema에서 추가 필드를 지우고 통과시킴. 예: 가입에 `isAdmin: true` → 201, 필드는 저장 안 됨. 권한을 나타내는 필드 자체가 없어 권한 상승은 불가. #115의 `PATCH /api/users/me`만 preValidation으로 422 "Invalid profile fields."(이메일 변경 시도 포함).
+- 타입은 schema에 맞게 바뀜. Ajv `coerceTypes: 'array'`(같은 파일 `:6`)라 password에 숫자 `12345678`을 보내면 문자열 `"12345678"`로 받아 가입·로그인 성공. 검증은 바뀐 값에 그대로 적용되므로 길이·패턴 규칙은 우회되지 않음.
 - 검증 실패 → 422 `VALIDATION_ERROR`, 그 외 400/413/415 매핑(`app.ts:197-231`).
 - frontend 검증 빈 곳은 #121(A)로 넘김.
 
