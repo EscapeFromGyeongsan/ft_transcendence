@@ -1,4 +1,8 @@
-import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
+import Fastify, {
+  type FastifyError,
+  type FastifyReply,
+  type FastifyServerOptions,
+} from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
@@ -117,7 +121,26 @@ export async function buildApp(
   // #98 원본 테스트의 수신자 주입 지점입니다. 실제 기동은 친구 서비스 조회를 씁니다.
   friendIdsOf?: (userId: number) => Promise<number[]>,
 ) {
-  const app = Fastify(options);
+  const app = Fastify({
+    // A path parameter that is not valid %-encoding or is over 100 characters
+    // fails in the router, before setErrorHandler. Answer it like any other
+    // invalid parameter (#150).
+    frameworkErrors: (error, _request, routeReply) => {
+      const reply = routeReply as FastifyReply;
+      if (
+        error.code === "FST_ERR_BAD_URL" ||
+        error.code === "FST_ERR_MAX_PARAM_LENGTH"
+      ) {
+        return reply
+          .code(422)
+          .send(errorBody("VALIDATION_ERROR", "Invalid path parameter."));
+      }
+      return reply
+        .code(500)
+        .send(errorBody("INTERNAL_ERROR", "Internal server error."));
+    },
+    ...options,
+  });
   const database = databaseUrl
     ? createDatabase(databaseUrl, () =>
         app.log.error("Database pool connection lost."),
