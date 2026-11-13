@@ -7,6 +7,7 @@ import {
   test,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { sql } from "drizzle-orm";
 import { buildApp } from "../app.ts";
 import {
   openTestDatabase,
@@ -100,6 +101,16 @@ describe.skipIf(!testDatabaseUrl)("user profile with PostgreSQL", () => {
     expect(takenUpper.statusCode).toBe(409);
     expect(takenUpper.json().error.code).toBe("NICKNAME_TAKEN");
     expect((await patchNickname({ nickname: "a b" })).statusCode).toBe(422);
+  });
+
+  test("profile edit rejects an NFC equivalent of a legacy NFD nickname (#133 upgrade)", async () => {
+    // 비교 대상은 이전 버전에서 이미 분해형으로 저장된 다른 사용자의 닉네임입니다.
+    await database.db.execute(
+      sql`UPDATE users SET nickname = ${"가나".normalize("NFD")} WHERE id = ${otherId}`,
+    );
+    const duplicate = await patchNickname({ nickname: "가나" });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().error.code).toBe("NICKNAME_TAKEN");
   });
 
   test("authentication is checked before body validation", async () => {

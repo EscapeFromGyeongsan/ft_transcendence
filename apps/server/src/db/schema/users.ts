@@ -20,7 +20,7 @@ export const users = pgTable(
     email: varchar("email", { length: 254 }).notNull().unique(),
     // NULL for accounts created through OAuth only (no password login).
     passwordHash: text("password_hash"),
-    // Stored in NFC; unique without regard to case (see the index below).
+    // 새 입력은 NFC로 저장하고, 기존 NFD 값도 아래 인덱스에서 같은 이름으로 비교합니다.
     nickname: varchar("nickname", { length: 32 }).notNull(),
     avatarUrl: text("avatar_url"),
     recordsPublic: boolean("records_public").notNull().default(true),
@@ -34,9 +34,11 @@ export const users = pgTable(
     // its user id; email and nickname are replaced with placeholders.
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  // "P1" and "p1" would look like the same player, so case does not count.
+  // 대소문자와 Unicode 조합 형태가 다른 기존 닉네임도 중복으로 처리합니다.
   (table) => [
-    uniqueIndex("users_nickname_unique").on(sql`lower(${table.nickname})`),
+    uniqueIndex("users_nickname_unique").on(
+      sql`lower(normalize(${table.nickname}, NFC))`,
+    ),
   ],
 );
 

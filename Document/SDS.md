@@ -629,7 +629,7 @@ erDiagram
 
 | 테이블 | 제약 | 목적 |
 |---|---|---|
-| users | `UNIQUE(email)`, `UNIQUE(nickname)` | 동시 가입·닉네임 변경 경합에서도 중복 방지 (FR-AUTH-01, FR-PRO-01) |
+| users | `UNIQUE(email)`, `UNIQUE(lower(normalize(nickname, NFC)))` | 동시 가입·닉네임 변경 경합에서도 대소문자·Unicode 조합 형태에 따른 중복 방지 (FR-AUTH-01, FR-PRO-01). #133의 `0007` 다음 후속 `0008` 적용 기준 |
 | refresh_tokens | `UNIQUE(token_hash)` | token 조회·중복 방지 |
 | oauth_accounts | `UNIQUE(provider, provider_user_id)`, `UNIQUE(user_id, provider)` | 42 계정 하나는 한 사용자에만, 사용자당 42 연결 하나 |
 | oauth_states | `CHECK(mode='login' AND user_id, session_id 모두 NULL OR mode='link' AND 둘 다 NOT NULL)` | link는 시작한 사용자와 세션을 반드시 기록 |
@@ -642,6 +642,8 @@ erDiagram
 | game_commands | `CHECK(applied ⇔ applied_version NOT NULL, rejected ⇔ reject_code NOT NULL)` | 처리 결과 형식 고정 |
 
 Index: `sessions(user_id)`, `refresh_tokens(session_id)`, `game_players(user_id, result)`(통계), `two_factor_recovery_codes(user_id)`, `two_factor_challenges(user_id)`.
+
+닉네임 신규 입력은 가입·수정·42 가입 경로에서 NFC로 정규화한다. 기존 분해형(NFD) 값도 DB UNIQUE index에서 NFC로 비교하되 저장된 닉네임과 경기 당시 스냅샷은 이 migration으로 바꾸지 않는다. 이미 대소문자 또는 NFC 비교 키가 충돌하는 계정이 있으면 index 생성이 실패하고 migration 트랜잭션이 롤백된다. 배포 전 충돌 조회·수동 해결이 필요하며 계정을 자동 삭제하거나 임의 개명하지 않는다. 닉네임 index의 case 변환은 PostgreSQL `lower`와 해당 DB locale을 따른다.
 
 설계 결정:
 
