@@ -11,8 +11,10 @@ A turn-based board game platform. Create an account, join the Omok (15 × 15, fr
 - Node.js 22.12+, TypeScript, npm workspaces
 - Backend: Fastify, Swagger UI (`@fastify/swagger`, `@fastify/swagger-ui`)
 - Database: PostgreSQL 17 (local Docker), Drizzle ORM + Drizzle Kit, pg
-- Frontend: React, Vite
+- Frontend: React, Vite, Tailwind CSS 4.3.3 (`@tailwindcss/vite`). [Styling demonstration](Document/evaluation/mandatory-checklist.md#스타일링-솔루션-시연-116): login/profile/friends JSX utilities and shared button/input/card `@apply` rules; screen-specific board CSS remains in `apps/web/src/styles.css`.
 - Tests: Vitest (unit), Playwright (E2E)
+
+The [#116 integration validation](Document/styling-116-integration-validation.md) records the candidate source, production build, actual HTTPS/WSS checks and remaining submission requirements.
 
 ## Instructions
 

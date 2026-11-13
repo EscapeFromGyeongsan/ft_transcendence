@@ -1,5 +1,7 @@
 # Styling solution 후속 검증 — #116 / #119
 
+2026-11-13 후속: 최신 master `742ba64`와 #119 `c51bf27`의 [통합 후보 검증](styling-116-integration-validation.md)을 별도로 기록했다. 아래 #124 원본 화면 비교 결과는 당시 기준으로 보존한다. 최종 제출 SHA의 Docker/Nginx·작성자 외 재현은 아직 남아 있다.
+
 요구사항: `NFR-UX-04`, subject III.3 p.9. 관련 작업: [#116](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/116), [B의 Tailwind PR #119](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/119), [인수 검증 #88](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/88).
 
 ## 통합 기준과 변경 범위

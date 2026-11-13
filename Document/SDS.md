@@ -205,7 +205,7 @@ flowchart LR
 
 #### 2. Frontend architecture (A)
 
-`계획`. 현재 `apps/web`은 React + Vite 골격(`App.tsx`, `main.tsx`)만 있다. 아래는 API 계약에 맞춘 최소 구조 제안이며 A가 확정한다.
+아래 다이어그램은 초기 구조 제안이다. #116 통합 검증 후보에는 인증·프로필·친구·매칭·오목·오델로 UI와 Tailwind CSS가 포함된다. master 반영과 최종 제출 인수 완료는 별도다.
 
 ```mermaid
 flowchart TD
@@ -227,6 +227,18 @@ flowchart TD
 - OAuth: 시작 응답의 `flowToken`을 sessionStorage에 보관한다. 42가 redirect하는 web 페이지(`FT_OAUTH_REDIRECT_URI`)가 `code`, `state`를 받아 보관한 `flowToken`과 함께 `POST /api/auth/oauth/42/callback`으로 보낸다. 다른 탭·브라우저로 열린 callback은 실패한다.
 - 2FA: 로그인 응답에 `twoFactorRequired`가 있으면 코드 입력 화면으로 보내고 `POST /api/auth/2fa/verify`를 호출한다.
 - 승률은 `played`가 0이면 `-`로 표시한다(DEC-08).
+
+##### 스타일링 솔루션 (`NFR-UX-04`, #116)
+
+B의 [#118](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/118) 문서 커밋 `a727ade`·`69a2e29`의 스타일링 설명과 시연 절차를 이 통합 후보의 문서 구조에 맞춰 반영했다.
+
+- Tailwind CSS와 `@tailwindcss/vite`는 **4.3.3**이다. `apps/web/vite.config.ts`의 `tailwindcss()`가 production build에 연결되고 `main.tsx`는 `index.css`를 로드한다.
+- `index.css`는 `theme → styles.css(components) → utilities` 순서로 cascade layer를 구성한다. 기존 전역 규칙을 보존하기 위해 Preflight는 제외한다.
+- 로그인 폼의 `flex flex-col gap-5`, 친구 검색 필드의 `flex min-w-48 flex-1 flex-col gap-1.5`, 프로필의 `lg:grid-cols-[340px_1fr]`처럼 JSX에서 유틸리티를 직접 사용한다(#119).
+- 공통 버튼·입력·카드·모달·앱 레이아웃 19개 규칙은 `.cbc-*` 클래스 안에서 `@apply`를 사용한다(#124). 예: `.cbc-input { @apply w-full rounded-lg py-3 pr-11 pl-4; … }`. 게임판 좌표·돌과 상태별 색상·테두리는 화면 고유 CSS를 함께 사용한다.
+- `@theme inline`은 기존 CSS 변수를 Tailwind 색상·글꼴에 연결한다. 배경 `--surface: #fcf9f2`, 본문 `--on-surface: #1c1c18`, 주 강조 `--primary: #2f6c00`, 제목 `Epilogue`, 본문 `Plus Jakarta Sans`다.
+- 사용 코드와 렌더링은 [평가 체크리스트](evaluation/mandatory-checklist.md#스타일링-솔루션-시연-116)의 순서로 두 화면 이상에서 시연한다. [#124 검증 기록](styling-validation.md)과 최종 제출 SHA의 HTTPS/WSS·작성자 외 재현을 구분한다.
+- 최신 master와 #119를 합친 후보의 빌드·실제 API/DB·Chrome 결과와 남은 조건은 [#116 통합 검증](styling-116-integration-validation.md)에 기록한다.
 
 ##### 친구 REST 화면 후속 구현 (#80·#90, 2026-11-12)
 
@@ -1725,7 +1737,7 @@ flowchart TD
 | 결정 | 선택 | 이유 | 상태 |
 |---|---|---|---|
 | Backend framework | Fastify 5 | JSON Schema 검증과 Swagger 생성이 내장돼 상태 코드 선언 규칙을 지키기 쉬움 | `구현됨` |
-| Frontend framework | React + Vite | 팀 합의 | 골격만 |
+| Frontend framework | React + Vite + Tailwind CSS 4.3.3 | Vite plugin·JSX utility(#119)·공통 `@apply`(#124), 화면 고유 CSS와 함께 사용 | #116 통합 후보 구현, 최종 제출 인수 별도 |
 | Database | PostgreSQL 17 | 행 잠금, UNIQUE·CHECK 제약, 트랜잭션 | `구현됨` |
 | ORM / migration | Drizzle ORM + Drizzle Kit + pg | TypeScript 스키마와 검토 가능한 SQL migration | `구현됨` |
 | ID | BIGINT identity (세션·challenge는 UUID) | 단순·순서 보장. 외부 JSON의 matchId도 number (`Number.MAX_SAFE_INTEGER` 이하) | `구현됨` |
