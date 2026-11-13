@@ -16,6 +16,7 @@ import {
   ApiError,
   getAuthFieldErrors,
   getErrorMessage,
+  getOAuthStartErrorMessage,
 } from "../api/errors.ts";
 import {
   profileApi,
@@ -194,6 +195,8 @@ export function ProfileView({
     null,
   );
   const [oauthAlreadyLinked, setOauthAlreadyLinked] = useState(false);
+  // 2FA 상태 조회가 실패하면 "미설정"으로 보이지 않게 따로 표시합니다.
+  const [twoFactorStatusFailed, setTwoFactorStatusFailed] = useState(false);
   const disableTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const deleteTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -210,7 +213,7 @@ export function ProfileView({
         }
       })
       .catch(() => {
-        // 2FA 상태 조회 실패 시 기본값 유지
+        if (active) setTwoFactorStatusFailed(true);
       });
     return () => {
       active = false;
@@ -552,7 +555,7 @@ export function ProfileView({
       if (error instanceof ApiError && error.code === "OAUTH_ALREADY_LINKED") {
         setOauthAlreadyLinked(true);
       }
-      setActionError(getErrorMessage(error));
+      setActionError(getOAuthStartErrorMessage(error));
     } finally {
       setBusy(null);
     }
@@ -773,7 +776,13 @@ export function ProfileView({
                     data-testid="two-factor-status-pill"
                   >
                     {twoFactorEnabled && <span className="cbc-pulse-dot" />}
-                    {twoFactorEnabled ? "2FA 사용 중" : "2FA 미설정"}
+                    {twoFactorEnabled === true
+                      ? "2FA 사용 중"
+                      : twoFactorEnabled === false
+                        ? "2FA 미설정"
+                        : twoFactorStatusFailed
+                          ? "2FA 상태 확인 실패"
+                          : "2FA 확인 중"}
                   </span>
                 </div>
 
@@ -787,7 +796,14 @@ export function ProfileView({
                     있습니다.
                   </p>
 
-                  {!twoFactorEnabled && !twoFactorSetupData && (
+                  {twoFactorEnabled === undefined && twoFactorStatusFailed && (
+                    <p className="cbc-profile-hint" role="alert">
+                      2단계 인증 상태를 불러오지 못했습니다. 새로고침한 뒤 다시
+                      확인해 주세요.
+                    </p>
+                  )}
+
+                  {twoFactorEnabled === false && !twoFactorSetupData && (
                     <button
                       type="button"
                       className="cbc-btn-primary cbc-btn-compact"

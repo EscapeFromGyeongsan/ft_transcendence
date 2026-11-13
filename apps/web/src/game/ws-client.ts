@@ -705,6 +705,8 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
       manualDisconnect = false;
       sessionReplaced = false;
       clearReconnectTimer();
+      // A manual retry starts a fresh round of automatic retries.
+      reconnectAttempt = 0;
       openSocket(true);
     },
 

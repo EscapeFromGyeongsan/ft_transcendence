@@ -49,15 +49,18 @@ export class ApiError extends Error {
 }
 
 /**
- * 서버가 잠시 요청을 처리하지 못한 오류(429·5xx)인지 확인합니다.
+ * 서버가 잠시 요청을 처리하지 못했거나(429·5xx) 네트워크 요청 자체가 실패한(`fetch`의 `TypeError`) 오류인지 확인합니다.
  *
  * @remarks
- * 이때 서버는 refresh token을 회전하지 않았으므로 저장된 토큰은 아직 유효합니다.
- * 토큰을 지우거나 로그아웃시키지 말고 오류만 보여 줍니다.
+ * 429·5xx면 서버는 refresh token을 회전하지 않았으므로 저장된 토큰은 아직 유효합니다.
+ * 네트워크 실패는 대개 요청이 서버에 닿지 않은 경우입니다. 드물게 서버가 회전한 뒤 응답만 잃었다면 다음 refresh가 401이 되어 그때 토큰을 지웁니다.
+ * 어느 쪽이든 지금 토큰을 지우거나 로그아웃시키지 말고 오류만 보여 줍니다.
  */
-export function isTransientError(error: unknown): error is ApiError {
+export function isTransientError(error: unknown): boolean {
   return (
-    error instanceof ApiError && (error.status === 429 || error.status >= 500)
+    (error instanceof ApiError &&
+      (error.status === 429 || error.status >= 500)) ||
+    error instanceof TypeError
   );
 }
 
@@ -92,6 +95,20 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
     "서버 또는 데이터베이스에 일시적으로 연결할 수 없습니다.",
   INTERNAL_ERROR: "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
 };
+
+/**
+ * 42 로그인·계정 연결을 시작할 때의 오류 문구를 반환합니다.
+ *
+ * @remarks
+ * 이 두 요청의 503은 서버에 42 OAuth가 설정되지 않은 경우가 대부분이라, DB 장애로 읽히는 공통 503 문구 대신 42 로그인 문구를 씁니다.
+ * 그 밖의 오류는 {@link getErrorMessage}와 같습니다.
+ */
+export function getOAuthStartErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 503) {
+    return "지금은 42 로그인을 사용할 수 없습니다. 서버에 42 OAuth가 설정되지 않았거나 일시적으로 연결할 수 없습니다.";
+  }
+  return getErrorMessage(error);
+}
 
 function getValidationIssueMessage(path: string): string | undefined {
   if (path.includes("email")) {

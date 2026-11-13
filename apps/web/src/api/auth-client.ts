@@ -965,4 +965,17 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
 
 export type AuthApiClient = ReturnType<typeof createAuthApiClient>;
 
-export const authApi = createAuthApiClient();
+let authFailureHandler: (() => void) | undefined;
+
+/**
+ * 기본 {@link authApi}가 세션을 잃었을 때(refresh 거절, refresh 뒤에도 401) 부를 함수를 정합니다.
+ *
+ * @remarks 화면은 이것으로 로그인 화면으로 돌아갑니다. 429·5xx·네트워크 실패는 세션이 남아 있으므로 부르지 않습니다.
+ */
+export function setAuthFailureHandler(handler: (() => void) | undefined) {
+  authFailureHandler = handler;
+}
+
+export const authApi = createAuthApiClient({
+  onAuthFailure: () => authFailureHandler?.(),
+});
