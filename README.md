@@ -6,23 +6,23 @@
 
 A Korean-language, two-player board game platform for freestyle Gomoku (Omok, 15 × 15) and standard Othello (8 × 8). Accounts, matchmaking, real-time transport and persistence are separated from each game's rules and board UI.
 
-This submission README draft was updated on **2026-11-12 (KST)**. Feature-branch implementation, runtime integration and evaluation readiness are tracked separately in the [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md).
+This README was updated on **2026-11-13 (KST)**. Feature-branch implementation, runtime integration and evaluation readiness are tracked separately in the [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md).
 
 ## Features and integration status
 
-| Area | Implemented scope | Remaining work |
-|---|---|---|
-| Accounts | Registration, email/password login, rotating refresh tokens and session revocation | Full browser acceptance coverage |
-| OAuth and 2FA | 42 login/link API and UI; TOTP setup, verification, recovery codes and disable flow | Real 42 provider verification; UI PR #72 is open |
-| Profiles | Public profiles, nickname changes, PNG/JPEG avatar upload/delete and default avatars | UI #57 and browser E2E #77 are implemented on open PRs; integration and acceptance remain |
-| Records | Per-game statistics, history, first-win achievement, ten-game progress and leaderboard | Full real-game acceptance data and independent reproduction |
-| Matchmaking | Game selection, queue join/cancel/matched flow and waiting UI | UI PR #63 is open; requires D's real-time server |
-| Gomoku | Rules engine, board UI and WS client | Two-session reconnect/result/history E2E is on the separate #27 integration branch |
-| Othello | Engine merged in #58; UI in #73; server registration and two-session browser E2E in #77 | #73 and #77 are open; final integrated acceptance remains |
-| Legal pages | `/terms`, `/privacy`, links and modal Escape handling in #71 (`011b5a8`), including #99/#100 and selected #77 history/mobile fixes | #71 remains open against the web stack; policy needs final comparison with a release containing #89/#85 |
-| Friends and invitations | Friend UI #90, REST #95 and presence/relationship notification transport #98 are implemented on open PRs | Wire the REST service to the authenticated connection registry and UI events; invitations remain planned |
-| Privacy and deletion | Privacy API/DB/UI/E2E in open #79; deletion API/DB in open #89 | Integrate migrations in order (#96); deletion UI #85 and social/WS cleanup remain |
-| Deployment | Full application containers, HTTPS and persistent DB/avatar volumes from merged #10 | Pinned historical WSS evidence is separate from current-master and two-PC acceptance |
+| Area | Owners | Implemented scope | Remaining work |
+|---|---|---|---|
+| Accounts | B (server, #11), A (web, #55) | Registration, email/password login, rotating refresh tokens and session revocation | Full browser acceptance coverage |
+| OAuth and 2FA | B (server, #11), A (web, #72) | 42 login/link API and UI; TOTP setup, verification, recovery codes and disable flow | Real 42 provider verification; UI PR #72 is open |
+| Profiles | B (server, #11, #15), A (web, #57) | Public profiles, nickname changes, PNG/JPEG avatar upload/delete and default avatars | UI #57 and browser E2E #77 are implemented on open PRs; integration and acceptance remain |
+| Records | B (server, #11), A (web, #57) | Per-game statistics, history, first-win achievement, ten-game progress and leaderboard | Full real-game acceptance data and independent reproduction |
+| Matchmaking | D (server, #49), A (web, #63) | Game selection, queue join/cancel/matched flow and waiting UI | UI PR #63 is open; requires D's real-time server |
+| Gomoku | E (engine), C (snapshot board, #45), D (WebSocket), A (web, #56) | Rules engine, board UI and WS client | Two-session reconnect/result/history E2E is on the separate #27 integration branch |
+| Othello | C (engine, #58), A (web, #73) | Engine merged in #58; UI in #73; server registration and two-session browser E2E in #77 | #73 and #77 are open; final integrated acceptance remains |
+| Legal pages | A (web, #71), B (notice text, #117, #127) | `/terms`, `/privacy`, links and modal Escape handling in #71 (`011b5a8`), including #99/#100 and selected #77 history/mobile fixes | #71 remains open against the web stack; policy needs final comparison with a release containing #89/#85 |
+| Friends and invitations | E (REST, #95), D (presence, #98), A (web, #90) | Friend UI #90, REST #95 and presence/relationship notification transport #98 are implemented on open PRs | Wire the REST service to the authenticated connection registry and UI events; invitations remain planned |
+| Privacy and deletion | A (records privacy, #79), B (account deletion, #84, #85) | Privacy API/DB/UI/E2E in open #79; deletion API/DB in open #89 | Integrate migrations in order (#96); deletion UI #85 and social/WS cleanup remain |
+| Deployment | E (containers and HTTPS, #10), B (one-command `make`, #123, #131) | Full application containers, HTTPS and persistent DB/avatar volumes from merged #10 | Pinned historical WSS evidence is separate from current-master and two-PC acceptance |
 
 Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. The web implementation reference is `feat/web-othello` at `3d06126`. This documentation branch incorporates `master` at `6965b9c`: server APIs, both game engines, authenticated `/api/ws`, full application containers and a placeholder web page. It does not include those frontend feature PRs. The current startup does **not** register game engines, match subscriptions, game commands, matchmaking or reconnection; those remain in the open #42/#43/#49/#50 stack. Use a checkout containing the web feature branch for signup/profile screens and the real-time integration for matches. The feature table describes the referenced branches, not features all available in this checkout.
 
@@ -358,7 +358,7 @@ Challenges and how they were addressed:
 2. **Commands arriving after a match ended got the wrong error (`INVALID_MESSAGE`).** B wrote a reproduction test in review. The cause was that ending a match also cleared its game type; it is now kept until every subscriber leaves, and the test was added ([#43](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/43)).
 3. **A queue request waiting on a DB lookup in one tab still entered the queue after another tab canceled it, even though the cancel had been acknowledged.** A cancel now marks the pending request, which then stays out of the queue, and both tabs are told it was canceled ([#49](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/49)).
 
-#### uersnmae (E) - PM and social developer
+#### dong-hki (E, uersnmae) - PM and social developer
 
 - **Role:** PM and social developer. Owned the runtime environment and HTTPS deployment, and carried out the friends API and remote-play integration checks.
 - **Full-stack Docker Compose deployment** ([#10](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/10), [#40](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/40)), the feature E will explain during evaluation: configured the web, API and PostgreSQL Docker Compose deployment and the Nginx HTTPS/WSS connection, including the DB ready → Drizzle migration → API/web start order and the avatar storage volume.
