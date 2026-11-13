@@ -13,13 +13,13 @@ if (!process.env.DATABASE_URL) {
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret || jwtSecret.length < 32) {
   throw new Error(
-    "Set JWT_SECRET in .env to a random string of 32+ characters.",
+    "Set JWT_SECRET in .env (.env.full for make) to a random string of 32+ characters.",
   );
 }
 const twoFactorKey = process.env.TWO_FACTOR_KEY;
 if (twoFactorKey !== undefined && twoFactorKey.length < 32) {
   throw new Error(
-    "Set TWO_FACTOR_KEY in .env to a random string of 32+ characters.",
+    "Set TWO_FACTOR_KEY in .env (.env.full for make) to a random string of 32+ characters.",
   );
 }
 const oauthEnv = [
@@ -62,7 +62,7 @@ try {
   });
   if (databaseHealth.statusCode !== 200) {
     throw new Error(
-      "Database is unavailable. Run npm run db:up and npm run db:migrate first.",
+      "Database is unavailable. Run npm run db:up and npm run db:migrate first, or check make logs for the containers.",
     );
   }
   const startup = createDatabase(process.env.DATABASE_URL);
