@@ -116,7 +116,9 @@ describe("legal-routing and policy content (Issue #64)", () => {
     expect(text).toContain("비밀번호 계정은 비밀번호");
     expect(text).toContain("복구 코드 포함");
     expect(text).toContain("최근 10분 안에 로그인");
-    expect(text).toContain("진행 중이거나 대기 중인 경기가 있으면 탈퇴할 수 없으며");
+    expect(text).toContain(
+      "진행 중이거나 대기 중인 경기가 있으면 탈퇴할 수 없으며",
+    );
     // 삭제: 한 트랜잭션에서 지우는 항목 (account-repository.anonymizeUser)
     for (const deleted of [
       "리프레시 토큰이 삭제",
@@ -135,5 +137,14 @@ describe("legal-routing and policy content (Issue #64)", () => {
     expect(text).toContain('"(탈퇴한 사용자)"');
     // 서버는 탈퇴한 사용자 기록에 보존 기한을 두지 않으므로 기한을 약속하지 않는다.
     expect(text).not.toMatch(/\d+\s*(일|개월|년)\s*(후|뒤|동안)\s*(삭제|파기)/);
+  });
+
+  it("gives a real contact address in the privacy policy", () => {
+    const contact = PRIVACY_POLICY_SECTIONS.find(
+      (section) => section.id === "privacy-contact",
+    );
+    expect(JSON.stringify(contact)).toContain(
+      "yunhpark@student.42gyeongsan.kr",
+    );
   });
 });
