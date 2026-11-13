@@ -443,6 +443,20 @@ export function App() {
     };
   }, [logoutModalOpen, accountMenuOpen, submitting]);
 
+  // 대국 화면을 떠나면 그 화면의 착수 오류를 지워 로비에 남지 않게 합니다. 로비에서 생긴 오류(대국실 입장 실패 등)는 유지합니다 (#162).
+  const previousViewRef = useRef(view);
+  useEffect(() => {
+    const left = previousViewRef.current;
+    previousViewRef.current = view;
+    if (left === view || (left !== "gomoku" && left !== "othello")) return;
+    setGomokuState((prev) =>
+      prev.gameError ? { ...prev, gameError: null } : prev,
+    );
+    setOthelloState((prev) =>
+      prev.gameError ? { ...prev, gameError: null } : prev,
+    );
+  }, [view]);
+
   useEffect(() => {
     if (!accountMenuOpen) return;
     const items = () => [
