@@ -49,8 +49,8 @@ fill_secret TWO_FACTOR_KEY
 password_file="$(value_of POSTGRES_PASSWORD_FILE)"
 password_file="${password_file:-./infra/secrets/postgres-password}"
 if [ ! -e "$password_file" ]; then
+  # umask 077 makes new directories 0700 and keeps existing ones as they are.
   mkdir -p "$(dirname "$password_file")"
-  chmod 700 "$(dirname "$password_file")"
   openssl rand -hex 32 > "$password_file"
   echo "Generated $password_file."
 fi
