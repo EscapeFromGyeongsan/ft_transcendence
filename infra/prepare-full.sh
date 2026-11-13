@@ -48,14 +48,31 @@ fill_secret TWO_FACTOR_KEY
 
 password_file="$(value_of POSTGRES_PASSWORD_FILE)"
 password_file="${password_file:-./infra/secrets/postgres-password}"
+# The API and migration containers read the password file as the non-root
+# node user, so it must be readable by others. Only a file this script creates
+# in a directory other users cannot enter is widened; existing files keep
+# their mode and get a hint instead.
+password_hint() {
+  echo "Note: $password_file is not readable by other users. The api and" >&2
+  echo "migration containers read it as the non-root node user; make it" >&2
+  echo "readable (chmod 444) inside a directory only you can open." >&2
+}
+password_dir="$(dirname "$password_file")"
 if [ ! -e "$password_file" ]; then
+  [ -d "$password_dir" ] || new_dir=1
   # umask 077 makes new directories 0700 and keeps existing ones as they are.
-  mkdir -p "$(dirname "$password_file")"
+  mkdir -p "$password_dir"
   openssl rand -hex 32 > "$password_file"
   echo "Generated $password_file."
+  if [ -n "${new_dir:-}" ] ||
+    [ -z "$(find "$password_dir" -prune -perm -001)" ]; then
+    chmod 444 "$password_file"
+  else
+    password_hint
+  fi
+elif [ -z "$(find "$password_file" -prune -perm -004)" ]; then
+  password_hint
 fi
-# The API and migration containers read it as the non-root node user.
-chmod 444 "$password_file"
 
 cert_dir="$(value_of CERT_DIR)"
 cert_dir="${cert_dir:-./infra/certs}"
