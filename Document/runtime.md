@@ -97,7 +97,16 @@ LAN 접속에서는 다른 컴퓨터가 실제로 사용하는 IP·DNS 이름이
 
 ## 단일 명령 기동
 
-사전 준비를 마친 뒤 실행한다.
+저장소 루트에서 `make` 하나로 준비와 기동을 함께 실행한다. `make`는 먼저 `infra/prepare-full.sh`로 없는 것만 만든다. `.env.full`이 없으면 `.env.full.example`을 복사하고, 비어 있는 `JWT_SECRET`·`TWO_FACTOR_KEY`를 `openssl rand -hex 32`로 채운다. DB 비밀번호 파일이 없으면 만들고, `server.crt`·`server.key`가 둘 다 없으면 `infra/generate-local-cert.sh`를 실행한다. 이미 있는 값·파일은 바꾸지 않는다. 비밀번호 파일은 API·migration 컨테이너가 non-root `node` 사용자로 읽으므로, 스크립트가 그룹·다른 사용자 모두 들어갈 수 없는 디렉터리에 새로 만든 경우에만 `0444`로 둔다. 기존 파일은 권한을 바꾸지 않고, 그 밖의 디렉터리(권한을 확인할 수 없는 경우 포함)의 새 파일은 `0600`으로 두며, 두 경우 모두 안내를 출력한다. 키를 바꾸면 발급된 토큰·저장된 2FA 설정·기존 DB 접속이 깨지기 때문이다. 인증서·개인키 중 하나만 있으면 멈춘다.
+
+~~~sh
+make        # 준비 후 아래 compose up 실행
+make down   # 컨테이너 종료, DB·아바타 볼륨 보존
+make logs
+make ps
+~~~
+
+위 "실행 전 준비"와 "인증서와 신뢰 설정"을 직접 마쳤다면 `make`는 그 값을 그대로 쓴다. `make` 없이 실행할 때는 사전 준비를 마친 뒤 다음 명령을 쓴다.
 
 ~~~sh
 docker compose --env-file .env.full --project-directory . \

@@ -59,18 +59,20 @@ npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:u
 
 ### Full application containers
 
-Prepare `.env.full` from `.env.full.example`, the password file, and certificates as described in [the full execution guide](Document/runtime.md). Then:
+Requirements: Docker Engine with Compose v2, `make`, and OpenSSL. From the repository root:
 
-Set a private `JWT_SECRET` of at least 32 characters in `.env.full`. Compose passes
-authentication settings explicitly and mounts a separate `avatars` volume at
-`/data/avatars`, writable by the API's `node` user. These settings prepare the
-server/avatar integration; the corresponding server routes must be included in
-the checkout to use them. An empty `TWO_FACTOR_KEY` disables the optional 2FA key.
+```sh
+make
+```
+
+`make` runs `infra/prepare-full.sh`, which creates only what is missing: `.env.full` from `.env.full.example` with random `JWT_SECRET` and `TWO_FACTOR_KEY`, the PostgreSQL password file `infra/secrets/postgres-password`, and a self-signed localhost certificate in `infra/certs`. Existing values and files are never replaced. It then runs:
 
 ```sh
 docker compose --env-file .env.full --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
 ```
+
+`make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID`, `FT_OAUTH_CLIENT_SECRET` and `FT_OAUTH_REDIRECT_URI` are set in `.env.full`. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
 
 Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
 
