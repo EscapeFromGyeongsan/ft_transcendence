@@ -1,0 +1,705 @@
+{
+  "date": "2026-11-13 KST",
+  "inputs": {
+    "base143": "4e299f7910adf95f5a87c43e81331fa8eebb573b",
+    "b142": "cacfaa99bd54b7962f68b580f4a3da22107fb1ec",
+    "b126": "23177d6aefc4cd4483c6a9ab861ea39f464130d2"
+  },
+  "productSource": "4e9429af6131f79c518631a8f570c65f38b406b3",
+  "browserTestSource": "953b6f30bfb8d5bab4847c1fc86f0233e57433a4",
+  "productDifferenceSinceBuild": "",
+  "environment": {
+    "os": "Windows",
+    "node": "v26.13.0",
+    "npm": "11.20.0",
+    "postgres": "17.11",
+    "chrome": "158.0.8127.37",
+    "baseURL": "https://127.0.0.1:54436",
+    "tls": "Vite production preview; Node CA and Chrome SPKI pin; ignoreHTTPSErrors=false"
+  },
+  "build": {
+    "passed": true,
+    "assets": [
+      {
+        "file": "index-C9ok7cc3.js",
+        "sha256": "d1371e0105e088e4a231ea625a461c1faf2a78f45366212f5218e3d1e2f6380c"
+      },
+      {
+        "file": "index-DdeueVv-.css",
+        "sha256": "29e783db3471de918a98e7f067a0f67807f7d5c540ff8937dd5630257af2be84"
+      }
+    ]
+  },
+  "unit": {
+    "files": 46,
+    "total": 529,
+    "passed": 529,
+    "failed": 0,
+    "skipped": 0
+  },
+  "redBaseline": {
+    "source": "ee97c7add587bac8fef0c2c0d840bc3fd0d34d9c",
+    "failed": 5,
+    "passed": 0,
+    "purpose": "Two game-control recovery and three terminal-close regressions fail before the fixes."
+  },
+  "ui": {
+    "stats": {
+      "startTime": "2026-11-13T11:00:09.584Z",
+      "duration": 141490.226,
+      "expected": 102,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "retries": 0,
+    "coverage": "19 #136 cases and 15 existing navigation/OAuth/friends cases at each of three viewports.",
+    "tests": [
+      {
+        "project": "desktop",
+        "title": "42 연결 notice와 연결 상태를 표시하고 다시 열어도 연결 버튼을 잠근다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "42 로그인 다음 2FA 화면에 인증 안내를 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "42 연결 실패 후 유효한 기존 세션으로 프로필에 돌아간다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "/me에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "/friends에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "/leaderboard에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "NOT_FOUND인 경기 구독을 지워 새로고침 뒤 재요청하지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "NOT_PARTICIPANT인 경기 구독을 지워 새로고침 뒤 재요청하지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "ALREADY_ACTIVE는 로비에 오류 배너 하나만 만든다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "오델로 game.error도 로비에서 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "대기 중 뒤로가기는 queue.leave를 보내며 늦은 joined가 화면을 되돌리지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "완료한 콜백 경로로 뒤로가도 재전송하거나 처리 중 화면에 멈추지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "약관에서 돌아오거나 취소된 matching 방문 기록을 열어도 종료된 대기열을 되살리지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "로그아웃 모달의 포커스를 가두고 요청 중 배경으로 닫지 않으며 실패에 성공 안내를 섞지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "계정 메뉴는 화살표·Home·End·바깥 클릭을 지원하고 화면 전환에 제목으로 포커스를 옮긴다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "gomoku 제어권 회복·기권 모달 포커스·턴 알림을 지원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "othello 제어권 회복·기권 모달 포커스·턴 알림을 지원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "2FA 해제 모달은 입력에 포커스하고 요청 중에는 닫히지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "매칭 타이머는 매초 live 알림을 하지 않고 reduced motion을 따른다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "42 연결 notice와 연결 상태를 표시하고 다시 열어도 연결 버튼을 잠근다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "42 로그인 다음 2FA 화면에 인증 안내를 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "42 연결 실패 후 유효한 기존 세션으로 프로필에 돌아간다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "/me에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "/friends에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "/leaderboard에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "NOT_FOUND인 경기 구독을 지워 새로고침 뒤 재요청하지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "NOT_PARTICIPANT인 경기 구독을 지워 새로고침 뒤 재요청하지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "ALREADY_ACTIVE는 로비에 오류 배너 하나만 만든다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "오델로 game.error도 로비에서 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "대기 중 뒤로가기는 queue.leave를 보내며 늦은 joined가 화면을 되돌리지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "완료한 콜백 경로로 뒤로가도 재전송하거나 처리 중 화면에 멈추지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "약관에서 돌아오거나 취소된 matching 방문 기록을 열어도 종료된 대기열을 되살리지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "로그아웃 모달의 포커스를 가두고 요청 중 배경으로 닫지 않으며 실패에 성공 안내를 섞지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "계정 메뉴는 화살표·Home·End·바깥 클릭을 지원하고 화면 전환에 제목으로 포커스를 옮긴다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "gomoku 제어권 회복·기권 모달 포커스·턴 알림을 지원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "othello 제어권 회복·기권 모달 포커스·턴 알림을 지원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "2FA 해제 모달은 입력에 포커스하고 요청 중에는 닫히지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "매칭 타이머는 매초 live 알림을 하지 않고 reduced motion을 따른다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "42 연결 notice와 연결 상태를 표시하고 다시 열어도 연결 버튼을 잠근다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "42 로그인 다음 2FA 화면에 인증 안내를 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "42 연결 실패 후 유효한 기존 세션으로 프로필에 돌아간다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "/me에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "/friends에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "/leaderboard에서도 수동 세션 갱신 결과를 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "NOT_FOUND인 경기 구독을 지워 새로고침 뒤 재요청하지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "NOT_PARTICIPANT인 경기 구독을 지워 새로고침 뒤 재요청하지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "ALREADY_ACTIVE는 로비에 오류 배너 하나만 만든다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "오델로 game.error도 로비에서 한 번 표시한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "대기 중 뒤로가기는 queue.leave를 보내며 늦은 joined가 화면을 되돌리지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "완료한 콜백 경로로 뒤로가도 재전송하거나 처리 중 화면에 멈추지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "약관에서 돌아오거나 취소된 matching 방문 기록을 열어도 종료된 대기열을 되살리지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "로그아웃 모달의 포커스를 가두고 요청 중 배경으로 닫지 않으며 실패에 성공 안내를 섞지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "계정 메뉴는 화살표·Home·End·바깥 클릭을 지원하고 화면 전환에 제목으로 포커스를 옮긴다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "gomoku 제어권 회복·기권 모달 포커스·턴 알림을 지원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "othello 제어권 회복·기권 모달 포커스·턴 알림을 지원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "2FA 해제 모달은 입력에 포커스하고 요청 중에는 닫히지 않는다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "매칭 타이머는 매초 live 알림을 하지 않고 reduced motion을 따른다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "온라인 알림은 목록을 다시 읽고 조회 중 겹친 알림과 삭제를 반영한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "멈춘 목록은 timeout 후 오류로 남고 새 조회로 복구한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "requests, confirmation keyboard flow, reload failure and profile navigation",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "guards direct access and discards the previous account's pending list",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "온라인 알림은 목록을 다시 읽고 조회 중 겹친 알림과 삭제를 반영한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "멈춘 목록은 timeout 후 오류로 남고 새 조회로 복구한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "requests, confirmation keyboard flow, reload failure and profile navigation",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "guards direct access and discards the previous account's pending list",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "온라인 알림은 목록을 다시 읽고 조회 중 겹친 알림과 삭제를 반영한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "멈춘 목록은 timeout 후 오류로 남고 새 조회로 복구한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "requests, confirmation keyboard flow, reload failure and profile navigation",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "guards direct access and discards the previous account's pending list",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "gomoku 활성 대국이 있어도 /terms 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "gomoku 활성 대국이 있어도 /privacy 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "othello 활성 대국이 있어도 /terms 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "othello 활성 대국이 있어도 /privacy 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "gomoku 대국 중 약관을 열어도 snapshot은 판만 갱신하고 뒤로·앞으로 가기를 보존한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "othello 대국 중 약관을 열어도 snapshot은 판만 갱신하고 뒤로·앞으로 가기를 보존한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "다른 대국의 뒤로·앞으로 가기는 URL과 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "gomoku와 othello 대국의 방문 기록은 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "othello와 gomoku 대국의 방문 기록은 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "360px 개인정보 화면은 가로 넘침 없이 푸터 약관 링크를 누를 수 있다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "gomoku 활성 대국이 있어도 /terms 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "gomoku 활성 대국이 있어도 /privacy 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "othello 활성 대국이 있어도 /terms 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "othello 활성 대국이 있어도 /privacy 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "gomoku 대국 중 약관을 열어도 snapshot은 판만 갱신하고 뒤로·앞으로 가기를 보존한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "othello 대국 중 약관을 열어도 snapshot은 판만 갱신하고 뒤로·앞으로 가기를 보존한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "다른 대국의 뒤로·앞으로 가기는 URL과 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "gomoku와 othello 대국의 방문 기록은 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "othello와 gomoku 대국의 방문 기록은 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "360px 개인정보 화면은 가로 넘침 없이 푸터 약관 링크를 누를 수 있다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "gomoku 활성 대국이 있어도 /terms 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "gomoku 활성 대국이 있어도 /privacy 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "othello 활성 대국이 있어도 /terms 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "othello 활성 대국이 있어도 /privacy 직접 접근·새로고침 화면을 유지한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "gomoku 대국 중 약관을 열어도 snapshot은 판만 갱신하고 뒤로·앞으로 가기를 보존한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "othello 대국 중 약관을 열어도 snapshot은 판만 갱신하고 뒤로·앞으로 가기를 보존한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "다른 대국의 뒤로·앞으로 가기는 URL과 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "gomoku와 othello 대국의 방문 기록은 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "othello와 gomoku 대국의 방문 기록은 판·구독·착수 대상을 일치시킨다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "360px 개인정보 화면은 가로 넘침 없이 푸터 약관 링크를 누를 수 있다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "StrictMode에서 OAuth 콜백을 한 번만 전송하고 refresh만 보관해 새로고침 후 복원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "tablet",
+        "title": "StrictMode에서 OAuth 콜백을 한 번만 전송하고 refresh만 보관해 새로고침 후 복원한다",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "mobile",
+        "title": "StrictMode에서 OAuth 콜백을 한 번만 전송하고 refresh만 보관해 새로고침 후 복원한다",
+        "status": "expected",
+        "attempts": 1
+      }
+    ]
+  },
+  "realtime": {
+    "stats": {
+      "startTime": "2026-11-13T10:54:33.611Z",
+      "duration": 10653.196,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "retries": 0,
+    "mockedResponses": false,
+    "database": "Separate disposable E2E database",
+    "tests": [
+      {
+        "project": "desktop",
+        "title": "gomoku: 실제 두 사용자와 두 탭의 제어권 재획득 뒤 착수·기권 (#136)",
+        "status": "expected",
+        "attempts": 1
+      },
+      {
+        "project": "desktop",
+        "title": "othello: 실제 두 사용자와 두 탭의 제어권 재획득 뒤 착수·기권 (#136)",
+        "status": "expected",
+        "attempts": 1
+      }
+    ]
+  },
+  "limitations": [
+    "UI HTTP/WS fixtures do not prove real 42 provider integration",
+    "Server OAuth tests use a fake provider with real PostgreSQL",
+    "No Docker/Nginx, physical two-PC or independent teammate reproduction in this run",
+    "The #143 rapid profile-refresh E2E HTTP 429 condition is unchanged"
+  ]
+}

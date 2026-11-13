@@ -432,7 +432,11 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 
 ## 11. REST API 상태 코드
 
-서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 아래 표는 2026-10-28 Swagger 출력에서 옮겼다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
+서버 REST API가 반환할 수 있는 상태 코드를 엔드포인트별로 기록한다. 모든 코드는 각 route의 `schema.response`에도 선언돼 Swagger(`/docs`)에 표시된다. 2026-10-28 Swagger 출력을 기준으로, 2026-11-09 [#78](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/78)의 전적 공개 설정과 조회 권한을 반영했다. 엔드포인트를 추가·변경하면 이 표도 함께 고친다.
+
+IF-02 토큰 보관 합의(#30): access token은 페이지 메모리에만 두고 브라우저 저장소에 기록하지 않는다. refresh token은 `cbc.auth.refreshToken` 키에 보관하며, 로그인 상태 유지를 선택하면 `localStorage`, 해제하면 `sessionStorage`를 쓴다. 새로고침 뒤 보호 API를 호출하기 전에 refresh로 access token을 복원한다. 동시 갱신은 같은 Promise를 공유하고, 이전 access token의 401이 늦게 도착하면 이미 교체된 토큰으로 한 번 재시도한다. 갱신 실패·갱신 후 401·로그아웃 시 보관 토큰을 지운다. 기존 `cyber_board_cafe.auth.tokens` 값은 refresh token만 이전한 뒤 삭제하고 access token은 복원하지 않는다. 저장소 접근·쓰기가 차단되면 현재 페이지 메모리만 사용하므로 다음 페이지 로드의 로그인 유지가 보장되지 않는다.
+
+`localStorage`를 공유하는 여러 탭의 갱신은 [Web Locks](https://w3c.github.io/web-locks/)의 origin 단위 배타 잠금(`cbc.auth.refresh`)으로 직렬화한다. 잠금 획득 후 최신 refresh token을 다시 읽고, 새 토큰 저장까지 잠금을 유지한다. 비밀이 아닌 로그인 표식 `cbc.auth.sessionId`를 같은 저장소에 두어 토큰 회전과 다른 로그인·로그아웃을 구별한다. 표식이 바뀐 이전 요청·갱신 응답은 폐기하며 새 로그인을 덮어쓰거나 지우지 않는다. 로그인 유지 해제 시 토큰과 표식은 탭별 `sessionStorage`에만 있다. Web Locks를 제공하는 Chrome의 HTTPS·localhost 환경에서 탭 간 갱신을 지원한다. Web Locks 미지원 환경은 같은 탭의 중복 요청만 합치므로 공유 토큰의 여러 탭 동시 갱신은 지원하지 않는다.
 
 ### 11.1 오류 응답 형식
 
@@ -450,10 +454,11 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 |---|---|---|
 | 400 | `BAD_REQUEST` | 본문을 해석할 수 없음 (깨진 JSON, multipart) |
 | 401 | `UNAUTHENTICATED` | token 없음·만료·위조, 폐기·만료된 세션 |
+| 403 | `RECORDS_PRIVATE` | 본인 외 사용자가 비공개 전적·통계 조회 |
 | 404 | `NOT_FOUND` | 없는 경로, 또는 경로는 있지만 그 메서드가 없음 (`Route not found.`) |
 | 413 | `PAYLOAD_TOO_LARGE` | 본문 크기 제한 초과 (JSON 1 MiB, 아바타 2 MiB) |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type. multipart는 `PUT /api/users/me/avatar`만 받는다 |
-| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패 |
+| 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패. 경로 파라미터가 100자를 넘거나 `%` 인코딩이 잘못된 경우도 포함(`Invalid path parameter.`, #150) |
 | 429 | `RATE_LIMITED` | 요청 횟수 제한 초과 |
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | DB 미설정·연결 실패 등 의존 서비스 장애 |
@@ -482,16 +487,79 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 | `POST /api/auth/oauth/42/callback` | 200 | 400, 401 (`OAUTH_STATE_INVALID`, `OAUTH_FAILED`, `UNAUTHENTICATED`), 409 (`EMAIL_TAKEN`, `OAUTH_ACCOUNT_LINKED`, `OAUTH_ALREADY_LINKED`), 413, 415, 422 (`VALIDATION_ERROR`, `OAUTH_EMAIL_MISSING`), 429, 500, 502 (`OAUTH_PROVIDER_ERROR`), 503 |
 | `GET /api/users/me` | 200 | 401, 500, 503 |
 | `PATCH /api/users/me` | 200 | 400, 401, 409 (`NICKNAME_TAKEN`), 413, 415, 422, 500, 503 |
+| `DELETE /api/users/me` (#84) | 204 | 400 (`BAD_REQUEST`, `INVALID_CREDENTIALS`, `INVALID_TWO_FACTOR_CODE`), 401, 403 (`RECENT_LOGIN_REQUIRED`), 409 (`ACTIVE_MATCH`), 413, 415, 422, 429, 500, 503 |
 | `GET /api/users/{userId}` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
-| `GET /api/users/{userId}/stats` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
-| `GET /api/users/{userId}/matches` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users/{userId}/stats` | 200 | 401, 403 (`RECORDS_PRIVATE`), 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users/{userId}/matches` | 200 | 401, 403 (`RECORDS_PRIVATE`), 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |
 | `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
 | `DELETE /api/users/me/avatar` (PR #15) | 204 | 400, 401, 413, 415, 500, 503 |
-| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
+| `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 422, 500, 503 |
+| `GET /api/users?nickname=` (#95) | 200 | 401, 422, 429, 500, 503 |
+| `GET /api/friends` (#95) | 200 | 401, 500, 503 |
+| `GET /api/chat/conversations` (채팅 테스트 후보) | 200 | 401, 500, 503 |
+| `GET /api/chat/conversations/{peerId}/messages` (채팅 테스트 후보) | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `POST /api/chat/conversations/{peerId}/messages` (채팅 테스트 후보) | 201 (신규), 200 (같은 전송 ID 재시도) | 400, 401, 404 (`NOT_FOUND`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests` (#95) | 201 (새 요청), 200 (맞요청 수락) | 400, 401, 404 (`USER_NOT_FOUND`), 409 (`ALREADY_FRIENDS`, `REQUEST_PENDING`, `REQUEST_DECLINED`, `FRIEND_REQUEST_CONFLICT`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/accept` (#95) | 200 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `POST /api/friends/requests/{requestId}/decline` (#95) | 204 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
+| `DELETE /api/friends/{userId}` (#95) | 204 | 400, 401, 404 (`NOT_FOUND`), 413, 415, 422, 429, 500, 503 |
 
-- 403은 아직 쓰지 않는다. 다른 사용자의 자원을 바꾸는 API가 없고, `me` 경로는 인증된 사용자 자신만 다루기 때문이다.
+- 새 닉네임 입력은 NFC로 정규화해 저장하고, 대소문자나 Unicode 조합 형태만 다른 닉네임도 중복(409 `NICKNAME_TAKEN`)으로 본다. 가입·`PATCH /api/users/me`·42 첫 로그인에 같이 적용된다. `0007_case_insensitive_nickname.sql` 다음 `0008_normalized_nickname.sql`이 `lower(normalize(nickname, NFC))` UNIQUE index를 적용하므로 이전 버전에서 NFD로 저장된 닉네임도 비교 대상이다. 기존 데이터에 이미 같은 비교 키가 둘 이상 있으면 migration은 실패하고 트랜잭션이 롤백된다. 계정이나 닉네임을 자동 삭제·개명하지 않으며, 배포 전에 충돌을 확인하고 담당자가 해결해야 한다.
+- 42 이메일이 없거나 254자를 넘으면 계정을 만들지 않고 422 `OAUTH_EMAIL_MISSING`으로 답한다.
+- `me` 경로는 인증된 사용자 자신만 다룬다. 전적 공개 권한은 대상 사용자와 인증된 조회자를 비교한다(11.4절).
 - 경기 조회·명령 API는 REST에 없다. 경기는 WebSocket(IF-03, D)으로 다루고, 그 오류는 8절 `GameError`를 쓴다.
+
+### 11.4 전적 공개 설정과 조회 권한 (FR-PRO-04, DEC-05)
+
+`users.records_public`은 `boolean NOT NULL DEFAULT true`다. 새 migration `0004_records_public.sql`이 기존 사용자도 공개 상태로 유지한다. 본인 계정 DTO(`id`, `email`, `nickname`, `avatarUrl`, `createdAt`)에 필수 boolean `recordsPublic`을 추가한다. 가입 응답의 `user`, `GET /api/users/me`, 프로필 변경 및 아바타 업로드 응답이 같은 DTO를 사용한다. 로그인·refresh 응답은 기존 토큰 형식을 유지한다.
+
+`PATCH /api/users/me`는 `nickname`과 `recordsPublic` 중 하나 이상을 받으며 두 필드를 함께 보낼 수 있다.
+
+```json
+{ "recordsPublic": false }
+```
+
+- `nickname`은 기존 2~32자 검증을 유지한다. `recordsPublic`은 JSON boolean만 허용하며 문자열·숫자·null은 422 `VALIDATION_ERROR`다. 빈 객체와 알 수 없는 필드도 422다. 인증은 본문 검증보다 먼저 수행한다.
+- 요청에 없는 필드는 유지한다. 두 필드는 하나의 UPDATE로 저장하므로 닉네임 충돌(409 `NICKNAME_TAKEN`) 시 공개 설정도 바뀌지 않는다. 성공 응답은 저장된 본인 계정 DTO다.
+- `/stats`와 `/matches`는 인증된 조회자의 ID를 서비스에 전달한다. 대상이 없으면 404, 본인이면 공개 설정과 관계없이 조회할 수 있다. 다른 사용자가 비공개 대상을 조회하면 통계·경기 데이터 없이 403 `RECORDS_PRIVATE`를 반환한다. 게임 필터·페이지 조건과 관계없이 같은 권한 검사를 적용한다.
+- 권한 확인과 전적 읽기는 한 트랜잭션에서 대상 사용자 행의 공유 잠금을 유지한다. 공개 설정 변경과 경합하면 DB에서 순서를 정하며, 변경이 먼저 완료된 조회는 변경된 설정으로 판단한다. 두 조회 API의 응답에는 `Cache-Control: no-store`를 붙인다.
+- 기본 프로필(`id`, `nickname`, `avatarUrl`), 리더보드, 상대방이 본인 `/matches`에서 보는 상대 이름은 공개 설정의 영향을 받지 않는다. 다른 사용자에게 이메일이나 `recordsPublic`을 추가 공개하지 않는다.
+- 내 프로필 토글은 저장 응답을 확인한 뒤 반영한다. 실패 시 기존 값을 유지하며 오류를 표시한다. 타인 프로필에서 `RECORDS_PRIVATE`를 받으면 통계·업적·최근 대국 대신 비공개 안내를 표시하고 이전 조회 데이터를 비운다.
+
+SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 별도다. 실제 PostgreSQL·두 세션 브라우저 검증은 [검증 기록](profile-records-privacy-validation.md)을 따른다.
+
+#### 본인 계정의 인증 수단 표시 (#136)
+
+`GET /api/users/me`는 기본 계정 DTO에 필수 boolean `hasPassword`와 `oauth42Linked`를 추가한다. `oauth42Linked`는 현재 사용자에 연결된 `oauth_accounts(provider='42')`의 존재 여부다. 비밀번호 계정도 42 계정을 연결할 수 있으므로 `hasPassword`의 반대 값으로 추정하지 않는다. 42 제공자 ID·토큰은 반환하지 않으며, 타인 공개 프로필·리더보드에는 두 필드를 추가하지 않는다. DB migration은 없다.
+
+프로필 변경·아바타 응답은 기본 DTO이므로 웹은 같은 사용자 ID의 갱신 결과를 기존 본인 정보에 병합해 인증 수단 표시를 보존한다. 새로고침 시 본인 계정 조회로 다시 확인한다.
+
+### 11.5 친구 웹 클라이언트 (#80·#90)
+
+친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 기능은 #147 통합 후보에 포함됐고 상태 코드는 11.3 표를 따른다(#158). 이 절은 #90이 소비하는 클라이언트 계약이다.
+
+| 클라이언트 동작 | 대조한 #95 계약 |
+|---|---|
+| 목록 | `GET /api/friends` → `{ friends: [{ userId, nickname, avatarUrl, online }], incoming: [...], outgoing: [...] }`. 두 요청 목록에는 `requestId`, `createdAt`이 필요하다. |
+| 검색 | `GET /api/users?nickname=접두사` → `{ id, nickname, avatarUrl }[]`, 최대 20명·본인 제외. trim한 1~32자 접두사를 사용하며 `userId`로 정규화한다. 접두사와 닉네임은 NFC로 맞춰 대소문자 없이 비교하므로 이전 버전에서 NFD로 저장된 닉네임도 찾는다(#157). |
+| 요청 | `POST /api/friends/requests { userId }` → 공통 사용자 정보와 `requestId`, `status: pending 또는 accepted` |
+| 수락 | `POST /api/friends/requests/{requestId}/accept` → 해당 요청 ID의 `accepted` 결과 |
+| 거절 | `POST /api/friends/requests/{requestId}/decline` → 204 |
+| 친구 삭제 | `DELETE /api/friends/{userId}` → 204 |
+
+서버 규칙(#95):
+
+- 수락·거절은 요청을 받은 사용자만 할 수 있다. 보낸 사용자가 시도하면 403 `FORBIDDEN`이다.
+- 거절된 요청의 보낸 사용자가 다시 요청하면 409 `REQUEST_DECLINED`다. 거절한 사용자가 반대 방향으로 요청하면 거절된 행을 지우고 새 `requestId`로 201을 돌려준다. 이전 `requestId`의 수락·거절은 404 `NOT_FOUND`다.
+- 받은 요청이 대기 중일 때 반대 방향으로 요청하면 새 행을 만들지 않고 그 요청을 수락해 200을 돌려준다.
+- 같은 두 사용자의 요청 삽입이 동시에 겹치면 서버가 다시 조회하며 삽입을 최대 3번 시도하고, 그래도 결과가 정해지지 않으면 409 `FRIEND_REQUEST_CONFLICT`다.
+
+목록·검색·성공 응답은 클라이언트에서 형태를 확인하며 누락된 `online`을 false로 채우지 않는다. 통합 앱은 `online`에 인증 완료 WS 연결이 하나 이상인지를 boolean으로 넣는다(`connections.isUserOnline`). 집계를 연결하지 않은 서비스는 목록 조회를 503으로 거절하며, 클라이언트는 명시적 null도 확인 불가로 보존한다. 부적합한 성공 응답은 로컬 `FRIENDS_INVALID_RESPONSE`, 15초 초과는 로컬 `FRIENDS_TIMEOUT`으로 표시한다. 두 코드는 서버 오류 계약이 아니다. timeout이면 개별 요청을 취소하고 결과 미확정을 안내한다. 공유 refresh는 유지하지만 취소된 변경 요청은 뒤늦게 전송하지 않는다. #95의 `REQUEST_DECLINED`는 409이며 B 검토안의 403도 같은 안내로 처리한다. 404·409 후에는 목록을 다시 확인하고 변경 요청을 자동 재전송하지 않는다.
+
+서버 성공 이후 재조회가 실패하면 성공 안내를 유지하면서 목록 실패를 별도로 표시한다. 새 조회가 확인될 때까지 이전 목록의 변경 동작과 온라인 표시를 확정하지 않는다. 온라인은 마지막 목록 조회 시점의 값이다. WS 인증 연결 복구와 인증 후 `presence { userId, online }`·`friends.changed {}`는 REST 재조회를 유발하며, 이벤트 값으로 목록을 직접 덮지 않는다. 서버는 연결 registry를 친구 서비스에 주입하고, 친구 변경이 DB에 반영된 뒤 `friends.changed`를, 연결 수가 0 ↔ 1 이상으로 바뀔 때 `presence`를 보낸다(12.8절).
+
+응답 대체 검증과 미공개 서버 후보의 실제 두 계정 API·WS·DB 검증, #89 탈퇴·migration 선행 조건은 [친구 화면 검증 기록](friends-web-validation.md)에서 구분한다.
 
 ## 12. WebSocket `/api/ws` (IF-03)
 
@@ -546,7 +614,9 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 | 응답을 기다리지 않고 보내 처리 대기 메시지가 32개를 넘음 | 1008 `Too many pending messages.` |
 | 인증 중 DB·인증 서비스 장애 | 1011 `Service unavailable.` |
 
-4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 갱신도 실패하면 로그인 화면으로 보낸다. 4400·1008·1009는 클라이언트 버그이므로 같은 방식으로 재시도하지 않는다.
+4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 세션이 거절되면 로그인 화면으로 보내고, 네트워크·429·5xx 같은 일시 오류는 토큰을 유지한다. 4400·1008·1009는 자동 재접속을 중단하며, 사용자가 명시적으로 재접속하면 새 재시도 주기를 시작한다 (#136, #142).
+
+`session.replaced` 뒤 수신하는 경기 갱신만으로 제어권을 복원하지 않는다. 사용자가 다시 연결해 인증을 마친 뒤 `match.subscribe`에 대한 `match.snapshot`을 받아야 착수·기권 잠금을 해제한다. 없는 경기·참가자가 아닌 경기의 구독 오류는 해당 구독과 저장한 재개 ID를 지워 새로고침으로 같은 오류가 반복되지 않게 한다.
 
 ### 12.4 경기 구독
 
@@ -624,3 +694,12 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 - `presence.online`은 바뀐 순간이 아니라 보내는 순간의 상태다. 친구 목록 조회가 비동기라 알림 순서가 섞여도 마지막 알림은 현재 상태와 같다.
 - 친구 목록을 조회하는 동안 그 사용자의 친구 관계가 바뀌면 조회 결과를 버리고 다시 조회한다. 따라서 `friends.changed` 뒤에 이전 친구에게 `presence`가 가지 않는다.
 - 두 메시지 모두 목록 갱신 신호다. 놓친 알림은 다시 보내지 않으므로, 클라이언트는 재연결이나 화면 진입 때 `GET /api/friends`로 다시 조회한다.
+
+
+### 12.9 친구 채팅 (테스트 후보)
+
+채팅 목록은 현재 수락된 친구의 `friendshipId`, `userId`, `nickname`, `lastMessageAt`을 반환합니다. 대화 이력은 상대 ID별로 최근 50건을 오래된 순으로 반환하며, 응답의 `nextBefore`를 다음 요청의 `before`에 넣어 이전 메시지를 읽습니다. 메시지 필드는 `id`, `senderId`, `text`, `createdAt`입니다.
+
+전송 본문은 `{ text, clientId }`입니다. 텍스트는 앞뒤 공백을 제외해 저장하며, 최대 1,000자입니다. 같은 친구 관계와 발신자의 동일 UUID `clientId`는 기존 메시지를 반환합니다. 새 메시지가 PostgreSQL에 커밋되면 두 사용자의 인증된 소켓에 `chat.changed { peerId }`를 전송합니다. 이 이벤트는 이력 재조회 신호이며, 소켓 재인증과 패널을 다시 열 때도 이력을 조회합니다.
+
+메시지 읽기·전송은 현재 수락된 친구만 할 수 있습니다. 친구 관계를 삭제하거나 회원이 탈퇴하면 해당 관계의 메시지도 삭제됩니다. 이 동작은 테스트 후보의 보존 정책입니다.

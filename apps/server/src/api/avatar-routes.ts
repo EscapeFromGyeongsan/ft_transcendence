@@ -156,6 +156,9 @@ export function registerAvatarRoutes(
             format: "binary",
           },
           404: errorSchema("없는 파일", ["NOT_FOUND"]),
+          422: errorSchema("100자 초과·잘못된 % 인코딩 파일 이름", [
+            "VALIDATION_ERROR",
+          ]),
           ...serverErrorResponses,
         },
       },

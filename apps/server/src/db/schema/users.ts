@@ -1,27 +1,46 @@
 import {
   bigint,
+  boolean,
   index,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
-export const users = pgTable("users", {
-  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-  email: varchar("email", { length: 254 }).notNull().unique(),
-  // NULL for accounts created through OAuth only (no password login).
-  passwordHash: text("password_hash"),
-  nickname: varchar("nickname", { length: 32 }).notNull().unique(),
-  avatarUrl: text("avatar_url"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    email: varchar("email", { length: 254 }).notNull().unique(),
+    // NULL for accounts created through OAuth only (no password login).
+    passwordHash: text("password_hash"),
+    // 새 입력은 NFC로 저장하고, 기존 NFD 값도 아래 인덱스에서 같은 이름으로 비교합니다.
+    nickname: varchar("nickname", { length: 32 }).notNull(),
+    avatarUrl: text("avatar_url"),
+    recordsPublic: boolean("records_public").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    // Set on account deletion (DEC-09). The row stays so match history keeps
+    // its user id; email and nickname are replaced with placeholders.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  // 대소문자와 Unicode 조합 형태가 다른 기존 닉네임도 중복으로 처리합니다.
+  (table) => [
+    uniqueIndex("users_nickname_unique").on(
+      sql`lower(normalize(${table.nickname}, NFC))`,
+    ),
+  ],
+);
 
 /**
  * 서버 세션입니다. access token이 이 ID(`sid`)를 담습니다.

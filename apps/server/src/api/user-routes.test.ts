@@ -7,6 +7,7 @@ import {
   test,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { sql } from "drizzle-orm";
 import { buildApp } from "../app.ts";
 import {
   openTestDatabase,
@@ -96,13 +97,105 @@ describe.skipIf(!testDatabaseUrl)("user profile with PostgreSQL", () => {
     const taken = await patchNickname({ nickname: "p2" });
     expect(taken.statusCode).toBe(409);
     expect(taken.json().error.code).toBe("NICKNAME_TAKEN");
+    const takenUpper = await patchNickname({ nickname: "P2" });
+    expect(takenUpper.statusCode).toBe(409);
+    expect(takenUpper.json().error.code).toBe("NICKNAME_TAKEN");
     expect((await patchNickname({ nickname: "a b" })).statusCode).toBe(422);
+  });
+
+  test("profile edit rejects an NFC equivalent of a legacy NFD nickname (#133 upgrade)", async () => {
+    // 비교 대상은 이전 버전에서 이미 분해형으로 저장된 다른 사용자의 닉네임입니다.
+    await database.db.execute(
+      sql`UPDATE users SET nickname = ${"가나".normalize("NFD")} WHERE id = ${otherId}`,
+    );
+    const duplicate = await patchNickname({ nickname: "가나" });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().error.code).toBe("NICKNAME_TAKEN");
   });
 
   test("authentication is checked before body validation", async () => {
     const response = await patchNickname({ nickname: "" }, false);
     expect(response.statusCode).toBe(401);
     expect(response.json().error.code).toBe("UNAUTHENTICATED");
+    expect(
+      (await patchNickname({ recordsPublic: "false" }, false)).statusCode,
+    ).toBe(401);
+  });
+
+  test("records default to public and settings survive nickname changes and account reads", async () => {
+    const getMe = () =>
+      app.inject({
+        method: "GET",
+        url: "/api/users/me",
+        headers: { authorization: `Bearer ${token}` },
+      });
+    expect((await getMe()).json().recordsPublic).toBe(true);
+    const updated = await patchNickname({ recordsPublic: false });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      id: 1,
+      nickname: "p1",
+      recordsPublic: false,
+    });
+    expect((await getMe()).json().recordsPublic).toBe(false);
+    expect(
+      (await patchNickname({ nickname: "new_name" })).json().recordsPublic,
+    ).toBe(false);
+    expect((await getMe()).json()).toMatchObject({
+      nickname: "new_name",
+      recordsPublic: false,
+    });
+    expect((await patchNickname({ recordsPublic: true })).json()).toMatchObject(
+      { nickname: "new_name", recordsPublic: true },
+    );
+  });
+
+  test("a duplicate nickname rolls back a combined privacy change", async () => {
+    const rejected = await patchNickname({
+      nickname: "p2",
+      recordsPublic: false,
+    });
+    expect(rejected.statusCode).toBe(409);
+    const me = await app.inject({
+      method: "GET",
+      url: "/api/users/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(me.json()).toMatchObject({ nickname: "p1", recordsPublic: true });
+    const saved = await patchNickname({
+      nickname: "renamed",
+      recordsPublic: false,
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({
+      nickname: "renamed",
+      recordsPublic: false,
+    });
+  });
+
+  test("privacy patches reject empty, unknown or coerced values without changing the account", async () => {
+    for (const payload of [
+      {},
+      { unknown: true },
+      { recordsPublic: "false" },
+      { recordsPublic: "true" },
+      { recordsPublic: null },
+      { recordsPublic: 0 },
+      { recordsPublic: 1 },
+      { recordsPublic: [] },
+      { recordsPublic: {} },
+      { recordsPublic: false, userId: otherId },
+    ]) {
+      const response = await patchNickname(payload);
+      expect(response.statusCode, JSON.stringify(payload)).toBe(422);
+      expect(response.json().error.code).toBe("VALIDATION_ERROR");
+    }
+    const me = await app.inject({
+      method: "GET",
+      url: "/api/users/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(me.json()).toMatchObject({ nickname: "p1", recordsPublic: true });
   });
 
   test("public profile hides email; unknown id 404, bad id 422", async () => {

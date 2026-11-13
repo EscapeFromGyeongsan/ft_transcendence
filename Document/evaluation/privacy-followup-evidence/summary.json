@@ -1,0 +1,69 @@
+{
+  "checkedAt": "2026-11-13T11:18:32.663Z",
+  "browser": "158.0.8127.37",
+  "scenarios": [
+    {
+      "name": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "status": "passed",
+      "horizontalOverflow": false,
+      "consoleAndPageErrors": [],
+      "checks": [
+        "direct privacy route",
+        "OAuth collection",
+        "session retention",
+        "avatar deletion failure",
+        "withdrawal and nickname retention",
+        "contact",
+        "keyboard tabs",
+        "terms password length",
+        "browser Back"
+      ]
+    },
+    {
+      "name": "tablet",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "status": "passed",
+      "horizontalOverflow": false,
+      "consoleAndPageErrors": [],
+      "checks": [
+        "direct privacy route",
+        "OAuth collection",
+        "session retention",
+        "avatar deletion failure",
+        "withdrawal and nickname retention",
+        "contact",
+        "keyboard tabs",
+        "terms password length",
+        "browser Back"
+      ]
+    },
+    {
+      "name": "mobile",
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "status": "passed",
+      "horizontalOverflow": false,
+      "consoleAndPageErrors": [],
+      "checks": [
+        "direct privacy route",
+        "OAuth collection",
+        "session retention",
+        "avatar deletion failure",
+        "withdrawal and nickname retention",
+        "contact",
+        "keyboard tabs",
+        "terms password length",
+        "browser Back"
+      ]
+    }
+  ]
+}

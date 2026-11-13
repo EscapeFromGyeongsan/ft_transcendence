@@ -1,0 +1,118 @@
+{
+  "checkedAt": "2026-11-13T11:46:29.947Z",
+  "source": "5eb78e9e536a5ff704ba76fb9d7ed15a29edf158",
+  "base": "#145 b9112b8406061faf60ab11f87f50f4b6eba644ab",
+  "integratedPR133": "4b8a3bb54088ba43d3383bf1de7a51db9f68a9bd",
+  "environment": {
+    "os": "Windows",
+    "node": "v26.13.0",
+    "postgres": "17.11",
+    "databaseEncoding": "UTF8",
+    "databaseLocale": "C",
+    "postgresPort": 55433,
+    "isolatedDatabases": true
+  },
+  "baselineAPIReproduction": {
+    "source": "#133 4b8a3bb merged into #145 b9112b8 without further product changes",
+    "legacyRegistration": {
+      "status": 201,
+      "nicknameCodePoints": [
+        "1100",
+        "1161",
+        "1102",
+        "1161"
+      ]
+    },
+    "afterMigrationRegistration": {
+      "status": 201,
+      "nicknameCodePoints": [
+        "ac00",
+        "b098"
+      ]
+    },
+    "defect": "Existing NFD and new NFC nicknames are both accepted after migration 0007."
+  },
+  "redRegression": {
+    "source": "b390c3507e21fa1834157d6f1e123b174116d27a",
+    "failed": 2,
+    "tests": [
+      "auth with PostgreSQL registration rejects an NFC equivalent of a legacy NFD nickname (#133 upgrade)",
+      "user profile with PostgreSQL profile edit rejects an NFC equivalent of a legacy NFD nickname (#133 upgrade)"
+    ],
+    "selection": "-t '#133 upgrade'; other tests intentionally filtered"
+  },
+  "fixedUpgradeAndRollback": {
+    "upgrade": {
+      "legacyRegistration": 201,
+      "migrationsAppliedThrough": "0008",
+      "duplicateRegistration": 409,
+      "errorCode": "NICKNAME_TAKEN",
+      "legacyLogin": 200,
+      "legacyIdAndNicknamePreserved": true
+    },
+    "preexistingCollision": {
+      "migrationFailureCode": "23505",
+      "usersPreserved": 2,
+      "previousIndexPreserved": true,
+      "migrationJournalUnchanged": true
+    }
+  },
+  "fullUnit": {
+    "files": 47,
+    "passed": 535,
+    "failed": 0,
+    "skipped": 0,
+    "success": true
+  },
+  "build": "TypeScript and Vite passed",
+  "drizzleRegeneration": "No schema changes, nothing to migrate",
+  "demoPR120": {
+    "scriptHead": "12af5a9408d2cf7550afd12c9b760e92f40a6820",
+    "scriptBlob": "08202483bd2216d9ef0eac898a7af0f20fc5acf7",
+    "originalScriptUnchanged": true,
+    "baseURL": "https://127.0.0.1:31433",
+    "transport": "actual HTTPS/WSS; NODE_EXTRA_CA_CERTS with the local test CA; no TLS bypass",
+    "matches": [
+      {
+        "game_type": "gomoku",
+        "status": "finished",
+        "result_reason": "five_in_row",
+        "count": 11
+      },
+      {
+        "game_type": "gomoku",
+        "status": "finished",
+        "result_reason": "resign",
+        "count": 1
+      },
+      {
+        "game_type": "othello",
+        "status": "finished",
+        "result_reason": "disc_count",
+        "count": 3
+      }
+    ],
+    "aliceGomoku": {
+      "userId": 1,
+      "gameType": "gomoku",
+      "wins": 7,
+      "losses": 3,
+      "draws": 0,
+      "played": 10,
+      "winRate": 0.7,
+      "achievements": {
+        "firstWin": true
+      },
+      "progress": {
+        "current": 10,
+        "target": 10
+      }
+    }
+  },
+  "notRun": [
+    "Docker/Nginx",
+    "real 42 provider",
+    "full browser acceptance",
+    "independent team reproduction"
+  ]
+}

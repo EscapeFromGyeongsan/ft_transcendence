@@ -30,9 +30,17 @@ export const userSchema = {
     email: { type: "string" },
     nickname: { type: "string" },
     avatarUrl: { type: ["string", "null"] },
+    recordsPublic: { type: "boolean" },
     createdAt: { type: "string", format: "date-time" },
   },
-  required: ["id", "email", "nickname", "avatarUrl", "createdAt"],
+  required: [
+    "id",
+    "email",
+    "nickname",
+    "avatarUrl",
+    "recordsPublic",
+    "createdAt",
+  ],
 };
 
 export const tokenPairSchema = {
@@ -74,6 +82,15 @@ export const loginResultSchema = {
 
 /** 인증 전 endpoint의 무차별 대입 방지 설정입니다. 클라이언트 IP마다 1분에 10번입니다. */
 export const authRateLimit = { rateLimit: { max: 10, timeWindow: "1 minute" } };
+
+/**
+ * refresh 설정입니다. 클라이언트 IP마다 1분에 60번입니다.
+ *
+ * @remarks 화면을 열 때마다 refresh를 부르므로 새로고침·재접속이 10번 제한에 걸리지 않게 따로 둡니다. 유효한 refresh token이 있어야 하므로 무차별 대입 대상이 아닙니다.
+ */
+export const refreshRateLimit = {
+  rateLimit: { max: 60, timeWindow: "1 minute" },
+};
 
 /**
  * `onRequest`에서 Bearer access token을 확인하는 인증 훅을 만듭니다.
@@ -192,7 +209,7 @@ export function registerAuthRoutes(
   app.post<{ Body: { refreshToken: string } }>(
     "/api/auth/refresh",
     {
-      config: authRateLimit,
+      config: refreshRateLimit,
       schema: {
         tags: ["auth"],
         summary: "refresh token 교체와 access token 재발급",

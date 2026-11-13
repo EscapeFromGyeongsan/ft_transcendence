@@ -1,0 +1,65 @@
+{
+  "baseUrl": "https://localhost:8643",
+  "scriptCommit": "8fd513e",
+  "serverCommit": "531f8a1",
+  "startedAt": "2026-11-13T02:47:25.992Z",
+  "endedAt": "2026-11-13T02:52:27.047Z",
+  "options": {
+    "users": 20,
+    "games": 10,
+    "durationSeconds": 300,
+    "moveIntervalMs": 1000,
+    "restIntervalMs": 1000
+  },
+  "machine": {
+    "platform": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 x8",
+    "memoryGiB": 16,
+    "node": "v24.3.0"
+  },
+  "metrics": {
+    "GET /api/users/me": {
+      "count": 1500,
+      "p50": 4.8,
+      "p95": 14.4,
+      "max": 58.5
+    },
+    "queue.join -> queue.matched": {
+      "count": 68,
+      "p50": 3.3,
+      "p95": 35.6,
+      "max": 36
+    },
+    "GET /api/users/:userId": {
+      "count": 1500,
+      "p50": 4.6,
+      "p95": 10.6,
+      "max": 35.1
+    },
+    "game.command -> game.ack": {
+      "count": 2893,
+      "p50": 7.7,
+      "p95": 15.3,
+      "max": 44.1
+    },
+    "game.command -> opponent game.updated": {
+      "count": 2893,
+      "p50": 9.9,
+      "p95": 17.6,
+      "max": 66.8
+    },
+    "GET /api/users/:userId/stats": {
+      "count": 1480,
+      "p50": 7,
+      "p95": 20.7,
+      "max": 121.5
+    },
+    "GET /api/leaderboard": {
+      "count": 1480,
+      "p50": 6.1,
+      "p95": 14.4,
+      "max": 23.5
+    }
+  },
+  "failures": {}
+}

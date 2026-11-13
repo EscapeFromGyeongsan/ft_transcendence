@@ -140,3 +140,32 @@ test("every Swagger route has a summary and response descriptions", async () => 
   }
   expect(missing).toEqual([]);
 });
+
+test("router errors on path parameters answer 422 VALIDATION_ERROR and are declared (#150)", async () => {
+  app = await buildApp();
+  const paths: Record<string, Record<string, { responses: object }>> = (
+    await app.inject({ method: "GET", url: "/docs/json" })
+  ).json().paths;
+  const withParams = Object.entries(paths).filter(([path]) =>
+    path.includes("{"),
+  );
+  expect(withParams.length).toBeGreaterThan(0);
+  for (const [path, methods] of withParams) {
+    for (const [method, operation] of Object.entries(methods)) {
+      expect(operation.responses, `${method} ${path}`).toHaveProperty("422");
+      for (const value of ["1".repeat(101), "%E0"]) {
+        const response = await app.inject({
+          method: method.toUpperCase() as "GET",
+          url: path.replace(/\{[^}]+\}/g, value),
+        });
+        expect(response.statusCode, `${method} ${path} ${value}`).toBe(422);
+        expect(response.json()).toEqual({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid path parameter.",
+          },
+        });
+      }
+    }
+  }
+});

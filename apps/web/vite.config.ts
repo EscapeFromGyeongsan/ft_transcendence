@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 // Read the same root .env as the API server so the proxy follows its PORT.
@@ -14,4 +15,8 @@ const proxy = {
     ws: true,
   },
 };
-export default defineConfig({ server: { proxy }, preview: { proxy } });
+export default defineConfig({
+  plugins: [tailwindcss()],
+  server: { proxy },
+  preview: { proxy },
+});

@@ -34,12 +34,16 @@ export type CallbackResult =
 
 // 42 login as nickname when free and valid, otherwise with a random suffix.
 function nicknameCandidates(login: string) {
-  const base = login.replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 27) || "user";
+  const base =
+    login
+      .normalize("NFC")
+      .replace(/[^\p{L}\p{N}_-]/gu, "")
+      .slice(0, 27) || "user";
   const suffixed = () => `${base}-${randomBytes(2).toString("hex")}`;
+  // Enough suffixed tries that all of them being taken is not realistic.
   return [
     NICKNAME_PATTERN.test(base) ? base : suffixed(),
-    suffixed(),
-    suffixed(),
+    ...Array.from({ length: 9 }, suffixed),
   ];
 }
 
@@ -214,7 +218,10 @@ export function createOAuthService(
 
       let userId = existing?.userId;
       if (userId === undefined) {
-        if (!profile.email) return { ok: false, code: "OAUTH_EMAIL_MISSING" };
+        // An email longer than users.email allows cannot be stored either.
+        if (!profile.email || profile.email.length > 254) {
+          return { ok: false, code: "OAUTH_EMAIL_MISSING" };
+        }
         const created = await createAccount({
           ...profile,
           email: profile.email,
@@ -223,11 +230,10 @@ export function createOAuthService(
         userId = created.userId;
       }
       // Same 2FA policy as password login.
-      return {
-        ok: true,
-        mode: "login",
-        login: await auth.completeLogin(userId),
-      };
+      const login = await auth.completeLogin(userId);
+      // The account was deleted while this callback ran; the state is already used.
+      if (!login) return { ok: false, code: "OAUTH_STATE_INVALID" };
+      return { ok: true, mode: "login", login };
     },
   };
 }

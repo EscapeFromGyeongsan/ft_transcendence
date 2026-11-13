@@ -125,6 +125,16 @@ export function createAvatarService(db: Database, avatarDir: string) {
     },
 
     /**
+     * 저장된 URL이 가리키는 아바타 파일을 지웁니다.
+     *
+     * @remarks 회원 탈퇴 commit 뒤에 씁니다. 그때는 사용자 행의 URL이 이미 지워져 있습니다. 삭제 실패는 무시합니다.
+     */
+    async removeFile(avatarUrl: string | null) {
+      const path = storedPath(avatarUrl);
+      if (path) await removeQuietly(path);
+    },
+
+    /**
      * 저장된 아바타 파일을 읽습니다.
      *
      * @param name - URL의 파일 이름. 이 서비스가 만든 이름 형식이 아니면 읽지 않습니다.

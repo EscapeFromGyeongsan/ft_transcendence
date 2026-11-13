@@ -3,24 +3,30 @@ import type { PublicUser } from "../repositories/auth-repository.ts";
 import * as repo from "../repositories/user-repository.ts";
 import { uniqueViolation } from "./auth-service.ts";
 
-export type UpdateNicknameResult =
+export type UpdateProfileResult =
   | { ok: true; user: PublicUser }
   | { ok: false; code: "NICKNAME_TAKEN" | "NOT_FOUND" };
 
-/** 닉네임 변경과 공개 프로필 조회를 맡는 서비스를 만듭니다. */
+/** 본인의 닉네임·전적 공개 설정 변경과 공개 프로필 조회를 맡습니다. */
 export function createUserService(db: Database) {
   return {
     /**
-     * 닉네임을 바꿉니다.
+     * 전달된 닉네임·전적 공개 설정을 함께 저장합니다.
      *
      * @returns 중복 닉네임은 `NICKNAME_TAKEN`, 사용자가 없으면 `NOT_FOUND`. 그 밖의 DB 오류는 예외로 전달됩니다.
      */
-    async updateNickname(
+    async updateProfile(
       userId: number,
-      nickname: string,
-    ): Promise<UpdateNicknameResult> {
+      changes: repo.ProfileUpdate,
+    ): Promise<UpdateProfileResult> {
       try {
-        const user = await repo.updateNickname(db, userId, nickname);
+        const user = await repo.updateProfile(
+          db,
+          userId,
+          changes.nickname === undefined
+            ? changes
+            : { ...changes, nickname: changes.nickname.normalize("NFC") },
+        );
         return user ? { ok: true, user } : { ok: false, code: "NOT_FOUND" };
       } catch (error) {
         if (uniqueViolation(error) === "users_nickname_unique") {

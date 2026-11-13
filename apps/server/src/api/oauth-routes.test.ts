@@ -22,6 +22,8 @@ const people: Record<string, { login: string; email: string | null }> = {
   "102": { login: "p1", email: "other@student.42.fr" },
   "103": { login: "taken", email: "p1@example.com" },
   "104": { login: "noemail", email: null },
+  // Longer than users.email (varchar 254).
+  "105": { login: "longmail", email: `${"a".repeat(243)}@student.42.fr` },
 };
 let providerDown = false;
 let providerBadJson = false;
@@ -182,6 +184,8 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
     expect(profile).toMatchObject({
       email: "yunhpark@student.42.fr",
       nickname: "yunhpark",
+      hasPassword: false,
+      oauth42Linked: true,
     });
     const second = await callback("code-101", await startLogin());
     expect((await me(second.json().accessToken)).json().id).toBe(profile.id);
@@ -217,10 +221,14 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
     const noEmail = await callback("code-104", await startLogin());
     expect(noEmail.statusCode).toBe(422);
     expect(noEmail.json().error.code).toBe("OAUTH_EMAIL_MISSING");
+    const longEmail = await callback("code-105", await startLogin());
+    expect(longEmail.statusCode).toBe(422);
+    expect(longEmail.json().error.code).toBe("OAUTH_EMAIL_MISSING");
   });
 
   test("a signed-in user links 42, then 42 login opens that account", async () => {
     const token = await registerAndLogin();
+    expect((await me(token)).json().oauth42Linked).toBe(false);
     const start = await app.inject({
       method: "POST",
       url: "/api/auth/oauth/42/link",
@@ -228,6 +236,16 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
     });
     const linked = await callback("code-101", stateOf(start.json()));
     expect(linked.json()).toEqual({ linked: true });
+    expect((await me(token)).json()).toMatchObject({
+      oauth42Linked: true,
+      hasPassword: true,
+    });
+    const profile = await app.inject({
+      method: "GET",
+      url: "/api/users/1",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(profile.json()).not.toHaveProperty("oauth42Linked");
     const viaOAuth = await callback("code-101", await startLogin());
     expect((await me(viaOAuth.json().accessToken)).json().email).toBe(
       "p1@example.com",

@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { sql } from "drizzle-orm";
@@ -40,6 +41,7 @@ test("stats routes declare every status code in Swagger", async () => {
   expect(codes("/api/users/{userId}/stats")).toEqual([
     "200",
     "401",
+    "403",
     "404",
     "422",
     "500",
@@ -48,6 +50,7 @@ test("stats routes declare every status code in Swagger", async () => {
   expect(codes("/api/users/{userId}/matches")).toEqual([
     "200",
     "401",
+    "403",
     "404",
     "422",
     "500",
@@ -134,6 +137,113 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
       headers: { authorization: `Bearer ${token}` },
     });
 
+  test("private records are denied for other viewers while owners and public-profile exceptions still work", async () => {
+    await playMatch("gomoku", 2, 1);
+    const ownerToken = (
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { email: "p2@example.com", password: "password-123" },
+      })
+    ).json().accessToken;
+    const ownerHeaders = { authorization: `Bearer ${ownerToken}` };
+    const patch = (recordsPublic: boolean) =>
+      app.inject({
+        method: "PATCH",
+        url: "/api/users/me",
+        headers: ownerHeaders,
+        payload: { recordsPublic },
+      });
+    expect((await get("/api/users/2/stats?gameType=gomoku")).statusCode).toBe(
+      200,
+    );
+    expect((await patch(false)).statusCode).toBe(200);
+
+    for (const suffix of [
+      "stats?gameType=gomoku",
+      "stats?gameType=othello",
+      "matches",
+      "matches?gameType=gomoku&limit=1",
+      "matches?gameType=othello&before=99",
+    ]) {
+      const denied = await get(`/api/users/2/${suffix}`);
+      expect(denied.statusCode, suffix).toBe(403);
+      expect(denied.json()).toEqual({
+        error: {
+          code: "RECORDS_PRIVATE",
+          message: "This user's records are private.",
+        },
+      });
+      expect(denied.headers["cache-control"]).toBe("no-store");
+      const own = await app.inject({
+        method: "GET",
+        url: `/api/users/2/${suffix}`,
+        headers: ownerHeaders,
+      });
+      expect(own.statusCode, suffix).toBe(200);
+      expect(own.headers["cache-control"]).toBe("no-store");
+    }
+    expect((await get("/api/users/2")).json()).toEqual({
+      id: 2,
+      nickname: "p2",
+      avatarUrl: null,
+    });
+    expect(
+      (await get("/api/leaderboard?gameType=gomoku")).json(),
+    ).toContainEqual(
+      expect.objectContaining({ userId: 2, nickname: "p2", wins: 1 }),
+    );
+    expect((await get("/api/users/1/matches")).json().matches).toContainEqual(
+      expect.objectContaining({
+        opponent: { id: 2, nickname: "p2", deleted: false },
+      }),
+    );
+    expect((await get("/api/users/999/stats?gameType=gomoku")).statusCode).toBe(
+      404,
+    );
+    expect(
+      (await app.inject({ method: "GET", url: "/api/users/2/matches" }))
+        .statusCode,
+    ).toBe(401);
+
+    expect((await patch(true)).statusCode).toBe(200);
+    expect(
+      (await get("/api/users/2/stats?gameType=gomoku")).json(),
+    ).toMatchObject({ played: 1, wins: 1 });
+    expect((await get("/api/users/2/matches")).json().matches).toHaveLength(1);
+  });
+
+  test("a records read waits for a pending privacy update and uses its committed policy", async () => {
+    const writer = await database.db.$client.connect();
+    let pending: ReturnType<typeof get> | undefined;
+    try {
+      await writer.query("BEGIN");
+      await writer.query(
+        "UPDATE users SET records_public = false WHERE id = 2",
+      );
+      const { pid } = (await writer.query("SELECT pg_backend_pid() AS pid"))
+        .rows[0];
+      pending = get("/api/users/2/stats?gameType=gomoku");
+      // inject() starts lazily; start the request before inspecting lock waits.
+      const response = Promise.resolve(pending);
+      await vi.waitFor(
+        async () => {
+          const waiting = await database.db.execute(
+            sql`SELECT pid FROM pg_stat_activity WHERE ${pid} = ANY(pg_blocking_pids(pid))`,
+          );
+          expect(waiting.rows.length).toBeGreaterThan(0);
+        },
+        { timeout: 1500, interval: 10 },
+      );
+      await writer.query("COMMIT");
+      expect((await response).statusCode).toBe(403);
+    } finally {
+      await writer.query("ROLLBACK");
+      writer.release();
+      await pending;
+    }
+  });
+
   test("stats count wins/losses per game type and skip unfinished matches", async () => {
     await playMatch("gomoku", 1, 2); // p1 wins
     await playMatch("gomoku", 1, 2, true); // p1 resigns, p2 wins
@@ -194,7 +304,7 @@ describe.skipIf(!testDatabaseUrl)("statistics with PostgreSQL", () => {
       result: "win",
       reason: "resign",
       seat: "white",
-      opponent: { id: 2, nickname: "p2" },
+      opponent: { id: 2, nickname: "p2", deleted: false },
     });
     expect(page1.nextBefore).toBe(second);
     const page2 = (

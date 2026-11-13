@@ -1,0 +1,25 @@
+/*
+ * Styling entry. Tailwind CSS v4 provides the theme and utility classes used in
+ * the components; styles.css keeps the screen-specific rules (boards, cards,
+ * buttons). Tailwind's preflight reset is not loaded because styles.css has
+ * its own base rules.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "./styles.css" layer(components);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Expose the existing design tokens (styles.css :root) as Tailwind colors and fonts. */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-outline-variant: var(--outline-variant);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-error: var(--error);
+  --color-on-error-container: var(--on-error-container);
+  --font-display: var(--font-headline);
+}

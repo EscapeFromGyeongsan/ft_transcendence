@@ -82,13 +82,17 @@ flowchart TD
 |---|---|---|---:|
 | MOD-01 | Frontend + Backend Framework | Major | 2 |
 | MOD-02 | Real-time Features | Major | 2 |
-| MOD-03 | User Interaction | Major | 2 |
 | MOD-04 | Standard User Management | Major | 2 |
 | MOD-05 | Complete Web-based Game | Major | 2 |
 | MOD-06 | Remote Players | Major | 2 |
 | MOD-07 | ORM | Minor | 1 |
 | MOD-08 | Game Statistics and Match History | Minor | 1 |
-| | **총합** | | **14** |
+| MOD-09 | Add another game with user history and matchmaking (Othello) | Major | 2 |
+| MOD-10 | Remote authentication with OAuth 2.0 (42) | Minor | 1 |
+| MOD-11 | Complete 2FA system | Minor | 1 |
+| | **총합** | | **16** |
+
+MOD-03 User Interaction은 필수 조건인 기본 채팅이 구현되지 않아 주장하지 않는다(#128). 14점을 넘는 2점은 보너스 후보다.
 
 현재 기본 점수 범위에서 제외:
 
@@ -737,7 +741,7 @@ flowchart TD
 
 ## 23. Module Matrix
 
-선택 모듈 14점의 책임·시나리오·세부 조건을 정의한다. 내용: [evaluation/module-matrix.md](evaluation/module-matrix.md)
+선택 모듈 16점의 책임·시나리오·세부 조건을 정의한다. 내용: [evaluation/module-matrix.md](evaluation/module-matrix.md)
 
 포함 항목:
 

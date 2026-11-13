@@ -7,6 +7,7 @@ import {
   test,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { sql } from "drizzle-orm";
 import { buildApp } from "../app.ts";
 import {
   openTestDatabase,
@@ -134,6 +135,52 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     expect(nickname.json().error.code).toBe("NICKNAME_TAKEN");
   });
 
+  test("registration rejects an NFC equivalent of a legacy NFD nickname (#133 upgrade)", async () => {
+    await register(account);
+    // 이전 API가 저장할 수 있던 분해형 닉네임을 가진 기존 계정을 재현합니다.
+    await database.db.execute(
+      sql`UPDATE users SET nickname = ${"가나".normalize("NFD")} WHERE id = 1`,
+    );
+    const duplicate = await register({
+      ...account,
+      email: "canonical@example.com",
+      nickname: "가나",
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().error.code).toBe("NICKNAME_TAKEN");
+  });
+
+  test("nicknames differing only in case or Unicode form are duplicates", async () => {
+    await register({ ...account, nickname: "가나" });
+    const upper = await register({
+      ...account,
+      email: "p2@example.com",
+      nickname: "P1",
+    });
+    expect(upper.statusCode).toBe(201);
+    const lower = await register({
+      ...account,
+      email: "p3@example.com",
+      nickname: "p1",
+    });
+    expect(lower.statusCode).toBe(409);
+    expect(lower.json().error.code).toBe("NICKNAME_TAKEN");
+    // "가나" decomposed into Hangul jamo (NFD).
+    const nfd = await register({
+      ...account,
+      email: "p4@example.com",
+      nickname: "\u1100\u1161\u1102\u1161",
+    });
+    expect(nfd.statusCode).toBe(409);
+    expect(nfd.json().error.code).toBe("NICKNAME_TAKEN");
+    const stored = await register({
+      ...account,
+      email: "p5@example.com",
+      nickname: "\u1103\u1161\u1105\u1161",
+    });
+    expect(stored.json().nickname).toBe("다라");
+  });
+
   test("invalid body returns 422, malformed JSON 400, wrong content type 415", async () => {
     const invalid = await register({
       email: "not-an-email",
@@ -183,6 +230,9 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     const profile = await me(ok.json().accessToken);
     expect(profile.statusCode).toBe(200);
     expect(profile.json().email).toBe(account.email);
+    expect(profile.json().hasPassword).toBe(true);
+    expect(profile.json().oauth42Linked).toBe(false);
+    expect(profile.body).not.toContain("passwordHash");
     expect((await me()).statusCode).toBe(401);
     expect((await me("garbage")).statusCode).toBe(401);
   });
@@ -226,6 +276,19 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     for (let i = 0; i < 10; i += 1)
       expect((await attempt()).statusCode).toBe(401);
     const limited = await attempt();
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error.code).toBe("RATE_LIMITED");
+  });
+
+  test("refresh allows 60 per minute so reloads do not hit the login limit (#149)", async () => {
+    await register(account);
+    let token = (await login(account)).json().refreshToken;
+    for (let i = 0; i < 60; i += 1) {
+      const response = await refresh(token);
+      expect(response.statusCode).toBe(200);
+      token = response.json().refreshToken;
+    }
+    const limited = await refresh(token);
     expect(limited.statusCode).toBe(429);
     expect(limited.json().error.code).toBe("RATE_LIMITED");
   });

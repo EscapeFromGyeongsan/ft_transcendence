@@ -245,11 +245,9 @@ docker compose --env-file .env.full --project-directory . \
 
 API 시작 스크립트는 같은 Node 프로세스에서 기존 서버를 import하므로 `SIGTERM`이 Fastify 종료 핸들러에 전달되도록 구성한다. `init: true`는 자식 프로세스를 정리하고, migration 시작 스크립트는 `SIGINT`·`SIGTERM`을 Drizzle 프로세스에 전달한다. 정상 종료 여부도 실제 실행으로 검증해야 한다.
 
-## WebSocket 인계 조건
+## WebSocket 경로와 타임아웃
 
-`/api/` 아래 경로에는 `Upgrade`·`Connection` 헤더 전달 설정을 준비했다. upstream 유휴 제한 시간은 75초이므로 실제 endpoint의 heartbeat 정책과 조율해야 한다. 담당자에게 실제 endpoint 경로를 확인한다. `/api/` 밖에 있으면 해당 프록시 경로를 명시적으로 추가하고 검증한다.
-
-인계 대기 항목은 endpoint 경로, 인증·origin 처리, heartbeat 주기, 연결 종료 동작, 연결·메시지·재접속 검증이다. 인계 전까지 실제 WSS 검증은 대기로 둔다. 임시 echo endpoint만 추가하고 제품의 실시간 통합이 완료됐다고 기록하지 않는다.
+실시간 API는 `/api/ws`를 사용한다. Nginx는 `/api/` 설정에서 HTTP/1.1의 `Upgrade`와 `Connection`을 전달한다. 프록시 read/send 제한 시간은 75초다. 서버 heartbeat는 10초 주기로 ping을 보내고 무응답을 20초에 감지한다. 경기의 누적 이탈 유예 60초는 프록시 제한과 별도로 적용한다.
 
 ## 격리된 수용 기준 검증
 
@@ -341,6 +339,14 @@ npm run db:up
 npm run db:migrate
 npm run test:e2e
 ~~~
+
+배포된 HTTPS 경로에 같은 브라우저 테스트를 실행하려면 테스트 계정과 결과를 남겨도 되는 격리된 실행 환경을 준비한다. Chromium이 해당 환경의 인증서를 신뢰하는지 확인한 뒤 실행한다.
+
+~~~sh
+E2E_BASE_URL=https://localhost:18443 npm run test:e2e -- --workers=1
+~~~
+
+`E2E_BASE_URL`을 지정하면 Playwright가 개발 서버를 띄우지 않는다. 오목 테스트는 두 브라우저 세션으로 가입·매칭하고, 접속을 끊었다가 같은 대국으로 복귀한 뒤 완주·양쪽 전적을 검증한다. 같은 매칭 큐에 두 시나리오가 동시에 들어가지 않도록 이 테스트는 데스크톱 프로젝트에서만 실행한다.
 
 기본값과 다른 `PORT`, 개발·preview API 프록시, Ctrl+C 종료도 확인한다. 일반 개발 DB에 보존할 데이터가 있다면 별도의 로컬 검증용 DB를 사용한다.
 

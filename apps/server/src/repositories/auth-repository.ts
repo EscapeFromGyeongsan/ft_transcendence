@@ -1,12 +1,14 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { refreshTokens, sessions, users } from "../db/schema/users.ts";
+import { oauthAccounts } from "../db/schema/external-auth.ts";
 
-const publicUserColumns = {
+export const publicUserColumns = {
   id: users.id,
   email: users.email,
   nickname: users.nickname,
   avatarUrl: users.avatarUrl,
+  recordsPublic: users.recordsPublic,
   createdAt: users.createdAt,
 };
 
@@ -16,6 +18,7 @@ export type PublicUser = {
   email: string;
   nickname: string;
   avatarUrl: string | null;
+  recordsPublic: boolean;
   createdAt: Date;
 };
 
@@ -45,15 +48,39 @@ export async function findUserCredentialsByEmail(db: Executor, email: string) {
   return user;
 }
 
+/** `GET /api/users/me`의 내 정보입니다. `hasPassword`는 비밀번호로 로그인할 수 있는 계정인지 나타냅니다. */
+export type MeUser = PublicUser & {
+  hasPassword: boolean;
+  oauth42Linked: boolean;
+};
+
 export async function findUserById(
   db: Executor,
   id: number,
-): Promise<PublicUser | undefined> {
+): Promise<MeUser | undefined> {
   const [user] = await db
-    .select(publicUserColumns)
+    .select({
+      ...publicUserColumns,
+      hasPassword: sql<boolean>`${users.passwordHash} IS NOT NULL`,
+      oauth42Linked: sql<boolean>`EXISTS (SELECT 1 FROM ${oauthAccounts} WHERE ${oauthAccounts.userId} = ${users.id} AND ${oauthAccounts.provider} = '42')`,
+    })
     .from(users)
     .where(eq(users.id, id));
   return user;
+}
+
+/**
+ * 탈퇴하지 않은 사용자 행을 `FOR SHARE`로 잠그고 있는지 확인합니다.
+ *
+ * @remarks 탈퇴는 같은 행을 `FOR UPDATE`로 잠그므로, 세션 생성과 탈퇴가 겹치면 한쪽이 끝날 때까지 기다립니다.
+ */
+export async function lockActiveUser(db: Executor, userId: number) {
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+    .for("share");
+  return user !== undefined;
 }
 
 export async function insertSession(

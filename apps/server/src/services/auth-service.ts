@@ -112,7 +112,13 @@ export function createAuthService(
     };
   }
 
+  /**
+   * 새 세션을 만들고 토큰 쌍을 발급합니다.
+   *
+   * @returns 그 사이 탈퇴한 사용자면 `null`. 트랜잭션 안에서 호출합니다.
+   */
   async function startSession(executor: Executor, userId: number) {
+    if (!(await repo.lockActiveUser(executor, userId))) return null;
     const session = await repo.insertSession(executor, {
       userId,
       expiresAt: new Date(Date.now() + refreshTtl * 1000),
@@ -127,11 +133,11 @@ export function createAuthService(
   /**
    * 인증을 마친 사용자의 로그인을 완료합니다.
    *
-   * @returns 2FA 계정이면 세션 대신 5분짜리 challenge token, 아니면 새 세션의 토큰 쌍
+   * @returns 2FA 계정이면 세션 대신 5분짜리 challenge token, 아니면 새 세션의 토큰 쌍. 그 사이 탈퇴했으면 `null`
    *
    * @remarks 비밀번호 로그인과 OAuth 로그인이 함께 써서 두 경로에 같은 2FA 정책이 적용됩니다.
    */
-  async function completeLogin(userId: number): Promise<LoginResult> {
+  async function completeLogin(userId: number): Promise<LoginResult | null> {
     if (await twoFactorRepo.isEnabled(db, userId)) {
       const challengeToken = createRefreshToken();
       await twoFactorRepo.insertChallenge(db, {
@@ -163,7 +169,7 @@ export function createAuthService(
       try {
         const user = await repo.insertUser(db, {
           email: input.email.toLowerCase(),
-          nickname: input.nickname,
+          nickname: input.nickname.normalize("NFC"),
           passwordHash,
         });
         return { ok: true, user };
@@ -239,7 +245,10 @@ export function createAuthService(
           return { ok: false, code: "INVALID_TWO_FACTOR_CODE" };
         }
         await twoFactorRepo.updateChallenge(tx, challenge.id, { usedAt: now });
-        return { ok: true, tokens: await startSession(tx, challenge.userId) };
+        const tokens = await startSession(tx, challenge.userId);
+        return tokens
+          ? { ok: true, tokens }
+          : { ok: false, code: "UNAUTHENTICATED" };
       });
     },
 
