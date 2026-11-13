@@ -13,13 +13,13 @@ if (!process.env.DATABASE_URL) {
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret || jwtSecret.length < 32) {
   throw new Error(
-    "Set JWT_SECRET in .env to a random string of 32+ characters.",
+    "Set JWT_SECRET in .env (.env.full for make) to a random string of 32+ characters.",
   );
 }
 const twoFactorKey = process.env.TWO_FACTOR_KEY;
 if (twoFactorKey !== undefined && twoFactorKey.length < 32) {
   throw new Error(
-    "Set TWO_FACTOR_KEY in .env to a random string of 32+ characters.",
+    "Set TWO_FACTOR_KEY in .env (.env.full for make) to a random string of 32+ characters.",
   );
 }
 const oauthEnv = [
@@ -44,8 +44,11 @@ const listenOptions = readListenOptions();
 // peer is a trusted proxy. Default: loopback (local dev proxy). Behind the
 // Docker Nginx set TRUST_PROXY=uniquelocal (private network addresses).
 const trustProxy = process.env.TRUST_PROXY || "loopback";
+// Errors (500, 503, lost DB pool) go to stdout for `make logs`. Per-request
+// lines stay off at every level: their URLs would carry values such as the 42
+// callback code and state.
 const app = await buildApp(
-  { trustProxy },
+  { trustProxy, logger: { level: "warn" }, disableRequestLogging: true },
   process.env.DATABASE_URL,
   { jwtSecret, twoFactorKey, oauth42 },
   process.env.AVATAR_DIR || "data/avatars",
@@ -59,7 +62,7 @@ try {
   });
   if (databaseHealth.statusCode !== 200) {
     throw new Error(
-      "Database is unavailable. Run npm run db:up and npm run db:migrate first.",
+      "Database is unavailable. Run npm run db:up and npm run db:migrate first, or check make logs for the containers.",
     );
   }
   const startup = createDatabase(process.env.DATABASE_URL);

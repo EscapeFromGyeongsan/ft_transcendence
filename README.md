@@ -76,6 +76,18 @@ Each target runs `infra/prepare-full.sh`, which creates only what is missing: `.
 
 `make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID` and `FT_OAUTH_CLIENT_SECRET` are set in `.env.full`. `make` then uses `https://<IP>:8443/oauth/42/callback` as the redirect URI; `make local` uses `FT_OAUTH_REDIRECT_URI`, or `https://localhost:8443/oauth/42/callback` when it is empty. The URI in use is printed and must be registered in the 42 intra application. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
 
+The `db`, `api` and `web` containers restart after a crash or a Docker restart; `make down` stops them. Server errors (500, 503, lost database connection) appear in `make logs`.
+
+If `make` stops with `service "migrate" didn't complete successfully: exit 1` and `make logs` shows `password authentication failed`, this computer still has a database volume created with an earlier password (for example from a previous clone). Restore that earlier password file (`POSTGRES_PASSWORD_FILE`) and run `make` again. If the database data is not needed, remove only the database volume instead; this deletes the stored accounts and matches:
+
+```sh
+make down
+docker volume rm cyber-board-cafe-full_postgres_data
+make
+```
+
+Uploaded avatars are in a separate volume and do not affect the database password. To reset all data, also remove `cyber-board-cafe-full_avatars` in the same step.
+
 Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
 
 The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. WebSocket upgrade forwarding is prepared under `/api/`; actual WSS validation requires the real endpoint. See [the validation record](Document/runtime-validation.md).

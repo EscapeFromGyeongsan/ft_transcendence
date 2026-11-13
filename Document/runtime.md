@@ -117,6 +117,18 @@ make logs
 make ps
 ~~~
 
+`db`·`api`·`web`은 `restart: unless-stopped`라 프로세스가 죽거나 Docker가 다시 시작되면 다시 뜬다. `make down`(또는 `docker stop`)으로 멈춘 컨테이너는 다시 띄우지 않는다. API는 `warn` 이상의 로그를 출력하므로 500·503·DB 연결 끊김의 원인은 `make logs`에서 확인한다. 이 레벨은 코드에 고정돼 있고 환경 변수로 바꾸지 않는다. 요청마다 남는 로그는 42 callback의 code·state 같은 URL 값이 남지 않도록 레벨과 관계없이 출력하지 않는다(`disableRequestLogging`).
+
+이 컴퓨터에 예전 실행(이전 clone 등)의 DB 볼륨이 남아 있고 비밀번호 파일이 새로 만들어졌다면 `make`가 `service "migrate" didn't complete successfully: exit 1`로 멈춘다. migration 로그에는 이유가 나오지 않고, `make logs`의 `db` 줄에 `password authentication failed for user "<POSTGRES_USER>"`가 나온다. 먼저 예전 비밀번호 파일(`POSTGRES_PASSWORD_FILE`)을 되살려 다시 `make`한다. 그 DB의 데이터(계정·경기 기록)가 필요 없으면 DB 볼륨만 지운 뒤 다시 실행한다.
+
+~~~sh
+make down
+docker volume rm cyber-board-cafe-full_postgres_data
+make
+~~~
+
+아바타는 별도 볼륨이고 DB 비밀번호와 관계없으므로 이 복구에서 지우지 않는다. 모든 데이터를 초기화할 때만 같은 단계에서 `cyber-board-cafe-full_avatars`도 지운다.
+
 위 "실행 전 준비"와 "인증서와 신뢰 설정"을 직접 마쳤다면 `make`는 그 값을 그대로 쓴다. `make` 없이 실행할 때는 사전 준비를 마친 뒤 다음 명령을 쓴다.
 
 ~~~sh

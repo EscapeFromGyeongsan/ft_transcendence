@@ -13,6 +13,8 @@ x-database-environment: &database-environment
 services:
   db:
     image: postgres:17-alpine
+    # Comes back after a crash or a Docker restart; `make down` stops it.
+    restart: unless-stopped
     environment: *database-environment
     secrets:
       - postgres_password
@@ -45,6 +47,7 @@ services:
   api:
     build: *server-build
     command: ["api"]
+    restart: unless-stopped
     init: true
     environment:
       <<: *database-environment
@@ -84,6 +87,7 @@ services:
       context: .
       dockerfile: infra/Dockerfile
       target: web
+    restart: unless-stopped
     environment:
       PUBLIC_HTTPS_PORT: ${HTTPS_PORT:-8443}
       NGINX_ENVSUBST_FILTER: "^PUBLIC_HTTPS_PORT$"
