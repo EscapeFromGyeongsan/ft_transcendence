@@ -294,4 +294,11 @@ export const PRIVACY_POLICY_SECTIONS: readonly LegalSection[] = [
       "탈퇴 후 보존되는 정보: 상대방의 전적·통계 무결성을 위해 경기 결과와 경기 당시 닉네임은 영구 보존되며, 상대방의 전적에는 \"(탈퇴한 사용자)\"로 표시됩니다.",
     ],
   },
+  {
+    id: "privacy-contact",
+    title: "5. 개인정보 문의",
+    paragraphs: [
+      "개인정보 처리에 관한 문의는 yunhpark@student.42gyeongsan.kr 로 메일을 보내 주세요.",
+    ],
+  },
 ];

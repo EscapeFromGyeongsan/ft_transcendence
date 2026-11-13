@@ -96,4 +96,13 @@ describe("legal-routing and policy content (Issue #64)", () => {
     expect(privacyText).toContain("1024×1024px");
     expect(privacyText).toContain("회원 탈퇴");
   });
+
+  it("gives a real contact address in the privacy policy", () => {
+    const contact = PRIVACY_POLICY_SECTIONS.find(
+      (section) => section.id === "privacy-contact",
+    );
+    expect(JSON.stringify(contact)).toContain(
+      "yunhpark@student.42gyeongsan.kr",
+    );
+  });
 });
