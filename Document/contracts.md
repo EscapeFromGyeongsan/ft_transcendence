@@ -450,14 +450,15 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 |---|---|---|
 | 400 | `BAD_REQUEST` | 본문을 해석할 수 없음 (깨진 JSON, multipart) |
 | 401 | `UNAUTHENTICATED` | token 없음·만료·위조, 폐기·만료된 세션 |
+| 404 | `NOT_FOUND` | 없는 경로, 또는 경로는 있지만 그 메서드가 없음 (`Route not found.`) |
 | 413 | `PAYLOAD_TOO_LARGE` | 본문 크기 제한 초과 (JSON 1 MiB, 아바타 2 MiB) |
-| 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | 허용하지 않는 Content-Type. multipart는 `PUT /api/users/me/avatar`만 받는다 |
 | 422 | `VALIDATION_ERROR` | 필드 형식·범위 검증 실패 |
 | 429 | `RATE_LIMITED` | 요청 횟수 제한 초과 |
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
 | 503 | `SERVICE_UNAVAILABLE` | DB 미설정·연결 실패 등 의존 서비스 장애 |
 
-본문을 받는 POST·PATCH는 본문이 없어도 보내면 해석하므로 400·413·415가 붙는다.
+POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 해석하므로 400·413·415가 붙는다.
 
 ### 11.3 엔드포인트별 상태 코드
 
@@ -486,7 +487,7 @@ TypeScript 타입은 데이터의 형태를 설명한다. 외부 JSON 입력은 
 | `GET /api/users/{userId}/matches` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/leaderboard` | 200 | 401, 422, 500, 503 |
 | `PUT /api/users/me/avatar` (PR #15) | 200 | 400, 401, 413, 415, 422 (`VALIDATION_ERROR`, `IMAGE_TOO_BIG`), 429, 500, 503 |
-| `DELETE /api/users/me/avatar` (PR #15) | 204 | 401, 500, 503 |
+| `DELETE /api/users/me/avatar` (PR #15) | 204 | 400, 401, 413, 415, 500, 503 |
 | `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
 
 - 403은 아직 쓰지 않는다. 다른 사용자의 자원을 바꾸는 API가 없고, `me` 경로는 인증된 사용자 자신만 다루기 때문이다.
@@ -520,6 +521,7 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 | 상황 | 결과 |
 |---|---|
 | 같은 IP에서 1분에 30번을 넘는 연결 요청 | upgrade 없이 HTTP 429 `RATE_LIMITED` |
+| upgrade 헤더 없는 `GET /api/ws` | 본문 없는 HTTP 404 |
 | 5초 안에 `auth`가 오지 않음 | 4401 `Authentication timed out.` |
 | 첫 메시지가 `auth`가 아니거나 `accessToken`이 없음, 인증 중 다른 메시지 | 4401 `Authenticate first.` |
 | 토큰 무효·만료, 폐기된 세션 | 4401 `Invalid or expired token.` |

@@ -51,7 +51,10 @@ test("avatar routes declare every status code in Swagger", async () => {
   ]);
   expect(codes(paths["/api/users/me/avatar"].delete)).toEqual([
     "204",
+    "400",
     "401",
+    "413",
+    "415",
     "500",
     "503",
   ]);
