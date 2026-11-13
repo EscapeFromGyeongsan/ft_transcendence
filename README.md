@@ -13,7 +13,7 @@ This README was updated on **2026-11-13 (KST)**. It describes the #147 integrati
 | Area | Owners | Implemented scope | Remaining work |
 |---|---|---|---|
 | Accounts | B (server, #11), A (web, #55) | Registration, email/password login, rotating refresh tokens and session revocation | Final acceptance run (#88) |
-| OAuth and 2FA | B (server, #11), A (web, #72) | 42 login/link API and UI; TOTP setup, verification, recovery codes and disable flow | Real 42 provider verification |
+| OAuth and 2FA | B (server, #11), A (web, #72) | 42 login/link API and UI; TOTP setup, verification, recovery codes and disable flow | Final acceptance run (#88) |
 | Profiles | B (server, #11, #15), A (web, #57) | Public profiles, nickname changes, PNG/JPEG avatar upload/delete and default avatars | Final acceptance run (#88) |
 | Records | B (server, #11), A (web, #57) | Per-game statistics, history, first-win achievement, ten-game progress and leaderboard | Final acceptance run (#88); demo data via `npm run demo:seed` (#120) |
 | Matchmaking | D (server, #49), A (web, #63) | Game selection, queue join/cancel/matched flow and waiting UI | Final acceptance run (#88) |
@@ -463,7 +463,6 @@ Codex has assisted with implementation, tests, code review and documentation. Th
 ## Known limitations
 
 - Friend invitations and chat are not implemented (chat major MOD-03 is not claimed).
-- 42 OAuth needs a real 42 intra application and has not been verified against the real provider.
 - The final acceptance run (#88) on the submission SHA, including two-PC play, is still required.
 - NFR-PERF-01 was measured on master `531f8a1` ([record](Document/perf/README.md)), not on the #147 candidate.
 - Asset/font attribution review and independent README reproduction remain required before submission.

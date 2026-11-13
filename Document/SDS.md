@@ -215,7 +215,7 @@ flowchart LR
 
 | Use case | 담당 | 상태 |
 |---|---|---|
-| Register, Login(email), Logout, 2FA, 42 OAuth, Link 42 | B (API), A (UI) | API `구현됨` (#11), UI `구현됨` (#21, #65). 실제 42 앱 검증 별도 |
+| Register, Login(email), Logout, 2FA, 42 OAuth, Link 42 | B (API), A (UI) | API `구현됨` (#11), UI `구현됨` (#21, #65) |
 | View/Edit profile | B (API), A (UI) | `구현됨` (#11, #24, 전적 공개 #78) |
 | Upload avatar | B (API), A (UI) | `구현됨` (#15, #24) |
 | Friend, online status | E (+ D 연결 상태), A (UI) | `구현됨` (#95 REST, #98·#82 presence, #90 UI) |
