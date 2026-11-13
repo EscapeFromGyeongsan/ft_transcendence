@@ -280,13 +280,15 @@ export function DeleteAccountDialog({
         </div>
 
         <form
-          className="cbc-form cbc-delete-form"
+          className="flex flex-col gap-5 cbc-delete-form"
           onSubmit={handleSubmit}
           noValidate
         >
           {hasPassword === undefined && (
             <fieldset className="cbc-delete-methods" disabled={busy}>
-              <legend className="cbc-label">본인 확인 방법</legend>
+              <legend className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface">
+                본인 확인 방법
+              </legend>
               <label className="cbc-delete-method">
                 <input
                   type="radio"
@@ -311,8 +313,11 @@ export function DeleteAccountDialog({
           )}
 
           {method === "password" ? (
-            <div className="cbc-field">
-              <label className="cbc-label" htmlFor="delete-account-password">
+            <div className="flex flex-col gap-1.5">
+              <label
+                className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                htmlFor="delete-account-password"
+              >
                 비밀번호
               </label>
               <input
@@ -348,8 +353,11 @@ export function DeleteAccountDialog({
           ) : requiresCode ||
             twoFactorEnabled !== false ||
             hasPassword === undefined ? (
-            <div className="cbc-field">
-              <label className="cbc-label" htmlFor="delete-account-code">
+            <div className="flex flex-col gap-1.5">
+              <label
+                className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                htmlFor="delete-account-code"
+              >
                 2단계 인증 코드 또는 복구 코드
                 {requiresCode ? "" : " (2FA를 쓰는 경우만)"}
               </label>

@@ -144,19 +144,19 @@ export function GomokuMatchView({
 
   const isBlackOpponentDisconnected = Boolean(
     isOpponentDisconnected &&
-      blackPlayerId !== null &&
-      (state.opponentDisconnect?.userId === blackPlayerId ||
-        (state.opponentDisconnect === null &&
-          viewerUserId !== null &&
-          blackPlayerId !== viewerUserId)),
+    blackPlayerId !== null &&
+    (state.opponentDisconnect?.userId === blackPlayerId ||
+      (state.opponentDisconnect === null &&
+        viewerUserId !== null &&
+        blackPlayerId !== viewerUserId)),
   );
   const isWhiteOpponentDisconnected = Boolean(
     isOpponentDisconnected &&
-      whitePlayerId !== null &&
-      (state.opponentDisconnect?.userId === whitePlayerId ||
-        (state.opponentDisconnect === null &&
-          viewerUserId !== null &&
-          whitePlayerId !== viewerUserId)),
+    whitePlayerId !== null &&
+    (state.opponentDisconnect?.userId === whitePlayerId ||
+      (state.opponentDisconnect === null &&
+        viewerUserId !== null &&
+        whitePlayerId !== viewerUserId)),
   );
 
   const showOwnConnectionBanner =
@@ -267,7 +267,8 @@ export function GomokuMatchView({
           <div className="cbc-conn-banner-main">
             <div>
               <div className="cbc-conn-banner-title">
-                [세션 전환됨] 다른 기기 또는 브라우저 탭에서 대국 제어권을 가져갔습니다
+                [세션 전환됨] 다른 기기 또는 브라우저 탭에서 대국 제어권을
+                가져갔습니다
               </div>
               <div className="cbc-conn-banner-desc">
                 현재 탭에서는 착수 및 기권 조작이 비활성화되었습니다.
@@ -305,7 +306,8 @@ export function GomokuMatchView({
                   </strong>
                 </div>
                 <p className="cbc-pause-desc">
-                  상대방의 네트워크 연결이 불안정하여 대국이 일시정지되었습니다. 누적 유예 시간(60초) 내 복귀하지 않으면 시간패 처리됩니다.
+                  상대방의 네트워크 연결이 불안정하여 대국이 일시정지되었습니다.
+                  누적 유예 시간(60초) 내 복귀하지 않으면 시간패 처리됩니다.
                 </p>
               </div>
             </div>
@@ -532,7 +534,10 @@ export function GomokuMatchView({
         </aside>
 
         {/* 우측 15×15 오목 보드 영역 (row/col 0..14) */}
-        <section className="cbc-gomoku-board-stage" aria-label="15×15 오목 보드">
+        <section
+          className="cbc-gomoku-board-stage"
+          aria-label="15×15 오목 보드"
+        >
           <div className="cbc-gomoku-wood-frame">
             {/* 상단 열(col: 0..14) 인덱스 헤더 */}
             <div className="cbc-gomoku-col-headers" aria-hidden="true">
@@ -614,8 +619,7 @@ export function GomokuMatchView({
                           lastMove.row === row &&
                           lastMove.col === col;
                         const isStar = isGomokuStarPoint(row, col);
-                        const isDisabled =
-                          cell !== null || !turn.canPlaceStone;
+                        const isDisabled = cell !== null || !turn.canPlaceStone;
 
                         const stoneDescription =
                           cell === "black"
@@ -746,7 +750,8 @@ export function GomokuMatchView({
                 data-testid="gomoku-result-minimized-bar"
               >
                 <strong>
-                  {resultPresentation.headline} ({resultPresentation.reasonTitle})
+                  {resultPresentation.headline} (
+                  {resultPresentation.reasonTitle})
                 </strong>
                 <div className="cbc-board-result-minimized-actions">
                   <button
@@ -803,10 +808,11 @@ export function GomokuMatchView({
             </h3>
             <p
               id="resign-dialog-desc"
-              className="cbc-subheading"
+              className="m-0 text-sm/5 text-on-surface-variant"
               style={{ maxWidth: "340px" }}
             >
-              기권 명령(resign)을 전송하면 서버가 즉시 상대방의 승리로 대국을 종료합니다.
+              기권 명령(resign)을 전송하면 서버가 즉시 상대방의 승리로 대국을
+              종료합니다.
             </p>
             <div className="cbc-modal-actions">
               <button

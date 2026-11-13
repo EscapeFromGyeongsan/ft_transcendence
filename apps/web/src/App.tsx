@@ -1646,7 +1646,10 @@ export function App() {
                   </div>
                 </>
               ) : (
-                <p className="cbc-subheading" style={{ marginTop: "0.5rem" }}>
+                <p
+                  className="m-0 text-sm/5 text-on-surface-variant"
+                  style={{ marginTop: "0.5rem" }}
+                >
                   보안 상태 토큰(state·flowToken)을 검증하고 세션을 연결하는
                   중입니다...
                 </p>
@@ -1656,7 +1659,9 @@ export function App() {
         ) : initializing ? (
           <div className="cbc-login-card" style={{ textAlign: "center" }}>
             <h1 className="cbc-heading-login">사이버 보드게임 카페</h1>
-            <p className="cbc-subheading">인증 세션을 확인하는 중입니다...</p>
+            <p className="m-0 text-sm/5 text-on-surface-variant">
+              인증 세션을 확인하는 중입니다...
+            </p>
           </div>
         ) : view === "login" ? (
           <div className="cbc-stage">
@@ -1676,7 +1681,7 @@ export function App() {
                   </svg>
                 </div>
                 <h1 className="cbc-heading-login">로그인</h1>
-                <p className="cbc-subheading">
+                <p className="m-0 text-sm/5 text-on-surface-variant">
                   Cyber Board Cafe에 오신 것을 환영합니다.
                   <br />
                   계정에 로그인해 대국을 시작하세요.
@@ -1695,13 +1700,16 @@ export function App() {
 
               <form
                 id="loginForm"
-                className="cbc-form"
+                className="flex flex-col gap-5"
                 onSubmit={handleLoginSubmit}
                 noValidate
               >
-                <div className="cbc-field">
-                  <div className="cbc-label-row">
-                    <label className="cbc-label" htmlFor="emailInput">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label
+                      className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                      htmlFor="emailInput"
+                    >
                       이메일
                       <span aria-hidden="true" className="cbc-required">
                         *
@@ -1736,9 +1744,12 @@ export function App() {
                   )}
                 </div>
 
-                <div className="cbc-field">
-                  <div className="cbc-label-row">
-                    <label className="cbc-label" htmlFor="passwordInput">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label
+                      className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                      htmlFor="passwordInput"
+                    >
                       비밀번호
                       <span aria-hidden="true" className="cbc-required">
                         *
@@ -1998,7 +2009,7 @@ export function App() {
                 <header style={{ marginBottom: "1.75rem" }}>
                   <h1 className="cbc-heading-signup">회원가입</h1>
                   <p
-                    className="cbc-subheading"
+                    className="m-0 text-sm/5 text-on-surface-variant"
                     style={{ marginTop: "0.5rem", fontSize: "15px" }}
                   >
                     새로운 계정을 생성하고 온라인 오목과 보드게임을 즐겨보세요.
@@ -2007,14 +2018,17 @@ export function App() {
 
                 <form
                   id="signup-form"
-                  className="cbc-form"
+                  className="flex flex-col gap-5"
                   onSubmit={handleRegisterSubmit}
                   noValidate
                 >
                   {/* Email Input Group */}
-                  <div className="cbc-field">
-                    <div className="cbc-label-row">
-                      <label className="cbc-label" htmlFor="user-email">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <label
+                        className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                        htmlFor="user-email"
+                      >
                         이메일
                       </label>
                       {fieldErrors.email ? (
@@ -2055,9 +2069,12 @@ export function App() {
                   </div>
 
                   {/* Password Input Group */}
-                  <div className="cbc-field">
-                    <div className="cbc-label-row">
-                      <label className="cbc-label" htmlFor="user-password">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <label
+                        className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                        htmlFor="user-password"
+                      >
                         비밀번호
                       </label>
                       {fieldErrors.password && (
@@ -2112,9 +2129,12 @@ export function App() {
                   </div>
 
                   {/* Nickname Input Group */}
-                  <div className="cbc-field">
-                    <div className="cbc-label-row">
-                      <label className="cbc-label" htmlFor="user-nickname">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <label
+                        className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                        htmlFor="user-nickname"
+                      >
                         닉네임
                       </label>
                       {fieldErrors.nickname ? (
@@ -2247,18 +2267,21 @@ export function App() {
             <div className="cbc-login-card">
               <div className="cbc-card-header-center">
                 <h1 className="cbc-heading-login">2단계 인증</h1>
-                <p className="cbc-subheading">
+                <p className="m-0 text-sm/5 text-on-surface-variant">
                   인증 앱의 6자리 코드 또는 복구 코드를 입력해 주세요.
                 </p>
               </div>
 
               <form
                 id="otp-form"
-                className="cbc-form"
+                className="flex flex-col gap-5"
                 onSubmit={handleTwoFactorSubmit}
               >
-                <div className="cbc-field">
-                  <label className="cbc-label" htmlFor="twoFactorCodeInput">
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                    htmlFor="twoFactorCodeInput"
+                  >
                     인증 코드
                   </label>
                   <input
@@ -2426,7 +2449,7 @@ export function App() {
                 <h1 className="cbc-welcome-title">
                   환영합니다, {currentUser?.nickname} 님
                 </h1>
-                <p className="cbc-subheading">
+                <p className="m-0 text-sm/5 text-on-surface-variant">
                   오늘도 차분한 원목 테이블에서 명승부를 펼쳐보세요. (계정:{" "}
                   {currentUser?.email})
                 </p>
@@ -2521,7 +2544,9 @@ export function App() {
                         </span>
                       </div>
 
-                      <p className="cbc-subheading">{entry.description}</p>
+                      <p className="m-0 text-sm/5 text-on-surface-variant">
+                        {entry.description}
+                      </p>
 
                       {/* 사전 대국 규칙 요약 리스트 (FR-CAT-02) */}
                       <dl className="cbc-lobby-rule-list">
@@ -2681,7 +2706,7 @@ export function App() {
             </h3>
             <p
               id="logout-desc"
-              className="cbc-subheading"
+              className="m-0 text-sm/5 text-on-surface-variant"
               style={{ maxWidth: "320px" }}
             >
               로그아웃하면 현재 세션이 종료되며, 다시 로그인해야 게임을 이용할

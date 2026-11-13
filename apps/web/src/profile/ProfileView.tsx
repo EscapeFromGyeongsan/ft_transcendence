@@ -592,12 +592,12 @@ export function ProfileView({
       )}
 
       {loading ? (
-        <p className="cbc-subheading" role="status">
+        <p className="m-0 text-sm/5 text-on-surface-variant" role="status">
           프로필을 불러오는 중입니다...
         </p>
       ) : loadError ? null : (
-        <div className="cbc-profile-layout">
-          <aside className="cbc-profile-side">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[340px_1fr]">
+          <aside className="flex min-w-0 flex-col gap-6">
             <section className="cbc-profile-card cbc-profile-identity">
               <Avatar
                 nickname={displayName}
@@ -616,7 +616,7 @@ export function ProfileView({
 
               {isMine && (
                 <>
-                  <div className="cbc-profile-avatar-actions">
+                  <div className="mt-2 flex w-full gap-2">
                     <button
                       type="button"
                       className="cbc-btn-primary cbc-btn-compact"
@@ -643,7 +643,7 @@ export function ProfileView({
                     aria-label="프로필 이미지 파일 선택"
                     onChange={handleAvatarSelected}
                   />
-                  <p className="cbc-profile-hint">
+                  <p className="m-0 text-[12px] text-on-surface-variant">
                     PNG, JPEG 파일 지원 (최대 2MB, 1024px 이하)
                   </p>
                 </>
@@ -652,14 +652,19 @@ export function ProfileView({
 
             {isMine && (
               <section className="cbc-profile-card">
-                <h2 className="cbc-profile-section-title">계정 정보</h2>
+                <h2 className="mx-0 mt-0 mb-4 font-display text-[20px]">
+                  계정 정보
+                </h2>
                 <form
-                  className="cbc-form"
+                  className="flex flex-col gap-5"
                   onSubmit={handleNicknameSubmit}
                   noValidate
                 >
-                  <div className="cbc-field">
-                    <label className="cbc-label" htmlFor="profile-nickname">
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                      htmlFor="profile-nickname"
+                    >
                       닉네임
                     </label>
                     <div className="cbc-profile-nickname-row">
@@ -699,8 +704,11 @@ export function ProfileView({
                       </p>
                     )}
                   </div>
-                  <div className="cbc-field">
-                    <label className="cbc-label" htmlFor="profile-email">
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                      htmlFor="profile-email"
+                    >
                       이메일 (읽기 전용)
                     </label>
                     <input
@@ -720,7 +728,9 @@ export function ProfileView({
                 className="cbc-profile-card"
                 data-testid="profile-records-settings"
               >
-                <h2 className="cbc-profile-section-title">전적 공개 설정</h2>
+                <h2 className="mx-0 mt-0 mb-4 font-display text-[20px]">
+                  전적 공개 설정
+                </h2>
                 <div className="cbc-profile-privacy-toggle">
                   <input
                     id="profile-records-public"
@@ -749,7 +759,10 @@ export function ProfileView({
                           : "비공개"}
                   </span>
                 </div>
-                <p id="profile-records-scope" className="cbc-profile-hint">
+                <p
+                  id="profile-records-scope"
+                  className="m-0 text-[12px] text-on-surface-variant"
+                >
                   비공개로 설정하면 다른 사용자는 내 프로필의 통계·업적·경기
                   기록을 볼 수 없습니다. 리더보드와 상대방 자신의 대국 기록에는
                   계속 표시됩니다.
@@ -762,8 +775,8 @@ export function ProfileView({
                 className="cbc-profile-card"
                 data-testid="profile-security-section"
               >
-                <div className="cbc-profile-section-head">
-                  <h2 className="cbc-profile-section-title">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <h2 className="m-0 font-display text-[20px]">
                     보안 및 계정 연동
                   </h2>
                   <span
@@ -779,7 +792,7 @@ export function ProfileView({
 
                 <div className="cbc-security-block">
                   <p
-                    className="cbc-profile-hint"
+                    className="m-0 text-[12px] text-on-surface-variant"
                     style={{ marginBottom: "0.75rem" }}
                   >
                     인증 앱(Google Authenticator, Authy 등) 기반 TOTP 2단계
@@ -810,7 +823,7 @@ export function ProfileView({
                       <h3 className="cbc-2fa-box-title">
                         1단계: 인증 앱에 시크릿 등록
                       </h3>
-                      <p className="cbc-profile-hint">
+                      <p className="m-0 text-[12px] text-on-surface-variant">
                         인증 앱에서 수동 키 입력을 선택하고 아래 Base32 비밀키를
                         등록하거나 <code>otpauth://</code> URI를 여세요.
                       </p>
@@ -837,13 +850,13 @@ export function ProfileView({
                       </div>
 
                       <form
-                        className="cbc-form"
+                        className="flex flex-col gap-5"
                         style={{ marginTop: "0.75rem" }}
                         onSubmit={handleEnableTwoFactorSubmit}
                       >
-                        <div className="cbc-field">
+                        <div className="flex flex-col gap-1.5">
                           <label
-                            className="cbc-label"
+                            className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
                             htmlFor="two-factor-enable-code"
                           >
                             2단계: 인증 앱의 6자리 코드 입력
@@ -864,7 +877,7 @@ export function ProfileView({
                             required
                           />
                         </div>
-                        <div className="cbc-profile-avatar-actions">
+                        <div className="mt-2 flex w-full gap-2">
                           <button
                             type="button"
                             className="cbc-btn-secondary cbc-btn-compact"
@@ -917,7 +930,7 @@ export function ProfileView({
                       <h3 className="cbc-2fa-box-title">
                         1회용 복구 코드 10개 (최초 1회만 표시)
                       </h3>
-                      <p className="cbc-profile-hint">
+                      <p className="m-0 text-[12px] text-on-surface-variant">
                         인증 기기를 분실했을 때 로그인 코드 대신 1회씩 사용할 수
                         있습니다. 지금 안전한 곳에 복사·보관해 주세요.
                       </p>
@@ -959,7 +972,7 @@ export function ProfileView({
                       )}
                     </div>
                     <p
-                      className="cbc-profile-hint"
+                      className="m-0 text-[12px] text-on-surface-variant"
                       style={{ marginBottom: "0.625rem" }}
                     >
                       현재 계정에 42 Intra 계정을 연결하면 다음부터 42 OAuth로도
@@ -991,11 +1004,11 @@ export function ProfileView({
               >
                 <h2
                   id="profile-danger-title"
-                  className="cbc-profile-section-title"
+                  className="mx-0 mt-0 mb-4 font-display text-[20px]"
                 >
                   회원 탈퇴
                 </h2>
-                <p className="cbc-profile-hint">
+                <p className="m-0 text-[12px] text-on-surface-variant">
                   계정과 로그인 정보를 삭제합니다. 되돌릴 수 없으며, 경기 결과는
                   상대방 전적에 &quot;(탈퇴한 사용자)&quot;로 남습니다.
                 </p>
@@ -1013,14 +1026,14 @@ export function ProfileView({
             )}
           </aside>
 
-          <div className="cbc-profile-main">
+          <div className="flex min-w-0 flex-col gap-6">
             {recordsPrivate ? (
               <section
                 className="cbc-profile-card"
                 role="status"
                 data-testid="records-private-notice"
               >
-                <h2 className="cbc-profile-section-title">
+                <h2 className="mx-0 mt-0 mb-4 font-display text-[20px]">
                   전적이 비공개입니다
                 </h2>
                 <p>
@@ -1031,7 +1044,7 @@ export function ProfileView({
             ) : (
               <>
                 <section className="cbc-profile-card">
-                  <h2 className="cbc-profile-section-title">
+                  <h2 className="mx-0 mt-0 mb-4 font-display text-[20px]">
                     게임별 전적 및 승률
                   </h2>
                   <div className="cbc-profile-total">
@@ -1056,8 +1069,10 @@ export function ProfileView({
                 </section>
 
                 <section className="cbc-profile-card">
-                  <div className="cbc-profile-section-head">
-                    <h2 className="cbc-profile-section-title">보드카페 업적</h2>
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <h2 className="m-0 font-display text-[20px]">
+                      보드카페 업적
+                    </h2>
                     <span className="cbc-chip">
                       달성 완료: {achievementCount} / 2
                     </span>
@@ -1077,8 +1092,8 @@ export function ProfileView({
                 </section>
 
                 <section className="cbc-profile-card">
-                  <div className="cbc-profile-section-head">
-                    <h2 className="cbc-profile-section-title">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <h2 className="m-0 font-display text-[20px]">
                       최근 경기 기록
                     </h2>
                     <div
@@ -1112,7 +1127,7 @@ export function ProfileView({
                   )}
 
                   {matches.length === 0 && !matchesLoading && !matchesError ? (
-                    <p className="cbc-subheading">
+                    <p className="m-0 text-sm/5 text-on-surface-variant">
                       아직 종료된 경기 기록이 없습니다.
                     </p>
                   ) : (
@@ -1173,7 +1188,10 @@ export function ProfileView({
                   )}
 
                   {matchesLoading && (
-                    <p className="cbc-subheading" role="status">
+                    <p
+                      className="m-0 text-sm/5 text-on-surface-variant"
+                      role="status"
+                    >
                       전적을 불러오는 중입니다...
                     </p>
                   )}
@@ -1270,7 +1288,7 @@ export function ProfileView({
             </h3>
             <p
               id="two-factor-disable-desc"
-              className="cbc-subheading"
+              className="m-0 text-sm/5 text-on-surface-variant"
               style={{ maxWidth: "340px" }}
             >
               보안 확인을 위해 현재 인증 앱의 6자리 숫자 또는 남은 복구 코드
@@ -1278,12 +1296,15 @@ export function ProfileView({
             </p>
 
             <form
-              className="cbc-form"
+              className="flex flex-col gap-5"
               style={{ width: "100%", marginTop: "0.75rem", textAlign: "left" }}
               onSubmit={handleDisableTwoFactorSubmit}
             >
-              <div className="cbc-field">
-                <label className="cbc-label" htmlFor="two-factor-disable-code">
+              <div className="flex flex-col gap-1.5">
+                <label
+                  className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+                  htmlFor="two-factor-disable-code"
+                >
                   인증 코드 또는 복구 코드
                 </label>
                 <input

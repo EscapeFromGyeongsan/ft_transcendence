@@ -220,10 +220,7 @@ export function MatchmakingView({
           >
             <div className="cbc-matchmaking-radar-circle" aria-hidden="true">
               <div className="cbc-matchmaking-radar-ping" />
-              <svg
-                className="cbc-matchmaking-radar-svg"
-                viewBox="0 0 160 160"
-              >
+              <svg className="cbc-matchmaking-radar-svg" viewBox="0 0 160 160">
                 <circle
                   className="cbc-matchmaking-ring-bg"
                   cx="80"
@@ -263,7 +260,9 @@ export function MatchmakingView({
 
             <div className="cbc-matchmaking-status-copy">
               <h2 className="cbc-matchmaking-status-title">{statusHeadline}</h2>
-              <p className="cbc-subheading">{catalog.waitingDescription}</p>
+              <p className="m-0 text-sm/5 text-on-surface-variant">
+                {catalog.waitingDescription}
+              </p>
             </div>
 
             <div className="cbc-matchmaking-elapsed-box">
@@ -285,7 +284,9 @@ export function MatchmakingView({
               </strong>
             </div>
             <div className="cbc-matchmaking-meta-item">
-              <span className="cbc-matchmaking-meta-label">돌 배정 및 시작</span>
+              <span className="cbc-matchmaking-meta-label">
+                돌 배정 및 시작
+              </span>
               <strong className="cbc-matchmaking-meta-value">
                 흑·백 무작위 배정 · 즉시 대국 시작
               </strong>
@@ -313,7 +314,10 @@ export function MatchmakingView({
         </section>
 
         {/* 우측: 대국 규칙 안내 + 내 전적 기록 요약 */}
-        <aside className="cbc-matchmaking-side" aria-label="대국 규칙 및 내 전적">
+        <aside
+          className="cbc-matchmaking-side"
+          aria-label="대국 규칙 및 내 전적"
+        >
           {/* 대국 규칙 안내 카드 */}
           <section className="cbc-matchmaking-side-card">
             <div className="cbc-matchmaking-card-head">
@@ -323,10 +327,7 @@ export function MatchmakingView({
               <span className="cbc-chip">{catalog.ruleBadge}</span>
             </div>
 
-            <div
-              className="cbc-matchmaking-board-preview"
-              aria-hidden="true"
-            >
+            <div className="cbc-matchmaking-board-preview" aria-hidden="true">
               <svg
                 width="100%"
                 height="100%"
@@ -341,9 +342,21 @@ export function MatchmakingView({
                   opacity="0.7"
                 />
                 <circle cx="180" cy="56" r="12" fill="#1c1814" />
-                <circle cx="240" cy="56" r="12" fill="#f7f3eb" stroke="#b5a68e" />
+                <circle
+                  cx="240"
+                  cy="56"
+                  r="12"
+                  fill="#f7f3eb"
+                  stroke="#b5a68e"
+                />
                 <circle cx="240" cy="84" r="12" fill="#1c1814" />
-                <circle cx="180" cy="84" r="12" fill="#f7f3eb" stroke="#b5a68e" />
+                <circle
+                  cx="180"
+                  cy="84"
+                  r="12"
+                  fill="#f7f3eb"
+                  stroke="#b5a68e"
+                />
                 <circle cx="120" cy="56" r="12" fill="#1c1814" />
               </svg>
               <div className="cbc-matchmaking-board-preview-caption">
@@ -381,9 +394,7 @@ export function MatchmakingView({
               <span className="cbc-matchmaking-section-label">
                 내 {catalog.shortTitle} 전적 기록
               </span>
-              <span className="cbc-matchmaking-meta-label">
-                총 {played}전
-              </span>
+              <span className="cbc-matchmaking-meta-label">총 {played}전</span>
             </div>
 
             <div className="cbc-matchmaking-stats-grid">
@@ -408,14 +419,8 @@ export function MatchmakingView({
             </div>
 
             <div className="cbc-progress-bar" aria-hidden="true">
-              <div
-                className="is-win"
-                style={{ width: `${winWidthPct}%` }}
-              />
-              <div
-                className="is-draw"
-                style={{ width: `${drawWidthPct}%` }}
-              />
+              <div className="is-win" style={{ width: `${winWidthPct}%` }} />
+              <div className="is-draw" style={{ width: `${drawWidthPct}%` }} />
             </div>
           </section>
         </aside>

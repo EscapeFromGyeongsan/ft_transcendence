@@ -200,7 +200,7 @@ export function FriendsView({
         <h1 className="cbc-profile-title" ref={headingRef} tabIndex={-1}>
           친구 관리
         </h1>
-        <p className="cbc-subheading">
+        <p className="m-0 text-sm/5 text-on-surface-variant">
           플레이어를 찾아 친구 요청을 보내고, 받은 요청을 관리하세요.
         </p>
       </header>
@@ -225,18 +225,18 @@ export function FriendsView({
         </div>
       )}
       {state.loading && (
-        <p role="status" className="cbc-subheading">
+        <p role="status" className="m-0 text-sm/5 text-on-surface-variant">
           친구 목록을 불러오는 중입니다...
         </p>
       )}
       {state.data && state.stale && !state.loading && (
-        <p className="cbc-profile-hint" role="status">
+        <p className="m-0 text-[12px] text-on-surface-variant" role="status">
           마지막으로 확인한 목록입니다. 다시 불러온 뒤 요청을 처리할 수
           있습니다.
         </p>
       )}
       {!state.connected && (
-        <p className="cbc-profile-hint">
+        <p className="m-0 text-[12px] text-on-surface-variant">
           연결을 확인하는 동안 친구의 온라인 상태를 확인할 수 없습니다.
         </p>
       )}
@@ -245,12 +245,18 @@ export function FriendsView({
         className="cbc-profile-card"
         aria-labelledby="friends-search-title"
       >
-        <h2 className="cbc-profile-section-title" id="friends-search-title">
+        <h2
+          className="mx-0 mt-0 mb-4 font-display text-[20px]"
+          id="friends-search-title"
+        >
           플레이어 검색
         </h2>
         <form className="cbc-friends-search" onSubmit={search}>
-          <div className="cbc-field">
-            <label className="cbc-label" htmlFor="friends-nickname">
+          <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+            <label
+              className="text-sm/5 font-semibold tracking-[0.01em] text-on-surface"
+              htmlFor="friends-nickname"
+            >
               닉네임으로 검색
             </label>
             <input
@@ -273,7 +279,10 @@ export function FriendsView({
             검색
           </button>
         </form>
-        <p className="cbc-profile-hint" id="friends-search-help">
+        <p
+          className="m-0 text-[12px] text-on-surface-variant"
+          id="friends-search-help"
+        >
           닉네임의 앞부분으로 검색하며 최대 20명을 표시합니다.
         </p>
         {state.searching && <p role="status">검색 중입니다...</p>}
@@ -298,7 +307,7 @@ export function FriendsView({
           </ul>
         )}
         {!state.data && (
-          <p className="cbc-profile-hint">
+          <p className="m-0 text-[12px] text-on-surface-variant">
             친구 목록을 확인한 뒤 요청을 보낼 수 있습니다.
           </p>
         )}
@@ -309,10 +318,13 @@ export function FriendsView({
           className="cbc-profile-card"
           aria-labelledby="friends-list-title"
         >
-          <h2 className="cbc-profile-section-title" id="friends-list-title">
+          <h2
+            className="mx-0 mt-0 mb-4 font-display text-[20px]"
+            id="friends-list-title"
+          >
             친구 목록
           </h2>
-          <p className="cbc-profile-hint">
+          <p className="m-0 text-[12px] text-on-surface-variant">
             온라인 상태는 마지막 목록 조회 시점 기준입니다. 목록 새로고침으로
             다시 확인할 수 있습니다.
           </p>
@@ -357,7 +369,10 @@ export function FriendsView({
           className="cbc-profile-card"
           aria-labelledby="friends-incoming-title"
         >
-          <h2 className="cbc-profile-section-title" id="friends-incoming-title">
+          <h2
+            className="mx-0 mt-0 mb-4 font-display text-[20px]"
+            id="friends-incoming-title"
+          >
             받은 요청
           </h2>
           {state.data ? (
@@ -414,7 +429,10 @@ export function FriendsView({
           className="cbc-profile-card"
           aria-labelledby="friends-outgoing-title"
         >
-          <h2 className="cbc-profile-section-title" id="friends-outgoing-title">
+          <h2
+            className="mx-0 mt-0 mb-4 font-display text-[20px]"
+            id="friends-outgoing-title"
+          >
             보낸 요청
           </h2>
           {state.data ? (

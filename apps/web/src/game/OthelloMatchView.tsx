@@ -151,19 +151,19 @@ export function OthelloMatchView({
 
   const isBlackOpponentDisconnected = Boolean(
     isOpponentDisconnected &&
-      blackPlayerId !== null &&
-      (state.opponentDisconnect?.userId === blackPlayerId ||
-        (state.opponentDisconnect === null &&
-          viewerUserId !== null &&
-          blackPlayerId !== viewerUserId)),
+    blackPlayerId !== null &&
+    (state.opponentDisconnect?.userId === blackPlayerId ||
+      (state.opponentDisconnect === null &&
+        viewerUserId !== null &&
+        blackPlayerId !== viewerUserId)),
   );
   const isWhiteOpponentDisconnected = Boolean(
     isOpponentDisconnected &&
-      whitePlayerId !== null &&
-      (state.opponentDisconnect?.userId === whitePlayerId ||
-        (state.opponentDisconnect === null &&
-          viewerUserId !== null &&
-          whitePlayerId !== viewerUserId)),
+    whitePlayerId !== null &&
+    (state.opponentDisconnect?.userId === whitePlayerId ||
+      (state.opponentDisconnect === null &&
+        viewerUserId !== null &&
+        whitePlayerId !== viewerUserId)),
   );
 
   const showOwnConnectionBanner =
@@ -250,7 +250,8 @@ export function OthelloMatchView({
                     : "실시간 대국 서버 연결 및 인증 확인 중..."}
               </div>
               <div className="cbc-conn-banner-desc">
-                재접속이 완료되면 서버의 최신 오델로 대국 상태를 자동으로 복구합니다.
+                재접속이 완료되면 서버의 최신 오델로 대국 상태를 자동으로
+                복구합니다.
               </div>
             </div>
           </div>
@@ -274,7 +275,8 @@ export function OthelloMatchView({
           <div className="cbc-conn-banner-main">
             <div>
               <div className="cbc-conn-banner-title">
-                [세션 전환됨] 다른 기기 또는 브라우저 탭에서 대국 제어권을 가져갔습니다
+                [세션 전환됨] 다른 기기 또는 브라우저 탭에서 대국 제어권을
+                가져갔습니다
               </div>
               <div className="cbc-conn-banner-desc">
                 현재 탭에서는 착수 및 기권 조작이 비활성화되었습니다.
@@ -312,7 +314,8 @@ export function OthelloMatchView({
                   </strong>
                 </div>
                 <p className="cbc-pause-desc">
-                  상대방의 네트워크 연결이 불안정하여 대국이 일시정지되었습니다. 누적 유예 시간(60초) 내 복귀하지 않으면 시간패 처리됩니다.
+                  상대방의 네트워크 연결이 불안정하여 대국이 일시정지되었습니다.
+                  누적 유예 시간(60초) 내 복귀하지 않으면 시간패 처리됩니다.
                 </p>
               </div>
             </div>
@@ -594,7 +597,10 @@ export function OthelloMatchView({
         </aside>
 
         {/* 우측 8×8 오델로 보드 영역 (row/col 0..7) */}
-        <section className="cbc-gomoku-board-stage" aria-label="8×8 오델로 보드">
+        <section
+          className="cbc-gomoku-board-stage"
+          aria-label="8×8 오델로 보드"
+        >
           <div className="cbc-othello-felt-frame">
             {/* 상단 열(col: 0..7) 인덱스 헤더 */}
             <div className="cbc-othello-col-headers" aria-hidden="true">
@@ -623,7 +629,11 @@ export function OthelloMatchView({
                 ))}
               </div>
 
-              <div className="cbc-othello-grid" role="grid" aria-label="8×8 오델로 격자">
+              <div
+                className="cbc-othello-grid"
+                role="grid"
+                aria-label="8×8 오델로 격자"
+              >
                 {OTHELLO_COORDS.map((row) => (
                   <div
                     key={`othello-row-${row}`}
@@ -779,7 +789,8 @@ export function OthelloMatchView({
                 data-testid="othello-result-minimized-bar"
               >
                 <strong>
-                  {resultPresentation.headline} ({resultPresentation.subheadline})
+                  {resultPresentation.headline} (
+                  {resultPresentation.subheadline})
                 </strong>
                 <div className="cbc-board-result-minimized-actions">
                   <button
@@ -839,7 +850,7 @@ export function OthelloMatchView({
             </h3>
             <p
               id="othello-resign-dialog-desc"
-              className="cbc-subheading"
+              className="m-0 text-sm/5 text-on-surface-variant"
               style={{ maxWidth: "320px" }}
             >
               기권하면 즉시 패배(resign)로 기록되며 상대방의 승리로 대국이

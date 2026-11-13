@@ -61,11 +61,11 @@ export function LeaderboardView({
 
   return (
     <div className="cbc-profile-page">
-      <header className="cbc-profile-section-head">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <span className="cbc-eyebrow">보드 카페 명예의 전당</span>
           <h1 className="cbc-profile-title">플레이어 순위</h1>
-          <p className="cbc-subheading">
+          <p className="m-0 text-sm/5 text-on-surface-variant">
             승수 순으로 정렬되며, 승수가 같으면 승률 순으로 산정됩니다.
           </p>
         </div>
@@ -99,11 +99,13 @@ export function LeaderboardView({
       )}
 
       {loading ? (
-        <p className="cbc-subheading" role="status">
+        <p className="m-0 text-sm/5 text-on-surface-variant" role="status">
           순위를 불러오는 중입니다...
         </p>
       ) : entries.length === 0 && !error ? (
-        <p className="cbc-subheading">아직 순위에 오른 플레이어가 없습니다.</p>
+        <p className="m-0 text-sm/5 text-on-surface-variant">
+          아직 순위에 오른 플레이어가 없습니다.
+        </p>
       ) : (
         <>
           {podium.length > 0 && (

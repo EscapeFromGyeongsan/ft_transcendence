@@ -33,9 +33,7 @@ export function LegalDocumentView({
   const sections = isTerms
     ? TERMS_OF_SERVICE_SECTIONS
     : PRIVACY_POLICY_SECTIONS;
-  const effectiveDate = isTerms
-    ? TERMS_EFFECTIVE_DATE
-    : PRIVACY_EFFECTIVE_DATE;
+  const effectiveDate = isTerms ? TERMS_EFFECTIVE_DATE : PRIVACY_EFFECTIVE_DATE;
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
@@ -57,7 +55,10 @@ export function LegalDocumentView({
           <h1 className="cbc-profile-title">
             {isTerms ? "서비스 이용약관" : "개인정보처리방침"}
           </h1>
-          <p className="cbc-subheading" style={{ marginTop: "0.25rem" }}>
+          <p
+            className="m-0 text-sm/5 text-on-surface-variant"
+            style={{ marginTop: "0.25rem" }}
+          >
             시행일: {effectiveDate} · 실제 서버 수집·보관·파기 정책 기준
           </p>
         </div>
@@ -172,7 +173,10 @@ export function NotFoundView({
         <h1 className="cbc-heading-login" style={{ marginTop: "0.375rem" }}>
           요청하신 페이지를 찾을 수 없습니다
         </h1>
-        <p className="cbc-subheading" style={{ marginTop: "0.5rem" }}>
+        <p
+          className="m-0 text-sm/5 text-on-surface-variant"
+          style={{ marginTop: "0.5rem" }}
+        >
           경로(<code>{pathname}</code>)가 존재하지 않거나 이동되었습니다.
         </p>
         <div style={{ marginTop: "1.5rem" }}>
