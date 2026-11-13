@@ -12,7 +12,9 @@ import {
   formatWinRate,
   sumStats,
   validateAvatarFile,
+  validateEmail,
   validateNickname,
+  validatePassword,
   validateTwoFactorCode,
 } from "./profile-format.ts";
 
@@ -248,6 +250,47 @@ describe("validateTwoFactorCode", () => {
       "A B C D - E F G H",
     ]) {
       expect(validateTwoFactorCode(code)).toMatch(/6자리 인증 코드/);
+    }
+  });
+});
+
+describe("validateEmail", () => {
+  it("accepts addresses the server accepts", () => {
+    for (const email of [
+      "a@b.co",
+      "Name.Last+tag@example.test",
+      `${"a".repeat(64)}@${"b".repeat(185)}.com`, // 254 characters
+    ]) {
+      expect(validateEmail(email)).toBeNull();
+    }
+  });
+
+  it("rejects empty, malformed and over 254 characters", () => {
+    expect(validateEmail("")).toMatch(/입력해/);
+    for (const email of [
+      "plain",
+      "a@b",
+      "a@@b.co",
+      "a b@c.co",
+      ".a@b.co",
+      `${"a".repeat(64)}@${"b".repeat(186)}.com`, // 255 characters
+    ]) {
+      expect(validateEmail(email)).toMatch(/올바른 이메일/);
+    }
+  });
+});
+
+describe("validatePassword", () => {
+  it("accepts 8 to 128 characters counted as code points", () => {
+    for (const password of ["12345678", "x".repeat(128), "😀".repeat(8)]) {
+      expect(validatePassword(password)).toBeNull();
+    }
+  });
+
+  it("rejects empty, shorter than 8 and longer than 128", () => {
+    expect(validatePassword("")).toMatch(/입력해/);
+    for (const password of ["1234567", "x".repeat(129), "😀".repeat(7)]) {
+      expect(validatePassword(password)).toMatch(/8~128자/);
     }
   });
 });
