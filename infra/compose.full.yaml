@@ -1,0 +1,129 @@
+name: cyber-board-cafe-full
+
+x-server-build: &server-build
+  context: .
+  dockerfile: infra/Dockerfile
+  target: server
+
+x-database-environment: &database-environment
+  POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.full}
+  POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.full}
+  POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+
+services:
+  db:
+    image: postgres:17-alpine
+    # Comes back after a crash or a Docker restart; `make down` stops it.
+    restart: unless-stopped
+    environment: *database-environment
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    stop_grace_period: 30s
+
+  migrate:
+    build: *server-build
+    command: ["migrate"]
+    init: true
+    restart: "no"
+    environment: *database-environment
+    secrets:
+      - postgres_password
+    networks:
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: *server-build
+    command: ["api"]
+    restart: unless-stopped
+    init: true
+    environment:
+      <<: *database-environment
+      API_HOST: 0.0.0.0
+      PORT: "3001"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.full (32+ characters)}
+      TWO_FACTOR_KEY: ${TWO_FACTOR_KEY:-}
+      FT_OAUTH_CLIENT_ID: ${FT_OAUTH_CLIENT_ID:-}
+      FT_OAUTH_CLIENT_SECRET: ${FT_OAUTH_CLIENT_SECRET:-}
+      FT_OAUTH_REDIRECT_URI: ${FT_OAUTH_REDIRECT_URI:-}
+      TRUST_PROXY: ${TRUST_PROXY:-uniquelocal}
+      AVATAR_DIR: /data/avatars
+    secrets:
+      - postgres_password
+    volumes:
+      - avatars:/data/avatars
+    networks:
+      - edge
+      - data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/api/health/db').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    stop_grace_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+      target: web
+    restart: unless-stopped
+    environment:
+      PUBLIC_HTTPS_PORT: ${HTTPS_PORT:-8443}
+      NGINX_ENVSUBST_FILTER: "^PUBLIC_HTTPS_PORT$"
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
+    volumes:
+      - type: bind
+        source: ${CERT_DIR:?Set CERT_DIR in .env.full}
+        target: /etc/nginx/tls
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - edge
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # Internal availability only; this does not prove certificate trust.
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O /dev/null https://127.0.0.1/api/health/db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    stop_grace_period: 10s
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE in .env.full}
+
+volumes:
+  postgres_data:
+  avatars:
+
+networks:
+  edge:
+  data:
+    internal: true

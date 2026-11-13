@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { buildApp } from "./app.ts";
 import { createDatabase } from "./db/client.ts";
+import { gameEngines } from "./engines.ts";
+import { readListenOptions } from "./listen-options.ts";
 import { voidUnfinishedGames } from "./services/game-command-service.ts";
 
 if (existsSync(".env")) loadEnvFile(".env");
@@ -11,13 +13,13 @@ if (!process.env.DATABASE_URL) {
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret || jwtSecret.length < 32) {
   throw new Error(
-    "Set JWT_SECRET in .env to a random string of 32+ characters.",
+    "Set JWT_SECRET in .env (.env.full for make) to a random string of 32+ characters.",
   );
 }
 const twoFactorKey = process.env.TWO_FACTOR_KEY;
 if (twoFactorKey !== undefined && twoFactorKey.length < 32) {
   throw new Error(
-    "Set TWO_FACTOR_KEY in .env to a random string of 32+ characters.",
+    "Set TWO_FACTOR_KEY in .env (.env.full for make) to a random string of 32+ characters.",
   );
 }
 const oauthEnv = [
@@ -35,19 +37,23 @@ const oauth42 =
   clientId && clientSecret && redirectUri
     ? { clientId, clientSecret, redirectUri }
     : undefined;
-const port = Number(process.env.PORT ?? 3001);
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new Error("Set PORT in .env to an integer between 1 and 65535.");
-}
+// PORT validation and the listen address live together. Containers set
+// API_HOST=0.0.0.0; local development keeps the 127.0.0.1 default.
+const listenOptions = readListenOptions();
 // Client IP for rate limiting comes from X-Forwarded-For only when the direct
 // peer is a trusted proxy. Default: loopback (local dev proxy). Behind the
 // Docker Nginx set TRUST_PROXY=uniquelocal (private network addresses).
 const trustProxy = process.env.TRUST_PROXY || "loopback";
+// Errors (500, 503, lost DB pool) go to stdout for `make logs`. Per-request
+// lines stay off at every level: their URLs would carry values such as the 42
+// callback code and state.
 const app = await buildApp(
-  { trustProxy },
+  { trustProxy, logger: { level: "warn" }, disableRequestLogging: true },
   process.env.DATABASE_URL,
   { jwtSecret, twoFactorKey, oauth42 },
   process.env.AVATAR_DIR || "data/avatars",
+  {},
+  gameEngines,
 );
 try {
   const databaseHealth = await app.inject({
@@ -56,7 +62,7 @@ try {
   });
   if (databaseHealth.statusCode !== 200) {
     throw new Error(
-      "Database is unavailable. Run npm run db:up and npm run db:migrate first.",
+      "Database is unavailable. Run npm run db:up and npm run db:migrate first, or check make logs for the containers.",
     );
   }
   const startup = createDatabase(process.env.DATABASE_URL);
@@ -68,10 +74,7 @@ try {
   } finally {
     await startup.close();
   }
-  const address = await app.listen({
-    port,
-    host: "127.0.0.1",
-  });
+  const address = await app.listen(listenOptions);
   console.log(`Fastify API listening on ${address}`);
 } catch (error) {
   await app.close();

@@ -713,7 +713,9 @@ flowchart TD
 | S→C | `STONE_PLACED`, `GAME_FINISHED` | **commit 후** broadcast | `apply()` 결과 |
 | S→C | `ERROR` | 거절 코드 전달 | `CommandResult.code` |
 
-미정: 토큰 전달 방식(첫 메시지 AUTH 권장, query string은 로그에 남음), 세션 폐기 시 기존 연결 처리, heartbeat·감지 지연.
+세션 폐기 시 기존 연결 처리(`구현됨`): 로그아웃이나 refresh token 재사용으로 세션이 폐기되면 commit 후 그 세션의 WS 연결을 모두 4401 `Session ended.`로 닫는다. 재사용 폐기는 `createAuthService`의 `onSessionRevoked`를 연결 목록의 `closeSession()`에 연결한다(#86).
+
+미정: 토큰 전달 방식(첫 메시지 AUTH 권장, query string은 로그에 남음), heartbeat·감지 지연.
 
 ---
 
@@ -783,6 +785,7 @@ sequenceDiagram
         Note over A,DB: 탈취로 간주
         A->>DB: sessions.revoked_at = now(), COMMIT
         A-->>W: 401 (같은 세션의 모든 토큰 무효)
+        Note over A: commit 후 그 세션의 WS 연결을 4401로 닫음
     else 만료 또는 세션 폐기
         A-->>W: 401 UNAUTHENTICATED
     else 정상
@@ -1562,7 +1565,7 @@ flowchart TD
     H -->|예| L["127.0.0.1:PORT listen, SIGINT/SIGTERM에 정상 종료"]
 ```
 
-`TWO_FACTOR_KEY`가 없으면 2FA route만 503이고, `FT_OAUTH_*`가 없으면 OAuth route만 503이다. 나머지 기능은 동작한다.
+`TWO_FACTOR_KEY`가 없으면 2FA route만 503(`Two-factor is not configured.`)이고, `FT_OAUTH_*`가 없으면 OAuth route만 503(`42 login is not configured.`)이다. 나머지 기능은 동작한다.
 
 #### 2.10.24 QA 계정 준비 `npm run qa:accounts`
 

@@ -228,7 +228,15 @@ describe.skipIf(!testDatabaseUrl)("2FA with PostgreSQL", () => {
   test("2FA endpoints return 503 when TWO_FACTOR_KEY is not set", async () => {
     await app.close();
     app = await buildApp({}, testDatabaseUrl, { jwtSecret: config.jwtSecret });
-    expect((await post("/api/auth/2fa/setup")).statusCode).toBe(503);
+    const response = await post("/api/auth/2fa/setup");
+    expect(response.statusCode).toBe(503);
+    // The DB is fine, so the message names the missing key, not the DB.
+    expect(response.json()).toEqual({
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Two-factor is not configured.",
+      },
+    });
   });
   test("a late setup cannot reset an enabled secret (setup race)", async () => {
     await enable();

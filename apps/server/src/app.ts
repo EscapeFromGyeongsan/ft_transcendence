@@ -4,6 +4,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
+import type { GameType } from "@cafe/game-contracts";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
@@ -14,6 +15,7 @@ import { errorBody } from "./schemas/errors.ts";
 import {
   createAuthService,
   ServiceUnavailableError,
+  TWO_FACTOR_NOT_CONFIGURED,
   type AuthConfig,
   type AuthService,
 } from "./services/auth-service.ts";
@@ -47,6 +49,12 @@ import {
   type AvatarService,
 } from "./services/avatar-service.ts";
 import { createConnectionRegistry } from "./services/connection-registry.ts";
+import { createPresence, type Presence } from "./services/presence.ts";
+import {
+  createGameCommandService,
+  type GameCommandService,
+  type RegisteredRules,
+} from "./services/game-command-service.ts";
 import {
   closeCodes,
   registerRealtimeRoutes,
@@ -99,6 +107,12 @@ export async function buildApp(
   // Directory for uploaded avatars. Without it the avatar endpoints answer 503.
   avatarDir?: string,
   realtimeConfig?: RealtimeConfig,
+  // Game engines (C) by game type; a match of an unregistered type cannot be
+  // created or shown.
+  rulesByGameType: Partial<Record<GameType, RegisteredRules>> = {},
+  // Accepted friends of a user, for presence events (#82). Until the friend
+  // service (#69) is wired here, nobody has friends and none are sent.
+  friendIdsOf: (userId: number) => Promise<number[]> = async () => [],
   isUserOnline?: (userId: number) => boolean,
 ) {
   const app = Fastify(options);
@@ -114,19 +128,42 @@ export async function buildApp(
           createSecretBox(authConfig.twoFactorKey),
         )
       : undefined;
+  // Without a DB the default message applies; with one, only the key is missing.
   const getTwoFactor = (): TwoFactorService => {
-    if (!twoFactor) throw new ServiceUnavailableError();
+    if (!twoFactor) {
+      throw new ServiceUnavailableError(
+        database ? TWO_FACTOR_NOT_CONFIGURED : undefined,
+      );
+    }
     return twoFactor;
   };
+  // The registry reports presence changes; presence reads the registry.
+  let presence: Presence | undefined;
+  const connections = createConnectionRegistry({
+    onPresenceChange: (userId) => void presence?.notifyPresence(userId),
+  });
+  presence = createPresence({
+    connections,
+    friendIdsOf,
+    onError: (error) =>
+      app.log.error({ err: error }, "Presence friend lookup failed."),
+  });
+  // A session revoked for refresh token reuse also closes its WebSocket
+  // connections, like logout does below.
   const auth =
     database && authConfig
-      ? createAuthService(database.db, authConfig, twoFactor)
+      ? createAuthService(database.db, authConfig, twoFactor, (sessionId) =>
+          connections.closeSession(
+            sessionId,
+            closeCodes.unauthenticated,
+            "Session ended.",
+          ),
+        )
       : undefined;
   const getAuth = (): AuthService => {
     if (!auth) throw new ServiceUnavailableError();
     return auth;
   };
-  const connections = createConnectionRegistry();
   // Logout also closes the WebSocket connections opened with that session.
   const routeAuth: AuthService | undefined = auth && {
     ...auth,
@@ -152,7 +189,11 @@ export async function buildApp(
         )
       : undefined;
   const getOAuth = (): OAuthService => {
-    if (!oauth) throw new ServiceUnavailableError();
+    if (!oauth) {
+      throw new ServiceUnavailableError(
+        auth ? "42 login is not configured." : undefined,
+      );
+    }
     return oauth;
   };
   const users = database ? createUserService(database.db) : undefined;
@@ -180,6 +221,13 @@ export async function buildApp(
   const getAvatars = (): AvatarService => {
     if (!avatars) throw new ServiceUnavailableError();
     return avatars;
+  };
+  const games = database
+    ? createGameCommandService(database.db, rulesByGameType)
+    : undefined;
+  const getGames = (): GameCommandService => {
+    if (!games) throw new ServiceUnavailableError();
+    return games;
   };
   app.addHook("onClose", async () => {
     await database?.close();
@@ -226,18 +274,33 @@ export async function buildApp(
         .send(errorBody("OAUTH_PROVIDER_ERROR", "42 login is unavailable."));
     }
     if (isDatabaseUnavailable(error)) {
-      request.log.error("Database is unavailable.");
-      return reply
-        .code(503)
-        .send(errorBody("SERVICE_UNAVAILABLE", "Database is unavailable."));
+      // A missing setting names itself; DB failures keep the generic message.
+      const message =
+        error instanceof ServiceUnavailableError
+          ? error.message
+          : "Database is unavailable.";
+      request.log.error(message);
+      return reply.code(503).send(errorBody("SERVICE_UNAVAILABLE", message));
     }
     request.log.error({ err: error }, "Unhandled error.");
     return reply
       .code(500)
       .send(errorBody("INTERNAL_ERROR", "Internal server error."));
   });
+  app.setNotFoundHandler((_request, reply) =>
+    reply.code(404).send(errorBody("NOT_FOUND", "Route not found.")),
+  );
   // JSON-only API: other bodies get 415 instead of failing validation as text.
   app.removeContentTypeParser("text/plain");
+  // The multipart parser is global; only routes that declare it accept it.
+  app.addHook("preValidation", async (request, reply) => {
+    const consumes = request.routeOptions.schema?.consumes;
+    if (request.isMultipart() && !consumes?.includes("multipart/form-data")) {
+      return reply
+        .code(415)
+        .send(errorBody("UNSUPPORTED_MEDIA_TYPE", "Use application/json."));
+    }
+  });
   await app.register(rateLimit, { global: false });
   await app.register(multipart, {
     limits: { fileSize: avatarMaxBytes, files: 1 },
@@ -260,8 +323,12 @@ export async function buildApp(
     {
       schema: {
         tags: ["health"],
+        summary: "서버 동작 확인",
+        description:
+          "DB를 확인하지 않습니다. DB 연결은 `/api/health/db`로 확인합니다.",
         response: {
           200: {
+            description: "서버가 요청을 받고 있음",
             type: "object",
             properties: { status: { type: "string", const: "ok" } },
             required: ["status"],
@@ -330,6 +397,6 @@ export async function buildApp(
   registerFriendRoutes(app, getAuth, getFriends);
   registerStatsRoutes(app, getAuth, getStats);
   registerAvatarRoutes(app, getAuth, getAvatars);
-  registerRealtimeRoutes(app, getAuth, connections, realtimeConfig);
+  registerRealtimeRoutes(app, getAuth, getGames, connections, realtimeConfig);
   return app;
 }

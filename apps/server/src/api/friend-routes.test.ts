@@ -127,6 +127,8 @@ describe.skipIf(!testDatabaseUrl)("friend REST with PostgreSQL", () => {
       { jwtSecret },
       undefined,
       undefined,
+      {},
+      undefined,
       () => false,
     );
     tokens = [];
