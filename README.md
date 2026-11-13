@@ -39,7 +39,7 @@ The [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md) contain curren
 ## Technical stack and architecture
 
 - Node.js `>=22.12.0` (package engine requirement), TypeScript, npm workspaces; recent implementation reports use Node.js `26.13.0`.
-- Frontend: React, Vite, History API routing and Tailwind CSS v4 (utility classes in components, wired in `apps/web/vite.config.ts` and `apps/web/src/index.css`, PR #119), with screen-specific rules and design tokens in `apps/web/src/styles.css`.
+- Frontend: React, Vite, History API routing and Tailwind CSS v4, wired in `apps/web/vite.config.ts` and `apps/web/src/index.css`. Components use utility classes directly (e.g. `flex flex-col gap-5` on the login form, PR #119); shared buttons, inputs and cards use `@apply` in `apps/web/src/styles.css` (PR #124), which also keeps screen-specific rules such as the boards and the design tokens. Where to show this during evaluation: [mandatory checklist](Document/evaluation/mandatory-checklist.md#스타일링-솔루션-시연-116).
 - Backend: Fastify, JSON Schema validation and Swagger UI.
 - Database: PostgreSQL 17, Drizzle ORM, Drizzle Kit migrations and `pg`.
 - Security: Argon2id passwords, signed access tokens, rotating opaque refresh tokens and encrypted TOTP secrets.
