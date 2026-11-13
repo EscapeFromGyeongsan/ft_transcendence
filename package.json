@@ -21,6 +21,7 @@
     "test:watch": "vitest --config=config/vitest.config.ts",
     "test:gomoku:persistence": "node --experimental-strip-types scripts/check-gomoku-persistence.mjs",
     "test:e2e": "playwright test --config=config/playwright.config.ts",
+    "test:perf": "node scripts/measure-perf.mjs",
     "preview": "npm run preview --workspace @cafe/web -- --host 0.0.0.0",
     "format": "prettier --write apps packages tests scripts config infra *.json"
   },

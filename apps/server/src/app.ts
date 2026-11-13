@@ -8,6 +8,7 @@ import type { GameType } from "@cafe/game-contracts";
 import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
+import { registerFriendRoutes } from "./api/friend-routes.ts";
 import { registerStatsRoutes } from "./api/stats-routes.ts";
 import { registerAvatarRoutes } from "./api/avatar-routes.ts";
 import { errorBody } from "./schemas/errors.ts";
@@ -35,6 +36,10 @@ import {
   type UserService,
 } from "./services/user-service.ts";
 import {
+  createFriendService,
+  type FriendService,
+} from "./services/friend-service.ts";
+import {
   createStatsService,
   type StatsService,
 } from "./services/stats-service.ts";
@@ -43,6 +48,10 @@ import {
   createAvatarService,
   type AvatarService,
 } from "./services/avatar-service.ts";
+import {
+  createAccountService,
+  type AccountService,
+} from "./services/account-service.ts";
 import { createConnectionRegistry } from "./services/connection-registry.ts";
 import { createPresence, type Presence } from "./services/presence.ts";
 import {
@@ -89,6 +98,7 @@ function isDatabaseUnavailable(error: unknown) {
  *
  * @param databaseUrl - 없으면 DB가 필요한 route는 503으로 답합니다.
  * @param authConfig - 없으면 인증이 필요한 route는 503으로 답합니다. 2FA 키·42 OAuth 설정이 빠지면 그 기능만 503입니다.
+ * @param friendIdsOf - #98 테스트의 presence 수신자 조회 주입점입니다. 생략하면 실제 친구 서비스의 수락된 관계를 조회합니다.
  *
  * @remarks
  * 서비스는 설정이 있을 때만 만들고 route에는 getter로 넘깁니다. 설정이 없으면 getter가 {@link ServiceUnavailableError}를 던집니다.
@@ -105,9 +115,8 @@ export async function buildApp(
   // Game engines (C) by game type; a match of an unregistered type cannot be
   // created or shown.
   rulesByGameType: Partial<Record<GameType, RegisteredRules>> = {},
-  // Accepted friends of a user, for presence events (#82). Until the friend
-  // service (#69) is wired here, nobody has friends and none are sent.
-  friendIdsOf: (userId: number) => Promise<number[]> = async () => [],
+  // #98 원본 테스트의 수신자 주입 지점입니다. 실제 기동은 친구 서비스 조회를 씁니다.
+  friendIdsOf?: (userId: number) => Promise<number[]>,
 ) {
   const app = Fastify(options);
   const database = databaseUrl
@@ -135,12 +144,6 @@ export async function buildApp(
   let presence: Presence | undefined;
   const connections = createConnectionRegistry({
     onPresenceChange: (userId) => void presence?.notifyPresence(userId),
-  });
-  presence = createPresence({
-    connections,
-    friendIdsOf,
-    onError: (error) =>
-      app.log.error({ err: error }, "Presence friend lookup failed."),
   });
   // A session revoked for refresh token reuse also closes its WebSocket
   // connections, like logout does below.
@@ -195,6 +198,52 @@ export async function buildApp(
     if (!users) throw new ServiceUnavailableError();
     return users;
   };
+  // 미게시 인수 후보 전용 연결입니다. 원본과의 차이는 provenance 문서에 기록합니다.
+  const friends = database
+    ? createFriendService(database.db, connections.isUserOnline)
+    : undefined;
+  presence = createPresence({
+    connections: {
+      isUserOnline: connections.isUserOnline,
+      sendToUser(userId, message) {
+        try {
+          connections.sendToUser(userId, message);
+        } catch (error) {
+          // 한 사용자 전송 실패가 상대 알림이나 이미 commit된 REST 성공을 바꾸지 않습니다.
+          app.log.error({ err: error, userId }, "Friend notification failed.");
+        }
+      },
+    },
+    friendIdsOf:
+      friendIdsOf ??
+      ((userId) =>
+        friends?.listAcceptedFriendIds(userId) ?? Promise.resolve([])),
+    onError: (error) =>
+      app.log.error({ err: error }, "Presence friend lookup failed."),
+  });
+  const routeFriends: FriendService | undefined = friends && {
+    ...friends,
+    async requestFriend(actorId, otherId) {
+      const result = await friends.requestFriend(actorId, otherId);
+      if (result.ok) presence?.notifyFriendsChanged(actorId, otherId);
+      return result;
+    },
+    async decide(actorId, requestId, action) {
+      const result = await friends.decide(actorId, requestId, action);
+      if (result.ok)
+        presence?.notifyFriendsChanged(actorId, result.result.userId);
+      return result;
+    },
+    async removeFriend(actorId, otherId) {
+      const result = await friends.removeFriend(actorId, otherId);
+      if (result.ok) presence?.notifyFriendsChanged(actorId, otherId);
+      return result;
+    },
+  };
+  const getFriends = (): FriendService => {
+    if (!routeFriends) throw new ServiceUnavailableError();
+    return routeFriends;
+  };
   const stats = database ? createStatsService(database.db) : undefined;
   const getStats = (): StatsService => {
     if (!stats) throw new ServiceUnavailableError();
@@ -207,6 +256,31 @@ export async function buildApp(
   const getAvatars = (): AvatarService => {
     if (!avatars) throw new ServiceUnavailableError();
     return avatars;
+  };
+  // Account deletion revokes every session of the user; close their sockets.
+  const accounts = database
+    ? createAccountService(
+        database.db,
+        twoFactor,
+        avatars,
+        (sessionIds) => {
+          for (const sessionId of sessionIds) {
+            connections.closeSession(
+              sessionId,
+              closeCodes.unauthenticated,
+              "Session ended.",
+            );
+          }
+        },
+        (userId, friendIds) => {
+          for (const friendId of friendIds)
+            presence?.notifyFriendsChanged(userId, friendId);
+        },
+      )
+    : undefined;
+  const getAccounts = (): AccountService => {
+    if (!accounts) throw new ServiceUnavailableError();
+    return accounts;
   };
   const games = database
     ? createGameCommandService(database.db, rulesByGameType)
@@ -379,7 +453,8 @@ export async function buildApp(
   registerAuthRoutes(app, getRouteAuth);
   registerTwoFactorRoutes(app, getAuth, getTwoFactor);
   registerOAuthRoutes(app, getAuth, getOAuth);
-  registerUserRoutes(app, getAuth, getUsers);
+  registerUserRoutes(app, getAuth, getUsers, getAccounts);
+  registerFriendRoutes(app, getAuth, getFriends);
   registerStatsRoutes(app, getAuth, getStats);
   registerAvatarRoutes(app, getAuth, getAvatars);
   registerRealtimeRoutes(app, getAuth, getGames, connections, realtimeConfig);

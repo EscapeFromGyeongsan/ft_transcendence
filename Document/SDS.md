@@ -39,6 +39,8 @@
 |---|---|---|
 | 0.1 | 2026-10-13 | 초안. B 구현(인증·2FA·OAuth·프로필·경기 저장·통계) 반영, 전체 다이어그램 작성. 기능별 모든 분기 흐름(2.10) 추가. Codex 코드 리뷰 15건 수정분과 SDS 누락 분석 반영: B 계획 기능(아바타·전적 공개·탈퇴·시스템 종료) 설계, 테스트 대응표, 담당자별 작성 필요 항목 |
 
+2026-11-09 [#78](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/78) 보완: `feat/profile-records-privacy`에서 migration `0004`, 전적 공개 API·권한 검사·프로필 UI와 테스트를 추가했다. 아래 관련 절의 `구현됨`은 이 브랜치 기준이며 B의 검토·통합 승인을 뜻하지 않는다. 기존 구현 기준 커밋과 다른 영역의 상태는 별도다.
+
 ---
 
 ## 1. Design stakeholders and concerns
@@ -190,7 +192,7 @@ flowchart LR
 | Use case | 담당 | 상태 |
 |---|---|---|
 | Register, Login(email), Logout, 2FA, 42 OAuth, Link 42 | B | `구현됨` (API) |
-| View/Edit profile | B (API), A (UI) | `구현됨` (닉네임 변경·공개 프로필 API) |
+| View/Edit profile | B (API), A (UI) | `구현됨` (닉네임·전적 공개 설정·공개 프로필, #78 B 검토 대기) |
 | Upload avatar | B (API), A (UI) | API `구현됨` (#14), UI `계획` |
 | Friend, online status | E (+ D 연결 상태) | `계획` |
 | Auto match, Invite, Ready, Reconnect | D | `계획` |
@@ -225,6 +227,21 @@ flowchart TD
 - OAuth: 시작 응답의 `flowToken`을 sessionStorage에 보관한다. 42가 redirect하는 web 페이지(`FT_OAUTH_REDIRECT_URI`)가 `code`, `state`를 받아 보관한 `flowToken`과 함께 `POST /api/auth/oauth/42/callback`으로 보낸다. 다른 탭·브라우저로 열린 callback은 실패한다.
 - 2FA: 로그인 응답에 `twoFactorRequired`가 있으면 코드 입력 화면으로 보내고 `POST /api/auth/2fa/verify`를 호출한다.
 - 승률은 `played`가 0이면 `-`로 표시한다(DEC-08).
+
+##### 친구 REST 화면 후속 구현 (#80·#90, 2026-11-12)
+
+`feat/web-friends`는 `/friends` 프런트를 추가하며 #95 `758459e`와 #98 `07a4989`의 소스·리뷰에 맞춰 계약을 대조했다. 두 서버 PR은 미병합이다. 별도 후보의 실제 두 계정 검증은 서버 PR의 병합·출시 조건 해결을 뜻하지 않는다.
+
+- 로그인한 사용자만 `/friends`에 진입한다. 로비·계정 메뉴에서 이동하며, 상대 프로필의 친구 검색·요청 버튼은 해당 닉네임으로 검색한다. 직접 접근·새로고침·방문 기록 이동을 기존 라우팅에 연결한다.
+- `api/friends-api.ts`가 REST 응답을 검증한다. 목록·요청은 `{ userId, nickname, avatarUrl }` 공통형과 `online` 또는 `requestId/createdAt`을 사용한다. #95 검색의 `{ id, nickname, avatarUrl }[]`를 `userId`로 변환한다. 부적합한 응답은 오류로 표시한다.
+- `friends/friends-state.ts`는 조회를 직렬화하고 여러 갱신 요청을 모은다. 오래된 검색·이전 화면 수명의 응답을 폐기하며, 계정별로 화면을 다시 만들어 사용자 데이터가 남지 않게 한다.
+- 변경 요청은 서버 응답 이후 확정하고 목록 전체를 재조회한다. 변경 성공과 재조회 실패는 별도로 표시하며, 오래된 목록에서는 추가 변경을 막는다. 수락·거절은 최신 요청 ID를 확인하고 충돌 시 변경 요청을 재전송하지 않는다.
+- 각 친구 요청은 15초 제한과 AbortSignal을 사용한다. 공유 refresh는 유지하되 timeout된 변경 요청은 지연 refresh 이후에도 새로 전송하지 않는다. 결과 미확정 안내와 목록 재조회로 복구한다.
+- 거절 확인은 재요청 차단과 본인이 먼저 요청할 수 있는 동선을 안내한다. 대화상자는 기본 취소 포커스·키보드 이동·Escape 취소·버튼 또는 제목으로의 포커스 복귀를 지원한다. 친구 삭제는 별도 확인 동작이다.
+- 초기 조회 실패를 빈 목록으로, 미확인 온라인 상태를 false로 바꾸지 않는다. 마지막 조회 시점 기준임을 안내하며 명시적 null은 확인 불가로 보존한다. 현재 #95는 온라인 집계 미연결 시 503을 반환한다. WS 연결이 끊기면 온라인 상태를 확인 불가로 표시하고, 인증 연결 복구 후 목록을 다시 읽는다.
+- 인증 후 `presence { userId, online }`와 `friends.changed {}`를 받으면 목록을 다시 읽는다. 알림 값으로 직접 덮지 않는다. 서버의 온라인 registry·변경 알림 연결과 #98의 삭제 후 수신자 경합 해결은 통합 조건이다. 초대·재대국·채팅은 이 변경의 범위가 아니다.
+
+검증 범위·결과·응답 대체와 실제 서버의 구분은 [친구 화면 검증 기록](friends-web-validation.md)을 따른다.
 
 #### 3. Backend architecture (B)
 
@@ -380,12 +397,12 @@ classDiagram
         callback(code, state) CallbackResult
     }
     class UserService {
-        updateNickname(userId, nickname)
+        updateProfile(userId, changes)
         getProfile(userId)
     }
     class StatsService {
-        getStats(userId, gameType)
-        getMatches(userId, options)
+        getStats(userId, gameType, viewerId)
+        getMatches(userId, options, viewerId)
         getLeaderboard(gameType, limit)
     }
     class GameCommandService {
@@ -485,6 +502,7 @@ erDiagram
         text password_hash "NULL = OAuth 전용 계정"
         varchar_32 nickname UK "NOT NULL"
         text avatar_url "NULL"
+        boolean records_public "NOT NULL DEFAULT true, migration 0004"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
     }
@@ -629,7 +647,7 @@ erDiagram
 
     users {
         bigint id PK
-        boolean records_public "계획, NOT NULL DEFAULT true (DEC-05)"
+        boolean records_public "구현됨, NOT NULL DEFAULT true (DEC-05, #78)"
         timestamptz deleted_at "계획, NULL = 활성 (DEC-09)"
         text avatar_url "업로드 시 /api/media/avatars/{id}-{rand}.png|jpg"
         varchar_254 email "탈퇴 시 NULL 또는 익명값으로 교체 (UNIQUE 해제)"
@@ -653,7 +671,7 @@ erDiagram
 
 | 계획 변경 | 이유 | 담당 | 상태 |
 |---|---|---|---|
-| `users.records_public` | 전적 공개 설정 (FR-PRO-04) | B | `계획` |
+| `users.records_public` | 전적 공개 설정 (FR-PRO-04), migration `0004` | A 구현, B 검토 | `구현됨` (#78 브랜치, B 검토 대기) |
 | `users.deleted_at`, email·nickname nullable 전환 | 탈퇴 후 닉네임 재사용과 경기 기록 보존 (DATA-01~05, DEC-09) | B | `계획` (DEC-09 확정 후) |
 | `game_players.nickname_snapshot` | 경기 당시 닉네임 표시. 전적 조회는 이 값을 우선 사용 | B | `계획` |
 | `friendships` | 친구 요청·수락 (FR-SOC-01~03). 제안 규칙: 거절 시 행을 지우지 않고 `declined`로 남김, 거절당한 요청자의 재요청은 차단, 거절한 쪽의 요청은 허용, 친구 삭제는 행 삭제 후 재요청 허용 | E (스키마 리뷰 B) | `계획` |
@@ -676,7 +694,7 @@ flowchart TD
 
 - 진행 중 경기는 `result`가 NULL이라 자동 제외된다.
 - 리더보드는 무효를 제외한 완료 경기가 1경기 이상인 사용자만 포함한다. 순위는 `row_number()`로 동률 없이 매긴다.
-- 미정: 전적 비공개(DEC-05), 탈퇴 사용자 표시(DEC-09). 경기 당시 닉네임 스냅샷 컬럼은 DEC-09 확정 후 추가한다.
+- 전적 비공개는 2.10.26의 DEC-05 제안을 구현했다(#78, B 검토 대기). 탈퇴 사용자 표시와 경기 당시 닉네임 스냅샷 컬럼은 DEC-09 확정 후 추가한다.
 
 ---
 
@@ -694,7 +712,7 @@ flowchart TD
 | OAuth | `POST /api/auth/oauth/42/login`, `link`, `callback` | B | `구현됨` |
 | Users | `GET /api/users/me`, `PATCH /api/users/me`, `GET /api/users/{userId}` | B | `구현됨` |
 | Avatar | `PUT /api/users/me/avatar`, `DELETE /api/users/me/avatar`, `GET /api/media/avatars/{name}` (2.10.25) | B | `구현됨` |
-| 전적 공개 설정 | `PATCH /api/users/me`의 `recordsPublic`, stats·matches의 403 (2.10.26) | B | `계획` |
+| 전적 공개 설정 | `PATCH /api/users/me`의 `recordsPublic`, stats·matches의 403 (2.10.26) | A 구현, B 검토 | `구현됨` (#78 브랜치, B 검토 대기) |
 | 탈퇴 | `DELETE /api/users/me` (2.10.27) | B | `계획` |
 | Statistics | `GET /api/users/{userId}/stats`, `GET /api/users/{userId}/matches`, `GET /api/leaderboard` | B | `구현됨` |
 | 매칭·초대·방 | 미정 | D | `계획` |
@@ -1303,19 +1321,23 @@ flowchart TD
 ```mermaid
 flowchart TD
     S([requireAuth 통과]) --> Find[users 조회 userId]
-    Find -->|있음| R200[200 id, email, nickname, avatarUrl, createdAt]
+    Find -->|있음| R200[200 id, email, nickname, avatarUrl, recordsPublic, createdAt]
     Find -->|"없음 (세션은 살아 있는데 계정 행 없음)"| R401[401 UNAUTHENTICATED]
 ```
 
-#### 2.10.8 닉네임 변경 `PATCH /api/users/me`
+#### 2.10.8 닉네임·전적 공개 설정 변경 `PATCH /api/users/me`
 
 ```mermaid
 flowchart TD
-    S([requireAuth 통과, nickname 검증 통과]) --> Up["users UPDATE nickname, updated_at"]
+    S([requireAuth 통과]) --> V{"nickname / recordsPublic 중 하나 이상, 필드 검증 통과?"}
+    V -->|아니오| R422[422 VALIDATION_ERROR]
+    V -->|예| Up["users UPDATE 전달된 필드와 updated_at (단일 UPDATE)"]
     Up -->|행 갱신됨| R200[200 갱신된 내 정보]
     Up -->|갱신된 행 없음| R401[401 UNAUTHENTICATED]
     Up -->|users_nickname_unique 위반| R409[409 NICKNAME_TAKEN]
 ```
+
+`recordsPublic`의 기본값·권한·UI 동작은 2.10.26을 따른다. 두 필드 동시 변경 시 닉네임 충돌이 나면 어느 필드도 변경하지 않는다.
 
 #### 2.10.9 공개 프로필 `GET /api/users/{userId}`
 
@@ -1453,7 +1475,9 @@ flowchart TD
     V -->|아니오 또는 gameType 없음| R422[422 VALIDATION_ERROR]
     V -->|예| U{사용자 있음?}
     U -->|아니오| R404[404 NOT_FOUND]
-    U -->|예| C["game_players JOIN games (user, game_type): win·loss·draw 개수"]
+    U -->|예| A{"본인 또는 records_public = true? (행 공유 잠금)"}
+    A -->|아니오| R403[403 RECORDS_PRIVATE]
+    A -->|예| C["game_players JOIN games (user, game_type): win·loss·draw 개수"]
     C --> P{"played = 승+패+무 > 0?"}
     P -->|예| R1["winRate = wins / played"]
     P -->|아니오| R0["winRate = 0"]
@@ -1469,7 +1493,9 @@ flowchart TD
     V -->|위반| R422[422 VALIDATION_ERROR]
     V -->|통과| U{사용자 있음?}
     U -->|아니오| R404[404 NOT_FOUND]
-    U -->|예| Q["status=finished 경기, 상대 JOIN, gameType 있으면 필터, before 있으면 id < before, id 내림차순, limit + 1개 조회"]
+    U -->|예| A{"본인 또는 records_public = true? (행 공유 잠금)"}
+    A -->|아니오| R403[403 RECORDS_PRIVATE]
+    A -->|예| Q["status=finished 경기, 상대 JOIN, gameType 있으면 필터, before 있으면 id < before, id 내림차순, limit + 1개 조회"]
     Q --> Full{"limit보다 많이 나옴?"}
     Full -->|예| N1["200 앞의 limit개, nextBefore = 그중 마지막 matchId"]
     Full -->|아니오| N0["200 전부, nextBefore = null"]
@@ -1612,7 +1638,7 @@ flowchart TD
 - 서비스가 만든 이름(`{userId}-{16진수 16자}.{png,jpg}`)만 읽고 지운다. 요청 경로나 DB 값으로 디렉터리 밖을 가리킬 수 없다.
 - 교체 실패 시 기존 파일과 URL을 유지한다. 탈퇴 시 파일을 삭제한다(2.10.27).
 
-#### 2.10.26 전적 공개 설정 (B, `계획`)
+#### 2.10.26 전적 공개 설정 (A 구현, B 검토, #78 브랜치 `구현됨`)
 
 FR-PRO-04, DEC-05: 기본 공개. 비공개면 **본인 외에는** 프로필의 전적·경기 기록을 볼 수 없다. 리더보드와 상대방 본인의 경기 기록에는 계속 표시된다.
 
@@ -1630,8 +1656,12 @@ flowchart TD
     Mine([내 /matches의 상대 정보]) --> Opp["상대가 비공개여도 내 기록의 상대 닉네임은 표시"]
 ```
 
-- 구현 시 `StatsService.getStats/getMatches`에 조회자 `viewerId`를 추가로 넘긴다(현재는 대상만 받음).
-- 상태 코드 추가: stats·matches에 403 `RECORDS_PRIVATE`.
+- migration `0004_records_public.sql`이 `users.records_public boolean NOT NULL DEFAULT true`를 추가하며 기존 사용자도 공개 상태로 유지한다. 공유된 `0000`~`0003` migration은 수정하지 않는다.
+- `PATCH /api/users/me`는 `nickname` 또는 `recordsPublic`을 받는다(둘 다 허용). boolean 이외의 설정, 빈 객체, 미등록 필드는 422다. 닉네임 충돌 시 단일 UPDATE 전체가 실패한다. 본인 계정 DTO에는 필수 boolean `recordsPublic`을 포함해 가입·내 정보·닉네임·아바타 응답에서도 설정을 유지한다.
+- `StatsService.getStats/getMatches`에 인증된 조회자의 `viewerId`를 필수로 넘긴다. 한 트랜잭션에서 대상 사용자 행을 `FOR SHARE`로 읽고 권한을 검사한 뒤 전적을 읽어, 설정 변경과 조회의 순서를 DB에서 정한다. 없는 대상은 404, 타인의 비공개 전적은 데이터 없이 403 `RECORDS_PRIVATE`다. 두 API 응답은 `Cache-Control: no-store`다.
+- 기본 프로필의 닉네임·아바타, 리더보드, 상대방 본인의 전적은 유지한다. 이메일·공개 설정은 타인의 기본 프로필에 추가 노출하지 않는다.
+- 내 프로필 토글은 처리 중 비활성화하고 서버 응답 이후 반영한다. 실패하면 저장된 값을 유지하고 오류를 표시한다. 다른 사용자의 비공개 안내는 기본 프로필과 함께 표시하며 통계·업적·최근 대국 및 이전 조회 데이터는 숨긴다.
+- 상세 요청·응답·상태 코드는 [contracts 11.4](contracts.md#114-전적-공개-설정과-조회-권한-fr-pro-04-dec-05), 실제 DB·브라우저 증거는 [검증 기록](profile-records-privacy-validation.md)을 따른다. DEC-05 제안의 B 검토는 아직 대기 중이다.
 
 #### 2.10.27 회원 탈퇴 `DELETE /api/users/me` (B, `계획`, DEC-09 확정 후)
 
@@ -1722,7 +1752,7 @@ flowchart TD
 | SRS 설계 항목 | 이 문서 | 상태 |
 |---|---|---|
 | 시스템 구성·실행/배포 | 2.1의 1번, 2.9 | `계획` (PR #10) |
-| 인증·권한·프로필 | 1.1, 2.6의 11번, 2.5의 8번 | `구현됨` (아바타·전적 비공개·탈퇴 제외) |
+| 인증·권한·프로필 | 1.1, 2.6의 11번, 2.5의 8번 | `구현됨` (전적 공개는 #78 브랜치, 탈퇴 제외) |
 | 친구·온라인 상태 | 2.1 use case | `계획` (E, D) |
 | 방·매칭 상태 전이 | 2.7 | `계획` (D) |
 | 공통 경기와 규칙 경계 | 2.2의 4번, 2.3 | 경계 `구현됨`, 엔진 연결 `계획` |
@@ -1741,10 +1771,10 @@ flowchart TD
 | `core/tokens.test.ts` | JWT 서명·만료·위조·`alg: none` 거절 | FR-AUTH-03 | 없음 |
 | `core/totp.test.ts` | RFC 6238 벡터, ±1 step, 재사용 거절, AES-GCM 키·변조 검사 | FR-AUTH-06, DATA-05 | 없음 |
 | `api/auth-routes.test.ts` | 가입·중복(대소문자)·검증 400/413/415/422, 로그인, refresh 교체·재사용 폐기, 로그아웃 후 거절·다른 기기 유지, rate limit 429, Swagger 상태 코드 | AT-02, FR-AUTH-01~03·07, NFR-SEC-03·05 | 없음 |
-| `api/user-routes.test.ts` | 닉네임 변경·중복, 인증이 검증보다 먼저, 공개 프로필 email 제외, ID 범위 | FR-PRO-01, FR-AUTH-04 | 없음 |
+| `api/user-routes.test.ts` | 닉네임 변경·중복, 전적 공개 기본값·저장·엄격 검증·동시 필드 원자성, 인증이 검증보다 먼저, 공개 프로필 email 제외, ID 범위 | FR-PRO-01·04, FR-AUTH-04 | 없음 |
 | `api/two-factor-routes.test.ts` | 설정·활성화 전 미적용, 2단계 로그인, 재사용·5회 실패 폐기, 복구 코드 1회, 비활성화, setup 경합, 키 없을 때 503 | AT-16, FR-AUTH-06 | 없음 |
 | `api/oauth-routes.test.ts` | 42 시작 URL, 첫 로그인 계정 생성·재사용, state 1회·위조·다른 브라우저 거절, email 중복 거절, 닉네임 접미사, 연결·연결 충돌·로그아웃 후 연결 거절, 2FA 적용, 42 장애·잘못된 JSON 502, 동시 첫 로그인 | AT-15, FR-AUTH-05 | **42 API는 `fake42`** (실제 42 검증은 앱 등록 후 별도) |
-| `api/stats-routes.test.ts` | 게임별 집계·진행 중 제외·첫 승·진행도, 전적 순서·페이지, 리더보드 정렬, 부분 결과 CHECK 거절 | AT-08, FR-REC-01~04, DEC-08 | **게임 규칙은 stub** |
+| `api/stats-routes.test.ts` | 게임별 집계·진행 중 제외·첫 승·진행도, 전적 순서·페이지, 리더보드 정렬, 부분 결과 CHECK 거절, 비공개 권한·예외·설정 변경과 조회 경합 | AT-08, FR-REC-01~04, FR-PRO-04, DEC-05·08 | **게임 규칙은 stub** |
 | `services/game-command-service.test.ts` | 착수·버전·차례, 재전송 1회 적용, 거절 기록, 비참가자·없는 경기·남의 commandId, 동시 명령 1개만 적용, 동시 재전송, 종료·기권 결과, 저장 실패 rollback | AT-05·09(저장 부분), FR-GAME-03, NFR-CONC-01 | **게임 규칙은 `stubRules`** (실제 엔진 연결은 C 엔진 병합 후) |
 | `app.test.ts` | health, DB 미설정·연결 실패 503과 비밀값 비노출 | NFR-OPS-01 | 없음 |
 
@@ -1762,7 +1792,8 @@ flowchart TD
 | 준비·시작 절차, 색상 배정, 초대 유효기간 | D, A | DEC-06 |
 | 이탈 시간 저장 위치·감지 지연 | D | DEC-03, DEC-07 |
 | 아바타 저장 위치 | B (PNG/JPEG 2MiB 이하 제안) | DEC-05 |
-| 전적 비공개, 탈퇴 표시·닉네임 스냅샷 | B, A | DEC-05, DEC-09 |
+| 전적 비공개 | DEC-05 제안으로 #78 구현, B 검토 대기 | DEC-05, A·B |
+| 탈퇴 표시·닉네임 스냅샷 | B, A | DEC-09 |
 | 같은 commandId·다른 payload | payload 해시 저장 후 불일치 거절할지 | B, C, D |
 
 ### 5.1 담당자별 작성 필요 항목

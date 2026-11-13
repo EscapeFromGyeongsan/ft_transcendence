@@ -125,9 +125,20 @@ describe.skipIf(!testDatabaseUrl)("avatar upload with PostgreSQL", () => {
   const fetchFile = (url: string) => app.inject({ method: "GET", url });
 
   test("upload stores the file, serves it, and replaces the previous one", async () => {
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: "/api/users/me",
+          headers: { authorization: `Bearer ${token}` },
+          payload: { recordsPublic: false },
+        })
+      ).statusCode,
+    ).toBe(200);
     const png = pngHeader(64, 64);
     const first = await upload(multipart(png));
     expect(first.statusCode).toBe(200);
+    expect(first.json().recordsPublic).toBe(false);
     const firstUrl: string = first.json().avatarUrl;
     expect(firstUrl).toMatch(/^\/api\/media\/avatars\/1-[0-9a-f]{16}\.png$/);
     expect((await me()).avatarUrl).toBe(firstUrl);
@@ -142,6 +153,7 @@ describe.skipIf(!testDatabaseUrl)("avatar upload with PostgreSQL", () => {
       multipart(jpegHeader(100, 80), "file", "b.jpg"),
     );
     expect(second.statusCode).toBe(200);
+    expect(second.json().recordsPublic).toBe(false);
     const secondUrl: string = second.json().avatarUrl;
     expect(secondUrl).toMatch(/\.jpg$/);
     expect((await fetchFile(secondUrl)).headers["content-type"]).toBe(
@@ -149,6 +161,16 @@ describe.skipIf(!testDatabaseUrl)("avatar upload with PostgreSQL", () => {
     );
     expect((await fetchFile(firstUrl)).statusCode).toBe(404);
     expect(await readdir(avatarDir)).toHaveLength(1);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/api/users/me/avatar",
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect((await me()).recordsPublic).toBe(false);
   });
 
   test("format, size and field problems keep the current avatar", async () => {

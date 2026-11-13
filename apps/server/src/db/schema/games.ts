@@ -10,6 +10,7 @@ import {
   timestamp,
   unique,
   uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { users } from "./users.ts";
 
@@ -77,7 +78,7 @@ export const games = pgTable(
   ],
 );
 
-/** 경기 참가자와 좌석(`black`/`white`)입니다. `result`는 경기가 끝날 때 채웁니다. */
+/** 경기 참가자와 좌석(`black`/`white`)입니다. `result`는 경기가 끝날 때 채우고, `nickname_snapshot`은 경기 생성 시 닉네임입니다. */
 export const gamePlayers = pgTable(
   "game_players",
   {
@@ -91,6 +92,9 @@ export const gamePlayers = pgTable(
       .notNull()
       .references(() => users.id),
     seat: text("seat").notNull(),
+    // Nickname at match creation. Match history shows this, so a later rename
+    // or account deletion does not change past records (DEC-09).
+    nicknameSnapshot: varchar("nickname_snapshot", { length: 32 }).notNull(),
     result: text("result"),
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .defaultNow()

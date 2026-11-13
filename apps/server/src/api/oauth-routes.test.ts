@@ -182,6 +182,7 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
     expect(profile).toMatchObject({
       email: "yunhpark@student.42.fr",
       nickname: "yunhpark",
+      hasPassword: false,
     });
     const second = await callback("code-101", await startLogin());
     expect((await me(second.json().accessToken)).json().id).toBe(profile.id);
