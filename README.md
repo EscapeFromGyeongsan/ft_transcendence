@@ -295,7 +295,25 @@ The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomok
 
 Commits and PRs record individual contributions. The [roadmap](Document/roadmap.md) preserves the original role/schedule plan; the SDS records implementation references. Work uses issues, feature branches and reviewed PRs under [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The [module matrix](Document/evaluation/module-matrix.md) describes the original 14-point candidate: frameworks, real-time functionality, user interaction, standard user management, a complete web game, remote play, ORM and statistics. That historical matrix includes chat; the later SRS two-game scope reserves chat for future work and does not claim the User Interaction major. Use the pinned SRS and SDS for current acceptance scope. These are candidate modules, not an awarded score; social functionality, remote-play evidence and independent acceptance remain incomplete.
+### Modules (16 points)
+
+Major modules are worth 2 points and minor modules 1 point. Details and evidence owners are in the [module matrix](Document/evaluation/module-matrix.md).
+
+| Module (subject) | Type | Points | How it is implemented | Owner |
+|---|---|---:|---|---|
+| Use a framework for both the frontend and backend | Major | 2 | React 19 + Vite web app, Fastify 5 API | yunhpark (B) |
+| Real-time features using WebSockets | Major | 2 | `/api/ws`: matchmaking, server-confirmed `game.updated` broadcasts, reconnection, friend `presence` | sipyeon (D) |
+| Standard user management and authentication | Major | 2 | Profile update, avatar upload with default avatar, friends with online status, profile page | yunhpark (B) |
+| Complete web-based game | Major | 2 | 15×15 Gomoku with server-side rules and win/loss conditions | yoshin (C) |
+| Remote players | Major | 2 | Two browsers on separate computers; pause on disconnect, 60-second cumulative reconnection window, snapshot restore | sipyeon (D) |
+| Add another game with user history and matchmaking | Major | 2 | 8×8 Othello engine and screen, matchmaking queue per game type, per-game history, statistics and leaderboard | yoshin (C) |
+| Use an ORM for the database | Minor | 1 | Drizzle ORM schema and SQL migrations on PostgreSQL | yunhpark (B) |
+| Game statistics and match history | Minor | 1 | Wins, losses, win rate, match history (date, opponent, result), first-win achievement, 10-game progression, leaderboard | yunhpark (B) |
+| Remote authentication with OAuth 2.0 | Minor | 1 | 42 Intra OAuth login, first sign-up and account linking | yunhpark (B) |
+| Complete 2FA system | Minor | 1 | TOTP setup, enable and disable, single-use recovery codes, second login step | yunhpark (B) |
+| **Total** | 6 Major + 4 Minor | **16** | 14 required points + 2 bonus candidate points | |
+
+The User Interaction major is not claimed: its basic chat requirement is not implemented. Profiles and friends are covered by Standard user management.
 
 ## Structure
 
