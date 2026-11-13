@@ -1,6 +1,7 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Executor } from "../db/client.ts";
 import { refreshTokens, sessions, users } from "../db/schema/users.ts";
+import { oauthAccounts } from "../db/schema/external-auth.ts";
 
 export const publicUserColumns = {
   id: users.id,
@@ -48,7 +49,10 @@ export async function findUserCredentialsByEmail(db: Executor, email: string) {
 }
 
 /** `GET /api/users/me`의 내 정보입니다. `hasPassword`는 비밀번호로 로그인할 수 있는 계정인지 나타냅니다. */
-export type MeUser = PublicUser & { hasPassword: boolean };
+export type MeUser = PublicUser & {
+  hasPassword: boolean;
+  oauth42Linked: boolean;
+};
 
 export async function findUserById(
   db: Executor,
@@ -58,6 +62,7 @@ export async function findUserById(
     .select({
       ...publicUserColumns,
       hasPassword: sql<boolean>`${users.passwordHash} IS NOT NULL`,
+      oauth42Linked: sql<boolean>`EXISTS (SELECT 1 FROM ${oauthAccounts} WHERE ${oauthAccounts.userId} = ${users.id} AND ${oauthAccounts.provider} = '42')`,
     })
     .from(users)
     .where(eq(users.id, id));

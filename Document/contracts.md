@@ -517,6 +517,12 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 
 SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 별도다. 실제 PostgreSQL·두 세션 브라우저 검증은 [검증 기록](profile-records-privacy-validation.md)을 따른다.
 
+#### 본인 계정의 인증 수단 표시 (#136)
+
+`GET /api/users/me`는 기본 계정 DTO에 필수 boolean `hasPassword`와 `oauth42Linked`를 추가한다. `oauth42Linked`는 현재 사용자에 연결된 `oauth_accounts(provider='42')`의 존재 여부다. 비밀번호 계정도 42 계정을 연결할 수 있으므로 `hasPassword`의 반대 값으로 추정하지 않는다. 42 제공자 ID·토큰은 반환하지 않으며, 타인 공개 프로필·리더보드에는 두 필드를 추가하지 않는다. DB migration은 없다.
+
+프로필 변경·아바타 응답은 기본 DTO이므로 웹은 같은 사용자 ID의 갱신 결과를 기존 본인 정보에 병합해 인증 수단 표시를 보존한다. 새로고침 시 본인 계정 조회로 다시 확인한다.
+
 ### 11.5 친구 웹 클라이언트 (#80·#90, 서버 PR 통합 대기)
 
 친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 PR은 미병합이다. 이 절은 #90이 소비하는 계약이며 master에 구현된 서버 API의 상태 코드 표(11.3)를 확장하지 않는다.
@@ -589,7 +595,9 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 | 응답을 기다리지 않고 보내 처리 대기 메시지가 32개를 넘음 | 1008 `Too many pending messages.` |
 | 인증 중 DB·인증 서비스 장애 | 1011 `Service unavailable.` |
 
-4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 갱신도 실패하면 로그인 화면으로 보낸다. 4400·1008·1009는 클라이언트 버그이므로 같은 방식으로 재시도하지 않는다.
+4401을 받은 클라이언트는 `POST /api/auth/refresh`로 토큰을 갱신한 뒤 다시 연결한다. 세션이 거절되면 로그인 화면으로 보내고, 네트워크·429·5xx 같은 일시 오류는 토큰을 유지한다. 4400·1008·1009는 자동 재접속을 중단하며, 사용자가 명시적으로 재접속하면 새 재시도 주기를 시작한다 (#136, #142).
+
+`session.replaced` 뒤 수신하는 경기 갱신만으로 제어권을 복원하지 않는다. 사용자가 다시 연결해 인증을 마친 뒤 `match.subscribe`에 대한 `match.snapshot`을 받아야 착수·기권 잠금을 해제한다. 없는 경기·참가자가 아닌 경기의 구독 오류는 해당 구독과 저장한 재개 ID를 지워 새로고침으로 같은 오류가 반복되지 않게 한다.
 
 ### 12.4 경기 구독
 

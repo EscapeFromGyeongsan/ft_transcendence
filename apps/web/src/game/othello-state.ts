@@ -425,7 +425,9 @@ export function applyOthelloIncomingSnapshot(
   incomingSnapshot: OthelloSnapshot,
   eventType: IncomingSnapshotEventType = "game.updated",
 ): OthelloClientState {
-  if (!shouldAcceptOthelloSnapshot(state.snapshot, incomingSnapshot, eventType)) {
+  if (
+    !shouldAcceptOthelloSnapshot(state.snapshot, incomingSnapshot, eventType)
+  ) {
     return {
       ...state,
       ignoredUpdateCount: state.ignoredUpdateCount + 1,
@@ -442,8 +444,11 @@ export function applyOthelloIncomingSnapshot(
   const nextOpponentDisconnect =
     incomingSnapshot.status === "paused" ? state.opponentDisconnect : null;
 
+  const regainedControl =
+    eventType === "match.snapshot" && state.connectionPhase === "connected";
   const nextGameError =
     eventType === "game.updated" ||
+    (regainedControl && state.gameError?.code === "SESSION_REPLACED") ||
     (state.gameError && state.gameError.code === "NOT_SUBSCRIBED")
       ? null
       : state.gameError;
@@ -456,6 +461,7 @@ export function applyOthelloIncomingSnapshot(
     pendingCommand: null,
     gameError: nextGameError,
     opponentDisconnect: nextOpponentDisconnect,
+    sessionReplaced: regainedControl ? false : state.sessionReplaced,
   };
 }
 
@@ -639,7 +645,8 @@ export function deriveOthelloTurnPresentation(
       legalMoves: [],
       autoPassNotice: null,
       turnLabel: "대국 정보 동기화 중",
-      turnDescription: "서버로부터 확정된 오델로 대국 스냅샷을 불러오고 있습니다.",
+      turnDescription:
+        "서버로부터 확정된 오델로 대국 스냅샷을 불러오고 있습니다.",
     };
   }
 
@@ -683,15 +690,15 @@ export function deriveOthelloTurnPresentation(
 
   const isMyTurn = Boolean(
     isParticipant &&
-      isPlaying &&
-      viewerUserId !== null &&
-      currentTurnPlayerId === viewerUserId,
+    isPlaying &&
+    viewerUserId !== null &&
+    currentTurnPlayerId === viewerUserId,
   );
   const isOpponentTurn = Boolean(
     isParticipant &&
-      isPlaying &&
-      currentTurnPlayerId !== null &&
-      currentTurnPlayerId !== viewerUserId,
+    isPlaying &&
+    currentTurnPlayerId !== null &&
+    currentTurnPlayerId !== viewerUserId,
   );
 
   const legalMoves =
@@ -708,10 +715,8 @@ export function deriveOthelloTurnPresentation(
 
   let autoPassNotice: string | null = null;
   if (isPlaying && lastMove?.autoPassedColor) {
-    const passedKor =
-      lastMove.autoPassedColor === "black" ? "흑돌" : "백돌";
-    const activeKor =
-      lastMove.autoPassedColor === "black" ? "백돌" : "흑돌";
+    const passedKor = lastMove.autoPassedColor === "black" ? "흑돌" : "백돌";
+    const activeKor = lastMove.autoPassedColor === "black" ? "백돌" : "흑돌";
     autoPassNotice = `${passedKor}에게 합법 착수 위치가 없어 자동 패스되었습니다. ${activeKor} 차례가 계속됩니다.`;
   }
 
@@ -761,8 +766,7 @@ const OTHELLO_REASON_META: Record<
 > = {
   disc_count: {
     title: "돌 개수 우세 승리",
-    description:
-      "대국 종료 시 보드 위에 더 많은 돌을 차지하여 승리했습니다.",
+    description: "대국 종료 시 보드 위에 더 많은 돌을 차지하여 승리했습니다.",
   },
   resign: {
     title: "기권",
@@ -868,4 +872,3 @@ export function describeOthelloResult(
     whiteCount: counts.white,
   };
 }
-

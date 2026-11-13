@@ -5,6 +5,8 @@ import type { OthelloSnapshot } from "@cafe/game-contracts";
 import { OthelloMatchView } from "./OthelloMatchView.tsx";
 import {
   OTHELLO_RULES_VERSION,
+  applyOthelloConnectionPhase,
+  applyOthelloSessionReplaced,
   applyOthelloIncomingSnapshot,
   buildOthelloPlaceCommand,
   buildOthelloResignCommand,
@@ -38,6 +40,38 @@ function makeOthelloSnapshot(
 }
 
 describe("othello-state & OthelloMatchView (FR-G2-01 ~ FR-G2-05)", () => {
+  it("제어권 상실 뒤 재인증만으로는 잠금을 풀지 않고 재구독 스냅샷에서 착수·기권을 복구한다 (#136)", () => {
+    const snapshot = makeOthelloSnapshot();
+    const initial = applyOthelloIncomingSnapshot(
+      applyOthelloConnectionPhase(
+        createInitialOthelloClientState(11, 201),
+        "connected",
+      ),
+      snapshot,
+      "match.snapshot",
+    );
+    const replaced = applyOthelloSessionReplaced(initial, 201);
+    const watched = applyOthelloIncomingSnapshot(
+      replaced,
+      snapshot,
+      "match.snapshot",
+    );
+    expect(watched.sessionReplaced).toBe(true);
+    expect(deriveOthelloTurnPresentation(watched).canResign).toBe(false);
+    const connected = applyOthelloConnectionPhase(watched, "connected");
+    expect(deriveOthelloTurnPresentation(connected).canPlaceDisc).toBe(false);
+    const restored = applyOthelloIncomingSnapshot(
+      connected,
+      snapshot,
+      "match.snapshot",
+    );
+    expect(restored.sessionReplaced).toBe(false);
+    expect(restored.gameError).toBeNull();
+    expect(deriveOthelloTurnPresentation(restored)).toMatchObject({
+      canPlaceDisc: true,
+      canResign: true,
+    });
+  });
   it("8×8 초기 보드 중앙 4칸에 백·흑 대각선 교차 배치 및 돌 개수를 정확히 집계한다 (FR-G2-01, FR-G2-05)", () => {
     const board = createInitialOthelloBoard();
     expect(board).toHaveLength(8);

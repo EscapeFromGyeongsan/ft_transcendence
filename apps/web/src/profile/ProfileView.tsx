@@ -40,6 +40,7 @@ import {
 import { Avatar } from "./Avatar.tsx";
 import { DeleteAccountDialog } from "./DeleteAccountDialog.tsx";
 import { describeOpponent } from "./account-deletion.ts";
+import { useDialogFocus } from "../ui/use-dialog-focus.ts";
 
 const GAME_TYPES: GameType[] = ["gomoku", "othello"];
 const MATCH_PAGE_SIZE = 10;
@@ -197,10 +198,36 @@ export function ProfileView({
   const [disableModalError, setDisableModalError] = useState<string | null>(
     null,
   );
-  const [oauthAlreadyLinked, setOauthAlreadyLinked] = useState(false);
+  const [oauthAlreadyLinked, setOauthAlreadyLinked] = useState(
+    currentUser.oauth42Linked === true,
+  );
+  const disableDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(
+    disableModalOpen,
+    disableDialogRef,
+    "#two-factor-disable-code",
+    busy === "twoFactorDisable",
+  );
+  useEffect(() => {
+    if (isMine && typeof currentUser.oauth42Linked === "boolean")
+      setOauthAlreadyLinked(currentUser.oauth42Linked);
+  }, [isMine, currentUser.oauth42Linked]);
   // 2FA 상태 조회가 실패하면 "미설정"으로 보이지 않게 따로 표시합니다.
   const [twoFactorStatusFailed, setTwoFactorStatusFailed] = useState(false);
   const disableTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+  const setupTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [restoreSetupFocus, setRestoreSetupFocus] = useState(false);
+  useEffect(() => {
+    if (
+      restoreSetupFocus &&
+      !disableModalOpen &&
+      twoFactorEnabled === false &&
+      busy === null
+    ) {
+      setupTriggerBtnRef.current?.focus();
+      setRestoreSetupFocus(false);
+    }
+  }, [restoreSetupFocus, disableModalOpen, twoFactorEnabled, busy]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const deleteTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -538,7 +565,7 @@ export function ProfileView({
       setDisableModalOpen(false);
       setDisableCodeInput("");
       setNotice("2단계 인증(2FA)이 비활성화되었습니다.");
-      disableTriggerBtnRef.current?.focus();
+      setRestoreSetupFocus(true);
     } catch (error) {
       setDisableModalError(getErrorMessage(error));
     } finally {
@@ -833,6 +860,7 @@ export function ProfileView({
                       style={{ width: "100%" }}
                       disabled={busy !== null}
                       data-testid="start-2fa-setup-btn"
+                      ref={setupTriggerBtnRef}
                       onClick={handleStartTwoFactorSetup}
                     >
                       {busy === "twoFactorSetup"
@@ -1290,6 +1318,8 @@ export function ProfileView({
             aria-describedby="two-factor-disable-desc"
             className="cbc-modal-dialog"
             data-testid="two-factor-disable-modal"
+            ref={disableDialogRef}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="cbc-modal-alert-icon" aria-hidden="true">
@@ -1339,6 +1369,7 @@ export function ProfileView({
                   placeholder="6자리 숫자 또는 ABCD-EFGH"
                   className={`cbc-input ${disableModalError ? "is-error" : ""}`}
                   data-testid="two-factor-disable-code-input"
+                  disabled={busy === "twoFactorDisable"}
                   value={disableCodeInput}
                   onChange={(e) => {
                     setDisableCodeInput(e.target.value);

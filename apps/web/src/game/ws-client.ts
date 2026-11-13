@@ -670,6 +670,17 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
         return;
       }
 
+      // Protocol, policy and oversized-message failures require an explicit retry.
+      if (
+        event?.code === 4400 ||
+        event?.code === 1008 ||
+        event?.code === 1009
+      ) {
+        clearReconnectTimer();
+        setPhase("disconnected", reconnectAttempt);
+        return;
+      }
+
       scheduleReconnect();
     };
 

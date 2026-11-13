@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { PlayerId } from "@cafe/game-contracts";
+import { useDialogFocus } from "../ui/use-dialog-focus.ts";
 import {
   GOMOKU_BOARD_SIZE,
   GOMOKU_COORDS,
@@ -73,6 +74,8 @@ export function GomokuMatchView({
   const [nowMs, setNowMs] = useState(() => Date.now());
   const cellRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const resignTriggerBtnRef = useRef<HTMLButtonElement | null>(null);
+  const resignDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(resignModalOpen, resignDialogRef, "[data-dialog-cancel]");
 
   const { snapshot, viewerUserId, lastMove, gameError, connectionPhase } =
     state;
@@ -371,6 +374,9 @@ export function GomokuMatchView({
                 : ""
           }`}
           data-testid="turn-indicator"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
         >
           {turn.currentTurnColor && (
             <span
@@ -794,6 +800,8 @@ export function GomokuMatchView({
             aria-labelledby="resign-dialog-title"
             aria-describedby="resign-dialog-desc"
             className="cbc-modal-dialog"
+            ref={resignDialogRef}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <h3
@@ -818,6 +826,7 @@ export function GomokuMatchView({
               <button
                 type="button"
                 className="cbc-btn-secondary"
+                data-dialog-cancel
                 onClick={() => {
                   setResignModalOpen(false);
                   resignTriggerBtnRef.current?.focus();

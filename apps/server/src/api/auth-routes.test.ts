@@ -184,6 +184,7 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     expect(profile.statusCode).toBe(200);
     expect(profile.json().email).toBe(account.email);
     expect(profile.json().hasPassword).toBe(true);
+    expect(profile.json().oauth42Linked).toBe(false);
     expect(profile.body).not.toContain("passwordHash");
     expect((await me()).statusCode).toBe(401);
     expect((await me("garbage")).statusCode).toBe(401);

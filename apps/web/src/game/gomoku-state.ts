@@ -314,7 +314,8 @@ export function detectPlacedMove(
   viewerUserId: PlayerId | null,
   prevLastMove: DetectedMove | null = null,
 ): DetectedMove | null {
-  const diffCoords: Array<{ row: number; col: number; color: PlayerColor }> = [];
+  const diffCoords: Array<{ row: number; col: number; color: PlayerColor }> =
+    [];
 
   if (prevSnapshot && prevSnapshot.matchId === nextSnapshot.matchId) {
     for (let r = 0; r < GOMOKU_BOARD_SIZE; r += 1) {
@@ -422,7 +423,9 @@ export function getGameErrorMessage(
     case "INTERNAL_ERROR":
       return "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
     default:
-      return fallbackMessage?.trim() || "게임 요청 처리 중 오류가 발생했습니다.";
+      return (
+        fallbackMessage?.trim() || "게임 요청 처리 중 오류가 발생했습니다."
+      );
   }
 }
 
@@ -476,8 +479,11 @@ export function applyIncomingSnapshot(
     incomingSnapshot.status === "paused" ? state.opponentDisconnect : null;
 
   // 새로운 정상 착수 진행(game.updated)이 도착하면 이전 gameError를 해제합니다.
+  const regainedControl =
+    eventType === "match.snapshot" && state.connectionPhase === "connected";
   const nextGameError =
     eventType === "game.updated" ||
+    (regainedControl && state.gameError?.code === "SESSION_REPLACED") ||
     (state.gameError && state.gameError.code === "NOT_SUBSCRIBED")
       ? null
       : state.gameError;
@@ -490,6 +496,7 @@ export function applyIncomingSnapshot(
     pendingCommand: null,
     gameError: nextGameError,
     opponentDisconnect: nextOpponentDisconnect,
+    sessionReplaced: regainedControl ? false : state.sessionReplaced,
   };
 }
 
@@ -713,15 +720,15 @@ export function deriveTurnPresentation(
 
   const isMyTurn = Boolean(
     isParticipant &&
-      isPlaying &&
-      viewerUserId !== null &&
-      currentTurnPlayerId === viewerUserId,
+    isPlaying &&
+    viewerUserId !== null &&
+    currentTurnPlayerId === viewerUserId,
   );
   const isOpponentTurn = Boolean(
     isParticipant &&
-      isPlaying &&
-      currentTurnPlayerId !== null &&
-      currentTurnPlayerId !== viewerUserId,
+    isPlaying &&
+    currentTurnPlayerId !== null &&
+    currentTurnPlayerId !== viewerUserId,
   );
 
   const canPlaceStone = Boolean(isMyTurn && isOnline && !pendingCommand);

@@ -49,6 +49,37 @@ function makeSnapshot(overrides: Partial<GomokuSnapshot> = {}): GomokuSnapshot {
   };
 }
 
+describe("#136 대국 제어권 재획득", () => {
+  it("다른 탭의 갱신으로는 풀리지 않고 재인증 후 재구독 스냅샷에서 착수·기권 잠금을 푼다", () => {
+    const snapshot = makeSnapshot();
+    const initial = applyIncomingSnapshot(
+      applyConnectionPhase(
+        createInitialGomokuClientState(101, 10),
+        "connected",
+      ),
+      snapshot,
+      "match.snapshot",
+    );
+    const replaced = applySessionReplaced(initial, 10);
+    const watched = applyIncomingSnapshot(replaced, snapshot, "match.snapshot");
+    expect(watched.sessionReplaced).toBe(true);
+    expect(deriveTurnPresentation(watched).canResign).toBe(false);
+    const connected = applyConnectionPhase(watched, "connected");
+    expect(deriveTurnPresentation(connected).canPlaceStone).toBe(false);
+    const restored = applyIncomingSnapshot(
+      connected,
+      snapshot,
+      "match.snapshot",
+    );
+    expect(restored.sessionReplaced).toBe(false);
+    expect(restored.gameError).toBeNull();
+    expect(deriveTurnPresentation(restored)).toMatchObject({
+      canPlaceStone: true,
+      canResign: true,
+    });
+  });
+});
+
 describe("오목 15×15 보드 및 0-기반 좌표 규격 (IF-01, IF-05)", () => {
   it("보드 크기는 15×15이고 행·열 인덱스는 0부터 14까지이다", () => {
     expect(GOMOKU_BOARD_SIZE).toBe(15);
@@ -225,7 +256,10 @@ describe("서버 권위 snapshot 표시 및 클라이언트 자체 승패 판정
     expect(describeGomokuResult(playingSnapshot, 101)).toBeNull();
 
     const state = applyIncomingSnapshot(
-      applyConnectionPhase(createInitialGomokuClientState(101, 10), "connected"),
+      applyConnectionPhase(
+        createInitialGomokuClientState(101, 10),
+        "connected",
+      ),
       playingSnapshot,
       "game.updated",
     );
@@ -245,7 +279,10 @@ describe("서버 권위 snapshot 표시 및 클라이언트 자체 승패 판정
 
   it("착수 명령(markCommandPending)을 전송해도 서버 snapshot 수신 전에는 보드에 돌을 미리 그리지 않는다", () => {
     const initial = applyIncomingSnapshot(
-      applyConnectionPhase(createInitialGomokuClientState(101, 10), "connected"),
+      applyConnectionPhase(
+        createInitialGomokuClientState(101, 10),
+        "connected",
+      ),
       makeSnapshot({ stateVersion: 1, currentPlayerId: 101 }),
       "match.snapshot",
     );
@@ -367,7 +404,10 @@ describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재�
     ).toBe("경기 취소");
 
     let state = applyIncomingSnapshot(
-      applyConnectionPhase(createInitialGomokuClientState(101, 10), "connected"),
+      applyConnectionPhase(
+        createInitialGomokuClientState(101, 10),
+        "connected",
+      ),
       finishedSnapshot,
       "game.updated",
     );
@@ -420,7 +460,10 @@ describe("차례 · 상대 착수 · 결과 · game.error · 연결 끊김/재�
 
   it("일시정지(paused) 상태에서는 기권 버튼(canResign)을 비활성화한다", () => {
     const pausedState = applyIncomingSnapshot(
-      applyConnectionPhase(createInitialGomokuClientState(101, 10), "connected"),
+      applyConnectionPhase(
+        createInitialGomokuClientState(101, 10),
+        "connected",
+      ),
       makeSnapshot({ stateVersion: 3, status: "paused", currentPlayerId: 101 }),
       "match.snapshot",
     );
@@ -507,8 +550,7 @@ describe("실시간 WebSocket 클라이언트(createGameWsClient) 프로토콜 �
             onopen: null as ((ev: unknown) => void) | null,
             onmessage: null as ((ev: { data: string }) => void) | null,
             onclose: null as
-              | ((ev: { code?: number; reason?: string }) => void)
-              | null,
+              ((ev: { code?: number; reason?: string }) => void) | null,
             onerror: null as ((ev: unknown) => void) | null,
             send(data: string) {
               this.sent.push(JSON.parse(data) as WsEnvelope);
@@ -635,8 +677,7 @@ describe("실시간 WebSocket 클라이언트(createGameWsClient) 프로토콜 �
             onopen: null as ((ev: unknown) => void) | null,
             onmessage: null as ((ev: { data: string }) => void) | null,
             onclose: null as
-              | ((ev: { code?: number; reason?: string }) => void)
-              | null,
+              ((ev: { code?: number; reason?: string }) => void) | null,
             onerror: null as ((ev: unknown) => void) | null,
             send(data: string) {
               this.sent.push(JSON.parse(data) as WsEnvelope);
@@ -675,7 +716,9 @@ describe("실시간 WebSocket 클라이언트(createGameWsClient) 프로토콜 �
 
       // 다음 ping 후 500ms 동안 pong이 없으면 재연결 트리거
       vi.advanceTimersByTime(1_000);
-      expect(ws1.sent.filter((m) => m.type === "ping").length).toBeGreaterThanOrEqual(2);
+      expect(
+        ws1.sent.filter((m) => m.type === "ping").length,
+      ).toBeGreaterThanOrEqual(2);
       vi.advanceTimersByTime(550);
       expect(client.getPhase()).toBe("reconnecting");
 

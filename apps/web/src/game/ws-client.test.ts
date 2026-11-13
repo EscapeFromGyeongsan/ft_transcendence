@@ -38,6 +38,28 @@ function authenticate(socket: MinimalWebSocket) {
   receive(socket, "auth.ok", { userId: 1, activeMatchId: null });
 }
 
+describe("#136 재시도하지 않는 종료 코드", () => {
+  it.each([4400, 1008, 1009])(
+    "%s는 자동 재접속을 멈추고 수동 재접속은 허용한다",
+    (code) => {
+      vi.useFakeTimers();
+      const { client, sockets } = setup({});
+      try {
+        authenticate(sockets[0]);
+        sockets[0].onclose?.({ code });
+        vi.advanceTimersByTime(60_000);
+        expect(client.getPhase()).toBe("disconnected");
+        expect(sockets).toHaveLength(1);
+        client.reconnectNow();
+        expect(sockets).toHaveLength(2);
+      } finally {
+        client.disconnect();
+        vi.useRealTimers();
+      }
+    },
+  );
+});
+
 describe("친구 목록을 무효화하는 WebSocket 알림", () => {
   it("인증 후 유효한 presence와 friends.changed를 전달한다", () => {
     const onPresence = vi.fn();

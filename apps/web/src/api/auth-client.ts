@@ -9,6 +9,8 @@ export interface AuthUser {
   createdAt: string;
   /** 내 계정 조회 응답의 비밀번호 보유 여부입니다. 이전 서버 응답에는 없을 수 있습니다. */
   hasPassword?: boolean;
+  /** Only the signed-in account response exposes its 42 link status. */
+  oauth42Linked?: boolean;
 }
 
 export interface TokenPair {

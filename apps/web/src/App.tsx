@@ -29,6 +29,7 @@ import {
   buildPlaceCommand,
   buildResignCommand,
   createInitialGomokuClientState,
+  getGameErrorMessage,
   markCommandPending,
   type GomokuClientState,
 } from "./game/gomoku-state.ts";
@@ -67,6 +68,7 @@ import { Avatar } from "./profile/Avatar.tsx";
 import { LeaderboardView } from "./profile/LeaderboardView.tsx";
 import { ProfileView } from "./profile/ProfileView.tsx";
 import { FriendsView } from "./friends/FriendsView.tsx";
+import { useDialogFocus } from "./ui/use-dialog-focus.ts";
 import { LegalDocumentView, NotFoundView } from "./legal/LegalDocumentView.tsx";
 import {
   parseAppRoute,
@@ -284,6 +286,17 @@ export function App() {
   // Lobby menus & modals
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const logoutDialogRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  const accountAreaRef = useRef<HTMLDivElement | null>(null);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const menuInitialLastRef = useRef(false);
+  useDialogFocus(
+    logoutModalOpen,
+    logoutDialogRef,
+    "#cancelLogoutBtn",
+    submitting,
+  );
 
   // 프로필 화면에서 조회 중인 사용자 (본인 또는 다른 사용자)
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
@@ -307,6 +320,28 @@ export function App() {
   const [othelloState, setOthelloState] = useState<OthelloClientState>(() =>
     createInitialOthelloClientState(null, parseInitialMatchId()),
   );
+  const matchmakingStateRef = useRef(matchmakingState);
+  matchmakingStateRef.current = matchmakingState;
+  const lobbyGameError = gomokuState.gameError ?? othelloState.gameError;
+
+  function updateCurrentUser(user: AuthUser) {
+    setCurrentUser((previous) =>
+      previous?.id === user.id ? { ...previous, ...user } : user,
+    );
+  }
+
+  function leaveQueueForNavigation() {
+    const state = matchmakingStateRef.current;
+    if (!isMatchmakingBusy(state) || state.phase === "leaving") return;
+    const leaving = applyQueueLeaveRequested(state);
+    matchmakingStateRef.current = leaving;
+    setMatchmakingState(leaving);
+    if (!wsClientRef.current?.leaveQueue()) {
+      const idle = applyQueueLeft(leaving);
+      matchmakingStateRef.current = idle;
+      setMatchmakingState(idle);
+    }
+  }
 
   function resetMessages() {
     setErrorMessage(null);
@@ -324,10 +359,9 @@ export function App() {
       next !== "matchmaking" &&
       next !== "gomoku" &&
       next !== "othello" &&
-      isMatchmakingBusy(matchmakingState)
+      isMatchmakingBusy(matchmakingStateRef.current)
     ) {
-      wsClientRef.current?.leaveQueue();
-      setMatchmakingState((prev) => applyQueueLeft(prev));
+      leaveQueueForNavigation();
     }
     setView(next);
   }
@@ -338,6 +372,7 @@ export function App() {
   }
 
   function openLegalDoc(doc: LegalDocKind) {
+    leaveQueueForNavigation();
     if (doc !== view) navigationModeRef.current = "push";
     resetMessages();
     setAccountMenuOpen(false);
@@ -365,7 +400,12 @@ export function App() {
     ) {
       const target = previousViewBeforeLegal;
       setPreviousViewBeforeLegal(null);
-      setView(target);
+      setView(
+        target === "matchmaking" &&
+          !isMatchmakingBusy(matchmakingStateRef.current)
+          ? "lobby"
+          : target,
+      );
       return;
     }
     setView(currentUser ? "lobby" : "login");
@@ -397,6 +437,68 @@ export function App() {
       globalThis.window.removeEventListener("keydown", handleKeyDown);
     };
   }, [logoutModalOpen, accountMenuOpen, submitting]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const items = () => [
+      ...(accountMenuRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitem"]:not([disabled])',
+      ) ?? []),
+    ];
+    const targets = items();
+    (menuInitialLastRef.current ? targets.at(-1) : targets[0])?.focus();
+    menuInitialLastRef.current = false;
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      const targets = items();
+      const current = targets.indexOf(
+        document.activeElement as HTMLButtonElement,
+      );
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const index =
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? targets.length - 1
+              : (current +
+                  (event.key === "ArrowDown" ? 1 : -1) +
+                  targets.length) %
+                targets.length;
+        targets[index]?.focus();
+      } else if (event.key === "Tab") setAccountMenuOpen(false);
+    }
+    function onPointerDown(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        !accountAreaRef.current?.contains(event.target)
+      )
+        setAccountMenuOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [accountMenuOpen]);
+
+  useEffect(() => {
+    if (initializing) return;
+    const frame = requestAnimationFrame(() => {
+      if (
+        accountMenuRef.current ||
+        logoutDialogRef.current ||
+        mainRef.current?.querySelector('[aria-modal="true"]')
+      )
+        return;
+      const heading = mainRef.current?.querySelector<HTMLElement>("h1, h2");
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [view, initializing]);
 
   // 화면 전환 시 브라우저 주소창 경로(/, /terms, /privacy, /me, /leaderboard, /matching, /match/:matchId)를 동기화합니다.
   useEffect(() => {
@@ -452,6 +554,11 @@ export function App() {
     function handlePopState() {
       navigationModeRef.current = "replace";
       const route = parseInitialAppRoute();
+      resetMessages();
+      if (route.kind !== "matchmaking" && route.kind !== "match")
+        leaveQueueForNavigation();
+      setAccountMenuOpen(false);
+      setLogoutModalOpen(false);
       switch (route.kind) {
         case "terms":
           setView("terms");
@@ -472,12 +579,24 @@ export function App() {
           break;
         case "oauthCallback":
           setView("oauthCallback");
+          setErrorMessage(
+            "이미 처리한 42 인증 응답입니다. 이전 화면으로 돌아가 인증을 다시 시작해 주세요.",
+          );
           break;
         case "lobby":
           setView(currentUser ? "lobby" : "login");
           break;
         case "matchmaking":
-          setView(currentUser ? "matchmaking" : "login");
+          if (currentUser && isMatchmakingBusy(matchmakingStateRef.current))
+            setView("matchmaking");
+          else {
+            globalThis.window.history.replaceState(
+              null,
+              "",
+              currentUser ? "/" : "/login",
+            );
+            setView(currentUser ? "lobby" : "login");
+          }
           break;
         case "match":
           if (currentUser) {
@@ -676,11 +795,10 @@ export function App() {
           }
         },
         onQueueJoined({ gameType }) {
-          setMatchmakingState((prev) => applyQueueJoined(prev, { gameType }));
-          setView((current) =>
-            current === "gomoku" || current === "othello"
-              ? current
-              : "matchmaking",
+          setMatchmakingState((prev) =>
+            prev.phase === "joining" || prev.phase === "queued"
+              ? applyQueueJoined(prev, { gameType })
+              : prev,
           );
         },
         onQueueLeft() {
@@ -759,14 +877,47 @@ export function App() {
           setOthelloState((prev) => applyOthelloGameError(prev, payload));
         },
         onError(payload) {
+          const subscribedId = client.getSubscribedMatchId();
+          if (payload.matchId !== undefined && payload.matchId !== subscribedId)
+            return;
+          if (
+            (payload.code === "NOT_FOUND" ||
+              payload.code === "NOT_PARTICIPANT") &&
+            subscribedId !== null
+          ) {
+            client.setSubscribedMatchId(null);
+            saveActiveMatchIdToStorage(null);
+            setGomokuState({
+              ...createInitialGomokuClientState(currentUserId),
+              connectionPhase: client.getPhase(),
+            });
+            setOthelloState({
+              ...createInitialOthelloClientState(currentUserId),
+              connectionPhase: client.getPhase(),
+            });
+            navigationModeRef.current = "replace";
+            setView((current) =>
+              current === "gomoku" || current === "othello" ? "lobby" : current,
+            );
+            setErrorMessage(getGameErrorMessage(payload.code, payload.message));
+            return;
+          }
+          if (
+            isMatchmakingBusy(matchmakingStateRef.current) ||
+            payload.code === "ALREADY_ACTIVE" ||
+            payload.code === "ALREADY_MATCHED"
+          ) {
+            setMatchmakingState((prev) => applyMatchmakingError(prev, payload));
+            setGomokuState((prev) => ({ ...prev, gameError: null }));
+            setOthelloState((prev) => ({ ...prev, gameError: null }));
+            if (payload.code !== "ALREADY_MATCHED")
+              setView((current) =>
+                current === "matchmaking" ? "lobby" : current,
+              );
+            return;
+          }
           setGomokuState((prev) => applyGameError(prev, payload));
           setOthelloState((prev) => applyOthelloGameError(prev, payload));
-          setMatchmakingState((prev) => applyMatchmakingError(prev, payload));
-          if (payload.code !== "ALREADY_MATCHED") {
-            setView((current) =>
-              current === "matchmaking" ? "lobby" : current,
-            );
-          }
         },
         onPlayerDisconnected(payload) {
           setGomokuState((prev) => applyPlayerDisconnected(prev, payload));
@@ -1126,7 +1277,7 @@ export function App() {
             return "friends";
           }
           if (initialRoute.kind === "matchmaking") {
-            return "matchmaking";
+            return "lobby";
           }
           return resumedMatchId !== null ? "gomoku" : "lobby";
         });
@@ -1325,6 +1476,30 @@ export function App() {
     }
   }
 
+  async function handleReturnFromOAuthCallback() {
+    resetMessages();
+    if (!authApi.storage.getTokens()) {
+      leaveSignedOutState({});
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const user = await authApi.getMe();
+      updateCurrentUser(user);
+      setProfileUserId(user.id);
+      navigationModeRef.current = "replace";
+      setView("profile");
+    } catch (error) {
+      if (isTransientError(error)) setErrorMessage(getErrorMessage(error));
+      else {
+        authApi.storage.clearTokens();
+        leaveSignedOutState({ error: getErrorMessage(error) });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   /**
    * 로그인 상태를 모두 버리고 로그인 화면으로 보냅니다. 탈퇴·세션 종료처럼 서버 세션이 이미 없을 때 씁니다.
    * 토큰 삭제는 호출한 쪽이 끝낸 상태여야 하며, 여기서는 화면 상태·메모리 속 사용자 정보만 정리합니다.
@@ -1399,16 +1574,14 @@ export function App() {
     setSubmitting(true);
     try {
       await authApi.logout();
+      leaveSignedOutState({ notice: "안전하게 로그아웃되었습니다." });
     } catch (error) {
       // 로그아웃 요청 중 오류가 발생하더라도 로컬 세션은 종료하고 안내만 남깁니다.
-      setErrorMessage(getErrorMessage(error));
+      leaveSignedOutState({
+        error: `이 기기의 로그인 정보는 지웠습니다. 서버 로그아웃 요청을 완료하지 못했습니다. ${getErrorMessage(error)}`,
+      });
     } finally {
-      setCurrentUser(null);
-      setAccountMenuOpen(false);
-      setLogoutModalOpen(false);
       setSubmitting(false);
-      setView("login");
-      setNoticeMessage("안전하게 로그아웃되었습니다.");
     }
   }
 
@@ -1439,7 +1612,7 @@ export function App() {
             view === "terms" ||
             view === "privacy" ||
             view === "notFound") ? (
-            <div className="cbc-account-area">
+            <div className="cbc-account-area" ref={accountAreaRef}>
               <span className="cbc-security-pill">
                 <span className="cbc-pulse-dot" />
                 {gomokuState.connectionPhase === "connected"
@@ -1456,6 +1629,15 @@ export function App() {
                 className="cbc-avatar-trigger"
                 aria-expanded={accountMenuOpen}
                 aria-haspopup="menu"
+                aria-controls="account-menu"
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    menuInitialLastRef.current = event.key === "ArrowUp";
+                    setAccountMenuOpen(true);
+                  }
+                }}
                 onClick={() => setAccountMenuOpen((prev) => !prev)}
               >
                 <Avatar
@@ -1468,6 +1650,8 @@ export function App() {
               {accountMenuOpen && (
                 <div
                   className="cbc-account-dropdown"
+                  id="account-menu"
+                  ref={accountMenuRef}
                   role="menu"
                   aria-label="계정 메뉴"
                 >
@@ -1612,7 +1796,28 @@ export function App() {
       </header>
 
       {/* Main Content */}
-      <main className="cbc-main">
+      <main className="cbc-main" ref={mainRef}>
+        {noticeMessage && (
+          <div
+            className="cbc-app-feedback cbc-success-banner"
+            role="status"
+            data-testid="app-notice"
+          >
+            <span>{noticeMessage}</span>
+          </div>
+        )}
+        {errorMessage &&
+          !["login", "register", "twoFactor", "oauthCallback"].includes(
+            view,
+          ) && (
+            <div
+              className="cbc-app-feedback cbc-error-banner"
+              role="alert"
+              data-testid="app-error"
+            >
+              <span>{errorMessage}</span>
+            </div>
+          )}
         {view === "terms" || view === "privacy" ? (
           <LegalDocumentView
             activeDoc={view}
@@ -1660,11 +1865,10 @@ export function App() {
                       type="button"
                       className="cbc-btn-primary"
                       data-testid="oauth-callback-return-btn"
-                      onClick={() =>
-                        switchView(currentUser ? "profile" : "login")
-                      }
+                      disabled={submitting}
+                      onClick={() => void handleReturnFromOAuthCallback()}
                     >
-                      {currentUser
+                      {currentUser || authApi.storage.getTokens()
                         ? "내 프로필로 돌아가기"
                         : "로그인 화면으로 돌아가기"}
                     </button>
@@ -1712,16 +1916,6 @@ export function App() {
                   계정에 로그인해 대국을 시작하세요.
                 </p>
               </div>
-
-              {noticeMessage && (
-                <div
-                  className="cbc-success-banner"
-                  role="status"
-                  style={{ marginBottom: "1rem" }}
-                >
-                  <span>{noticeMessage}</span>
-                </div>
-              )}
 
               <form
                 id="loginForm"
@@ -2360,7 +2554,7 @@ export function App() {
             key={profileUserId ?? currentUser.id}
             userId={profileUserId ?? currentUser.id}
             currentUser={currentUser}
-            onCurrentUserUpdated={setCurrentUser}
+            onCurrentUserUpdated={updateCurrentUser}
             onOpenProfile={openProfile}
             onOpenLeaderboard={() => switchView("leaderboard")}
             onOpenFriends={openFriends}
@@ -2419,18 +2613,6 @@ export function App() {
         ) : (
           /* Authenticated Lobby View (04_home_lobby + 20_logout_modal) */
           <div className="cbc-lobby-container" data-testid="lobby-view">
-            {noticeMessage && (
-              <div className="cbc-success-banner" role="status">
-                <span>{noticeMessage}</span>
-              </div>
-            )}
-
-            {errorMessage && (
-              <div className="cbc-error-banner" role="alert">
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
             {matchmakingState.error && (
               <div
                 className="cbc-error-banner"
@@ -2454,10 +2636,10 @@ export function App() {
               </div>
             )}
 
-            {gomokuState.gameError && (
+            {lobbyGameError && !matchmakingState.error && (
               <div className="cbc-error-banner" role="alert">
                 <span>
-                  [{gomokuState.gameError.code}] {gomokuState.gameError.message}
+                  [{lobbyGameError.code}] {lobbyGameError.message}
                 </span>
               </div>
             )}
@@ -2700,6 +2882,7 @@ export function App() {
           id="modalOverlay"
           className="cbc-modal-backdrop"
           onClick={() => {
+            if (submitting) return;
             setLogoutModalOpen(false);
             lastLogoutTriggerRef.current?.focus();
           }}
@@ -2710,6 +2893,8 @@ export function App() {
             aria-labelledby="logout-title"
             aria-describedby="logout-desc"
             className="cbc-modal-dialog"
+            ref={logoutDialogRef}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="cbc-modal-alert-icon" aria-hidden="true">

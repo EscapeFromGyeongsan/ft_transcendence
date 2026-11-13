@@ -213,11 +213,7 @@ export function MatchmakingView({
             </span>
           </div>
 
-          <div
-            className="cbc-matchmaking-radar-wrap"
-            role="status"
-            aria-live="polite"
-          >
+          <div className="cbc-matchmaking-radar-wrap">
             <div className="cbc-matchmaking-radar-circle" aria-hidden="true">
               <div className="cbc-matchmaking-radar-ping" />
               <svg className="cbc-matchmaking-radar-svg" viewBox="0 0 160 160">
@@ -259,7 +255,13 @@ export function MatchmakingView({
             </div>
 
             <div className="cbc-matchmaking-status-copy">
-              <h2 className="cbc-matchmaking-status-title">{statusHeadline}</h2>
+              <h2
+                className="cbc-matchmaking-status-title"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {statusHeadline}
+              </h2>
               <p className="m-0 text-sm/5 text-on-surface-variant">
                 {catalog.waitingDescription}
               </p>
@@ -270,6 +272,8 @@ export function MatchmakingView({
               <strong
                 className="cbc-matchmaking-elapsed-value"
                 data-testid="matchmaking-elapsed-timer"
+                role="timer"
+                aria-live="off"
               >
                 {elapsedText}
               </strong>

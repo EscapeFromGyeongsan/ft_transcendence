@@ -60,6 +60,23 @@ input {
 }
 
 /* App Shell */
+.cbc-app-feedback {
+  width: 100%;
+  max-width: 80rem;
+  margin-bottom: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .cbc-shell {
   @apply flex min-h-screen flex-col justify-between;
   /* Decorative glows must not enlarge the mobile page's scrollable width. */
