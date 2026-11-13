@@ -162,6 +162,14 @@ async function mockActiveMatch(
   };
 }
 
+async function addMatchHistoryEntry(page: Page, matchId: number) {
+  // Keep the same document and mocked socket while exercising the match route.
+  await page.evaluate((id) => {
+    window.history.pushState(null, "", `/match/${id}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, matchId);
+}
+
 for (const gameType of ["gomoku", "othello"] as const) {
   for (const kind of ["terms", "privacy"] as const) {
     test(`${gameType} 활성 대국이 있어도 /${kind} 직접 접근·새로고침 화면을 유지한다`, async ({
@@ -240,8 +248,8 @@ test("다른 대국의 뒤로·앞으로 가기는 URL과 판·구독·착수 �
 
   await page.getByTestId("leave-match-btn").click();
   await expect(page).toHaveURL(/\/$/);
-  await page.locator("#matchIdInput").fill("43");
-  await page.getByRole("button", { name: "대국실 입장", exact: true }).click();
+  await expect(page.getByTestId("lobby-view")).toBeVisible();
+  await addMatchHistoryEntry(page, 43);
   await match.waitForSnapshot();
   await expect(page).toHaveURL(/\/match\/43$/);
   expect(match.subscriptions.at(-1)).toBe(43);
@@ -250,7 +258,7 @@ test("다른 대국의 뒤로·앞으로 가기는 URL과 판·구독·착수 �
 
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator("#matchIdInput")).toBeVisible();
+  await expect(page.getByTestId("lobby-view")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/match\/42$/);
   await match.waitForSnapshot();
@@ -269,7 +277,7 @@ test("다른 대국의 뒤로·앞으로 가기는 URL과 판·구독·착수 �
 
   await page.goForward();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator("#matchIdInput")).toBeVisible();
+  await expect(page.getByTestId("lobby-view")).toBeVisible();
   await page.goForward();
   await expect(page).toHaveURL(/\/match\/43$/);
   await match.waitForSnapshot();
@@ -290,10 +298,8 @@ for (const firstGameType of ["gomoku", "othello"] as const) {
 
     await page.getByTestId("leave-match-btn").click();
     await expect(page).toHaveURL(/\/$/);
-    await page.locator("#matchIdInput").fill("43");
-    await page
-      .getByRole("button", { name: "대국실 입장", exact: true })
-      .click();
+    await expect(page.getByTestId("lobby-view")).toBeVisible();
+    await addMatchHistoryEntry(page, 43);
     await match.waitForSnapshot();
     await expect(page).toHaveURL(/\/match\/43$/);
     await expect(page.getByTestId(`${otherGameType}-match-view`)).toBeVisible();

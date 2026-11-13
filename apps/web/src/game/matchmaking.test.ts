@@ -17,7 +17,6 @@ import {
   formatQueueElapsed,
   getGameCatalogEntry,
   isMatchmakingBusy,
-  selectMatchmakingGame,
 } from "./matchmaking-state.ts";
 import {
   createGameWsClient,
@@ -45,17 +44,11 @@ describe("게임 선택 카탈로그 및 사전 규칙 안내 (FR-CAT-01, FR-CAT
 });
 
 describe("자동 매칭 신청·취소·성립 상태 전이 (IF-06, FR-MATCH-01, FR-MATCH-02)", () => {
-  it("게임 선택 → queue.join 신청 → queue.joined 대기 → queue.leave 요청 → queue.left 취소 흐름을 처리한다", () => {
+  it("queue.join 신청 → queue.joined 대기 → queue.leave 요청 → queue.left 취소 흐름을 처리한다", () => {
     const joinedAt = 1_700_000_000_000;
     let state = createInitialMatchmakingState("gomoku");
     expect(state.phase).toBe("idle");
     expect(isMatchmakingBusy(state)).toBe(false);
-
-    // 로비에서 게임 선택 변경 가능
-    state = selectMatchmakingGame(state, "othello");
-    expect(state.selectedGameType).toBe("othello");
-    state = selectMatchmakingGame(state, "gomoku");
-    expect(state.selectedGameType).toBe("gomoku");
 
     // 1. 매칭 신청 요청 (joining)
     state = applyQueueJoinRequested(state, "gomoku");
@@ -63,10 +56,8 @@ describe("자동 매칭 신청·취소·성립 상태 전이 (IF-06, FR-MATCH-01
     expect(state.queuedGameType).toBe("gomoku");
     expect(isMatchmakingBusy(state)).toBe(true);
 
-    // 대기열 진입 중에는 게임 선택이 바뀌지 않음
-    expect(selectMatchmakingGame(state, "othello").selectedGameType).toBe(
-      "gomoku",
-    );
+    // 대기열 진입 중에는 다른 게임의 매칭 신청을 무시함
+    expect(applyQueueJoinRequested(state, "othello")).toBe(state);
 
     // 2. 서버 queue.joined 수신 (queued)
     state = applyQueueJoined(state, { gameType: "gomoku" }, joinedAt);
