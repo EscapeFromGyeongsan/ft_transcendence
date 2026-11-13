@@ -287,7 +287,7 @@ The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomok
 
 | Member | Responsibility and implementation areas |
 |---|---|
-| jyoo (A) | Product scope, frontend screens, documentation and evaluation collection |
+| jyoo (A) | Product Owner (PO); product scope, frontend screens, documentation and evaluation collection |
 | yunhpark (B) | Technical lead; authentication, database, command persistence/concurrency, statistics and integration support |
 | yoshin (C) | Game rules and Gomoku/Othello engines |
 | sipyeon (D) | WebSocket transport, matchmaking, subscriptions and reconnection |
