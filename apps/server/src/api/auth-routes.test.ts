@@ -278,6 +278,19 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     expect(limited.statusCode).toBe(429);
     expect(limited.json().error.code).toBe("RATE_LIMITED");
   });
+
+  test("refresh allows 60 per minute so reloads do not hit the login limit (#149)", async () => {
+    await register(account);
+    let token = (await login(account)).json().refreshToken;
+    for (let i = 0; i < 60; i += 1) {
+      const response = await refresh(token);
+      expect(response.statusCode).toBe(200);
+      token = response.json().refreshToken;
+    }
+    const limited = await refresh(token);
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error.code).toBe("RATE_LIMITED");
+  });
   test("a body over 1 MiB returns 413, not 500", async () => {
     const response = await app.inject({
       method: "POST",
