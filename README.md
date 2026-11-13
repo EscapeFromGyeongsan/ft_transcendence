@@ -293,7 +293,7 @@ The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomok
 | sipyeon (D) | WebSocket transport, matchmaking, subscriptions and reconnection |
 | dong-hki (E) | Development/deployment environment and social contracts/implementation |
 
-Commits and PRs record individual contributions. The [roadmap](Document/roadmap.md) preserves the original role/schedule plan; the SDS records implementation references. Work uses issues, feature branches and reviewed PRs under [CONTRIBUTING.md](CONTRIBUTING.md).
+Commits and PRs record individual contributions. The [roadmap](Document/roadmap.md) preserves the original role/schedule plan; the SDS records implementation references. Work uses issues, feature branches and reviewed PRs under [CONTRIBUTING.md](CONTRIBUTING.md). Team communication used Discord and KakaoTalk alongside GitHub issues, PRs and reviews.
 
 ### Individual Contributions
 
@@ -430,6 +430,14 @@ Document/           Design, contracts and evaluation plans
 - [Roadmap](Document/roadmap.md), [module matrix](Document/evaluation/module-matrix.md), [mandatory checklist](Document/evaluation/mandatory-checklist.md).
 - [Documentation specification](Document/cyber_boardgame_documentation_spec.md), [contribution rules](CONTRIBUTING.md), [TSDoc conventions](Document/code-conventions.md).
 - Dependencies and versions: [package.json](package.json), [package-lock.json](package-lock.json). Package license notices accompany dependencies: React/Fastify/Vite/Vitest/pg use MIT; Drizzle ORM and Playwright use Apache-2.0. No root project license currently exists; dependency licenses do not license this project's code. Asset/font attribution review remains required before submission.
+
+External references (official documentation and standards):
+
+- Documents: [ISO/IEC/IEEE 29148:2018](https://doi.org/10.1109/IEEESTD.2018.8559686) (SRS structure, successor of IEEE 830-1998) and [IEEE 1016-2009](https://doi.org/10.1109/IEEESTD.2009.5167255) (SDS structure).
+- Frontend: [React](https://react.dev/), [Vite](https://vite.dev/), [Tailwind CSS](https://tailwindcss.com/docs).
+- Backend and data: [Fastify](https://fastify.dev/docs/latest/), [Drizzle ORM](https://orm.drizzle.team/docs/overview), [PostgreSQL 17](https://www.postgresql.org/docs/17/), [node-postgres](https://node-postgres.com/).
+- Protocols: [RFC 6455 WebSocket](https://www.rfc-editor.org/rfc/rfc6455), [RFC 6749 OAuth 2.0](https://www.rfc-editor.org/rfc/rfc6749), [42 API](https://api.intra.42.fr/apidoc), [RFC 6238 TOTP](https://www.rfc-editor.org/rfc/rfc6238), [RFC 9106 Argon2](https://www.rfc-editor.org/rfc/rfc9106).
+- Testing and deployment: [Vitest](https://vitest.dev/), [Playwright](https://playwright.dev/), [Docker Compose](https://docs.docker.com/compose/), [Nginx](https://nginx.org/en/docs/).
 
 ## AI usage
 
