@@ -4,11 +4,13 @@ import {
   authApi,
   isOAuthLinkedResult,
   isTokenPair,
+  setAuthFailureHandler,
   type AuthUser,
 } from "./api/auth-client.ts";
 import {
   getAuthFieldErrors,
   getErrorMessage,
+  getOAuthStartErrorMessage,
   isTransientError,
   type AuthFieldErrors,
 } from "./api/errors.ts";
@@ -1165,7 +1167,7 @@ export function App() {
         globalThis.window.location.assign(authorizeUrl);
       }
     } catch (error) {
-      setErrorMessage(getErrorMessage(error));
+      setErrorMessage(getOAuthStartErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -1338,6 +1340,22 @@ export function App() {
     if (feedback.notice) setNoticeMessage(feedback.notice);
     if (feedback.error) setErrorMessage(feedback.error);
   }
+
+  // 세션이 끝나 refresh가 거절되면(만료·로그아웃·폐기) 어느 화면에서든 로그인 화면으로
+  // 돌아갑니다. WebSocket 재연결도 authApi.refresh를 쓰므로 같은 경로로 처리됩니다.
+  const signedInRef = useRef(false);
+  signedInRef.current = currentUser !== null;
+  const leaveSignedOutStateRef = useRef(leaveSignedOutState);
+  leaveSignedOutStateRef.current = leaveSignedOutState;
+  useEffect(() => {
+    setAuthFailureHandler(() => {
+      if (!signedInRef.current) return;
+      leaveSignedOutStateRef.current({
+        error: "세션이 만료되었습니다. 다시 로그인해 주세요.",
+      });
+    });
+    return () => setAuthFailureHandler(undefined);
+  }, []);
 
   /** 회원 탈퇴 성공: 서버가 세션을 모두 폐기했고 `deleteAccount`가 토큰을 지운 뒤 호출됩니다. */
   function handleAccountDeleted() {

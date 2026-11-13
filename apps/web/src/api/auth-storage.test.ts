@@ -276,33 +276,46 @@ describe("메모리 access token 복원", () => {
     });
   });
 
-  it.each(["network", "rejected"])(
-    "복원 refresh가 %s로 실패하면 저장 토큰을 지우고 보호 요청을 보내지 않는다",
-    async (failure) => {
-      const { localStorage } = installBrowserStorage();
-      localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
-      const fetchMock = vi.fn<typeof fetch>();
-      if (failure === "network")
-        fetchMock.mockRejectedValueOnce(new TypeError("Network failure"));
-      else
-        fetchMock.mockResolvedValueOnce(
-          jsonResponse(401, {
-            error: { code: "UNAUTHENTICATED", message: "Revoked" },
-          }),
-        );
-      const onAuthFailure = vi.fn();
-      const client = createAuthApiClient({
-        fetchImpl: fetchMock,
-        onAuthFailure,
-      });
-      await expect(client.getMe()).rejects.toThrow();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/refresh");
-      expect(client.storage.getTokens()).toBeNull();
-      expect(localStorage.length).toBe(0);
-      expect(onAuthFailure).toHaveBeenCalledTimes(1);
-    },
-  );
+  it("복원 refresh가 거절되면 저장 토큰을 지우고 보호 요청을 보내지 않는다", async () => {
+    const { localStorage } = installBrowserStorage();
+    localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(401, {
+        error: { code: "UNAUTHENTICATED", message: "Revoked" },
+      }),
+    );
+    const onAuthFailure = vi.fn();
+    const client = createAuthApiClient({
+      fetchImpl: fetchMock,
+      onAuthFailure,
+    });
+    await expect(client.getMe()).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/refresh");
+    expect(client.storage.getTokens()).toBeNull();
+    expect(localStorage.length).toBe(0);
+    expect(onAuthFailure).toHaveBeenCalledTimes(1);
+  });
+
+  // 오프라인 새로고침: 요청이 서버에 닿지 않았으므로 refresh token은 아직 유효합니다.
+  it("복원 refresh가 네트워크 실패면 저장 토큰을 남기고 로그아웃 처리하지 않는다", async () => {
+    const { localStorage } = installBrowserStorage();
+    localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockRejectedValueOnce(new TypeError("Network failure"));
+    const onAuthFailure = vi.fn();
+    const client = createAuthApiClient({
+      fetchImpl: fetchMock,
+      onAuthFailure,
+    });
+    await expect(client.getMe()).rejects.toBeInstanceOf(TypeError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/refresh");
+    expect(client.storage.getTokens()?.refreshToken).toBe(tokens.refreshToken);
+    expect(localStorage.getItem(REFRESH_KEY)).toBe(tokens.refreshToken);
+    expect(onAuthFailure).not.toHaveBeenCalled();
+  });
 });
 
 describe("탭 간 refresh와 로그인 경계", () => {

@@ -155,3 +155,56 @@ describe("친구 목록을 무효화하는 WebSocket 알림", () => {
     expect(onFriendsChanged).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("수동 재접속", () => {
+  it("자동 재시도를 다 쓴 뒤 reconnectNow는 재시도 횟수를 처음부터 다시 센다", () => {
+    vi.useFakeTimers();
+    try {
+      const sockets: MinimalWebSocket[] = [];
+      const phases: Array<[string, number]> = [];
+      const client = createGameWsClient({
+        getAccessToken: () => "access-token",
+        heartbeatIntervalMs: 0,
+        reconnectDelaysMs: [10],
+        maxReconnectAttempts: 2,
+        createWebSocket: () => {
+          const socket: MinimalWebSocket = {
+            readyState: 1,
+            onopen: null,
+            onmessage: null,
+            onclose: null,
+            onerror: null,
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          sockets.push(socket);
+          return socket;
+        },
+        handlers: {
+          onPhaseChange: (phase, attempt) => phases.push([phase, attempt]),
+        },
+      });
+      client.connect();
+      // 연결이 끊기면 2회 자동 재시도 후 포기합니다.
+      for (let i = 0; i < 3; i++) {
+        sockets.at(-1)?.onclose?.({ code: 1006, reason: "" });
+        vi.advanceTimersByTime(10);
+      }
+      expect(sockets).toHaveLength(3);
+      expect(client.getPhase()).toBe("disconnected");
+
+      client.reconnectNow();
+      expect(sockets).toHaveLength(4);
+      // 수동 재접속 뒤 다시 끊겨도 자동 재시도가 2회 더 이어집니다.
+      for (let i = 0; i < 2; i++) {
+        sockets.at(-1)?.onclose?.({ code: 1006, reason: "" });
+        vi.advanceTimersByTime(10);
+      }
+      expect(sockets).toHaveLength(6);
+      expect(phases.at(-1)?.[0]).toBe("reconnecting");
+      client.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
