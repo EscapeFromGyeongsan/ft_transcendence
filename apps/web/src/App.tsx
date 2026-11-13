@@ -12,7 +12,12 @@ import {
   isTransientError,
   type AuthFieldErrors,
 } from "./api/errors.ts";
-import { NICKNAME_PATTERN, validateNickname } from "./api/profile-format.ts";
+import {
+  NICKNAME_PATTERN,
+  validateEmail,
+  validateNickname,
+  validatePassword,
+} from "./api/profile-format.ts";
 import { GomokuMatchView } from "./game/GomokuMatchView.tsx";
 import { MatchmakingView } from "./game/MatchmakingView.tsx";
 import { OthelloMatchView } from "./game/OthelloMatchView.tsx";
@@ -1175,12 +1180,24 @@ export function App() {
   async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     resetMessages();
+
+    const trimmedEmail = loginEmail.trim();
+    const emailProblem = validateEmail(trimmedEmail);
+    const passwordProblem = validatePassword(loginPassword);
+    if (emailProblem || passwordProblem) {
+      setFieldErrors({
+        ...(emailProblem && { email: emailProblem }),
+        ...(passwordProblem && { password: passwordProblem }),
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       const result = await authApi.login(
         {
-          email: loginEmail.trim(),
+          email: trimmedEmail,
           password: loginPassword,
         },
         rememberMe,
@@ -1210,9 +1227,15 @@ export function App() {
     resetMessages();
 
     const trimmedNickname = regNickname.trim();
+    const emailProblem = validateEmail(regEmail.trim());
+    const passwordProblem = validatePassword(regPassword);
     const nicknameProblem = validateNickname(trimmedNickname);
-    if (nicknameProblem) {
-      setFieldErrors({ nickname: nicknameProblem });
+    if (emailProblem || passwordProblem || nicknameProblem) {
+      setFieldErrors({
+        ...(emailProblem && { email: emailProblem }),
+        ...(passwordProblem && { password: passwordProblem }),
+        ...(nicknameProblem && { nickname: nicknameProblem }),
+      });
       return;
     }
 
