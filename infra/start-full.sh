@@ -13,9 +13,10 @@ env_file=.env.full
 
 sh infra/prepare-full.sh
 
-# Prints the value of KEY in the env file (empty if unset).
+# Prints KEY the way Compose resolves it: the environment first, then the env
+# file (empty if unset in both).
 value_of() {
-  sed -n "s/^$1=//p" "$env_file" | tail -n 1
+  printenv "$1" || sed -n "s/^$1=//p" "$env_file" | tail -n 1
 }
 
 # Prints this computer's first IPv4 address (empty if none is found).
@@ -29,7 +30,9 @@ detect_host() {
       fi
     done
   fi
-  hostname -I 2>/dev/null | awk '{ print $1 }' || true
+  # The list can start with IPv6 addresses; the demo uses IPv4 only.
+  hostname -I 2>/dev/null | tr ' ' '\n' |
+    grep -Em 1 '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || true
 }
 
 # Succeeds when the certificate's SAN list has exactly this host.
@@ -54,7 +57,7 @@ case "$mode" in
     [ -n "$host" ] || host="$(detect_host)"
     if [ -z "$host" ]; then
       echo "Could not find this computer's IP address." >&2
-      echo "Run make HOST=<IP>, or make local for this computer only." >&2
+      echo "Run make HOST=<IPv4>, or make local for this computer only." >&2
       exit 1
     fi
     case "$host" in
