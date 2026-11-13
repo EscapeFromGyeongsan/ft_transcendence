@@ -78,6 +78,67 @@ test("two players finish a Gomoku match after reconnecting and see the result in
   }
 });
 
+test("a board error does not stay on the lobby after leaving the match (#162)", async ({
+  page: firstPage,
+  browser,
+  baseURL,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop",
+    "Runs in one project per queue",
+  );
+  test.setTimeout(60_000);
+  const secondContext = await browser.newContext({ baseURL });
+
+  try {
+    const secondPage = await secondContext.newPage();
+    const suffix = randomUUID().slice(0, 8);
+    const firstName = `first_${suffix}`;
+    await register(firstPage, firstName);
+    await register(secondPage, `second_${suffix}`);
+
+    await firstPage.getByTestId("start-matchmaking-gomoku").click();
+    await expect(firstPage.getByTestId("matchmaking-view")).toBeVisible();
+    await secondPage.getByTestId("start-matchmaking-gomoku").click();
+    await expect(firstPage.getByTestId("gomoku-match-view")).toBeVisible();
+    await expect(secondPage.getByTestId("gomoku-match-view")).toBeVisible();
+    await expect(firstPage.getByTestId("player-card-black")).not.toHaveText(
+      /대기 중/,
+    );
+    const firstIsBlack = await firstPage
+      .getByTestId("player-card-black")
+      .getByText(firstName, { exact: false })
+      .isVisible();
+    const black = firstIsBlack ? firstPage : secondPage;
+    const white = firstIsBlack ? secondPage : firstPage;
+    await cell(black, 7, 7).click();
+    await expect(cell(white, 7, 7)).toHaveAttribute("data-cell-state", "black");
+
+    // The board blocks occupied cells, so rewrite the outgoing (7, 8) command
+    // to (7, 7) and let the server answer INVALID_ACTION.
+    await white.evaluate(() => {
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (data) {
+        if (typeof data === "string" && data.includes('"place"'))
+          data = data.replace('"col":8', '"col":7');
+        return send.call(this, data);
+      };
+    });
+    await cell(white, 7, 8).click();
+    await expect(white.getByTestId("game-error-banner")).toContainText(
+      "INVALID_ACTION",
+    );
+
+    await white.locator(".cbc-brand").click();
+    await expect(white.getByTestId("lobby-view")).toBeVisible();
+    await expect(
+      white.getByTestId("lobby-view").getByText("INVALID_ACTION"),
+    ).toHaveCount(0);
+  } finally {
+    await secondContext.close();
+  }
+});
+
 async function register(page: Page, nickname: string) {
   await page.goto("/");
   await page.getByRole("button", { name: "회원가입", exact: true }).click();
