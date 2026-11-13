@@ -20,7 +20,13 @@ export function createUserService(db: Database) {
       changes: repo.ProfileUpdate,
     ): Promise<UpdateProfileResult> {
       try {
-        const user = await repo.updateProfile(db, userId, changes);
+        const user = await repo.updateProfile(
+          db,
+          userId,
+          changes.nickname === undefined
+            ? changes
+            : { ...changes, nickname: changes.nickname.normalize("NFC") },
+        );
         return user ? { ok: true, user } : { ok: false, code: "NOT_FOUND" };
       } catch (error) {
         if (uniqueViolation(error) === "users_nickname_unique") {

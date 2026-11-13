@@ -96,6 +96,9 @@ describe.skipIf(!testDatabaseUrl)("user profile with PostgreSQL", () => {
     const taken = await patchNickname({ nickname: "p2" });
     expect(taken.statusCode).toBe(409);
     expect(taken.json().error.code).toBe("NICKNAME_TAKEN");
+    const takenUpper = await patchNickname({ nickname: "P2" });
+    expect(takenUpper.statusCode).toBe(409);
+    expect(takenUpper.json().error.code).toBe("NICKNAME_TAKEN");
     expect((await patchNickname({ nickname: "a b" })).statusCode).toBe(422);
   });
 

@@ -487,6 +487,7 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 | `POST /api/auth/oauth/42/callback` | 200 | 400, 401 (`OAUTH_STATE_INVALID`, `OAUTH_FAILED`, `UNAUTHENTICATED`), 409 (`EMAIL_TAKEN`, `OAUTH_ACCOUNT_LINKED`, `OAUTH_ALREADY_LINKED`), 413, 415, 422 (`VALIDATION_ERROR`, `OAUTH_EMAIL_MISSING`), 429, 500, 502 (`OAUTH_PROVIDER_ERROR`), 503 |
 | `GET /api/users/me` | 200 | 401, 500, 503 |
 | `PATCH /api/users/me` | 200 | 400, 401, 409 (`NICKNAME_TAKEN`), 413, 415, 422, 500, 503 |
+| `DELETE /api/users/me` (#84) | 204 | 400 (`BAD_REQUEST`, `INVALID_CREDENTIALS`, `INVALID_TWO_FACTOR_CODE`), 401, 403 (`RECENT_LOGIN_REQUIRED`), 409 (`ACTIVE_MATCH`), 413, 415, 422, 429, 500, 503 |
 | `GET /api/users/{userId}` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/users/{userId}/stats` | 200 | 401, 403 (`RECORDS_PRIVATE`), 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/users/{userId}/matches` | 200 | 401, 403 (`RECORDS_PRIVATE`), 404 (`NOT_FOUND`), 422, 500, 503 |
@@ -495,12 +496,16 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 | `DELETE /api/users/me/avatar` (PR #15) | 204 | 400, 401, 413, 415, 500, 503 |
 | `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 500, 503 |
 
+- 닉네임은 NFC로 정규화해 저장하고, 대소문자만 다른 닉네임도 중복(409 `NICKNAME_TAKEN`)으로 본다(`0007_case_insensitive_nickname.sql`). 가입·`PATCH /api/users/me`·42 첫 로그인에 같이 적용된다.
+- 42 이메일이 없거나 254자를 넘으면 계정을 만들지 않고 422 `OAUTH_EMAIL_MISSING`으로 답한다.
 - `me` 경로는 인증된 사용자 자신만 다룬다. 전적 공개 권한은 대상 사용자와 인증된 조회자를 비교한다(11.4절).
 - 경기 조회·명령 API는 REST에 없다. 경기는 WebSocket(IF-03, D)으로 다루고, 그 오류는 8절 `GameError`를 쓴다.
 
 ### 11.4 전적 공개 설정과 조회 권한 (FR-PRO-04, DEC-05)
 
 `users.records_public`은 `boolean NOT NULL DEFAULT true`다. 새 migration `0004_records_public.sql`이 기존 사용자도 공개 상태로 유지한다. 본인 계정 DTO(`id`, `email`, `nickname`, `avatarUrl`, `createdAt`)에 필수 boolean `recordsPublic`을 추가한다. 가입 응답의 `user`, `GET /api/users/me`, 프로필 변경 및 아바타 업로드 응답이 같은 DTO를 사용한다. 로그인·refresh 응답은 기존 토큰 형식을 유지한다.
+
+`GET /api/users/me`만 이 DTO에 필수 boolean `hasPassword`(비밀번호 로그인 가능 여부)를 더한다. 42로만 가입한 계정은 `false`이고, 탈퇴 화면이 본인 확인 입력란(비밀번호 또는 2FA 코드)을 고를 때 쓴다(#84).
 
 `PATCH /api/users/me`는 `nickname`과 `recordsPublic` 중 하나 이상을 받으며 두 필드를 함께 보낼 수 있다.
 
