@@ -65,7 +65,6 @@ import {
   createInitialMatchmakingState,
   getGameCatalogEntry,
   isMatchmakingBusy,
-  selectMatchmakingGame,
   type MatchmakingClientState,
 } from "./game/matchmaking-state.ts";
 import { createGameWsClient, type GameWsClient } from "./game/ws-client.ts";
@@ -318,7 +317,6 @@ export function App() {
     useState<MatchmakingClientState>(() =>
       createInitialMatchmakingState("gomoku"),
     );
-  const [matchIdInput, setMatchIdInput] = useState("");
   const [gomokuState, setGomokuState] = useState<GomokuClientState>(() =>
     createInitialGomokuClientState(null, parseInitialMatchId()),
   );
@@ -328,6 +326,11 @@ export function App() {
   const matchmakingStateRef = useRef(matchmakingState);
   matchmakingStateRef.current = matchmakingState;
   const lobbyGameError = gomokuState.gameError ?? othelloState.gameError;
+  const activeLobbyMatch = [gomokuState, othelloState]
+    .map(({ matchId, snapshot }) =>
+      snapshot?.matchId === matchId ? snapshot : null,
+    )
+    .find((snapshot) => snapshot !== null && snapshot.status !== "finished");
 
   function updateCurrentUser(user: AuthUser) {
     setCurrentUser((previous) =>
@@ -978,19 +981,12 @@ export function App() {
     switchView("profile");
   }
 
-  function handleSelectGame(gameType: GameType) {
-    resetMessages();
-    setMatchmakingState((prev) => selectMatchmakingGame(prev, gameType));
-  }
-
-  function handleStartMatchmaking(
-    gameType: GameType = matchmakingState.selectedGameType,
-  ) {
+  function handleStartMatchmaking(gameType: GameType) {
     resetMessages();
     const catalog = getGameCatalogEntry(gameType);
     if (!catalog.playable) {
       setErrorMessage(
-        `${catalog.shortTitle} 실시간 매칭은 현재 준비 중입니다. 오목(15×15)을 선택해 대국을 시작해 주세요.`,
+        `${catalog.shortTitle} 실시간 매칭은 현재 준비 중입니다.`,
       );
       return;
     }
@@ -1022,19 +1018,6 @@ export function App() {
 
   function handleDismissMatchmakingError() {
     setMatchmakingState((prev) => clearMatchmakingError(prev));
-  }
-
-  function handleSubscribeByMatchId(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    resetMessages();
-    const parsedId = Number.parseInt(matchIdInput.trim(), 10);
-    if (!Number.isInteger(parsedId) || parsedId <= 0) {
-      setErrorMessage("유효한 대국 번호(양의 정수 matchId)를 입력해 주세요.");
-      return;
-    }
-
-    navigationModeRef.current = "push";
-    openMatch(parsedId);
   }
 
   function openMatch(matchId: number) {
@@ -2681,6 +2664,26 @@ export function App() {
               </div>
             )}
 
+            {activeLobbyMatch && (
+              <section
+                aria-label="진행 중인 대국"
+                className="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 sm:p-5"
+              >
+                <button
+                  type="button"
+                  className="cbc-btn-primary sm:w-auto"
+                  data-testid={
+                    activeLobbyMatch.gameType === "gomoku"
+                      ? "return-active-match-btn"
+                      : "return-active-othello-match-btn"
+                  }
+                  onClick={() => switchView(activeLobbyMatch.gameType)}
+                >
+                  {`진행 중인 ${getGameCatalogEntry(activeLobbyMatch.gameType).shortTitle} 대국(#${activeLobbyMatch.matchId}) 복귀`}
+                </button>
+              </section>
+            )}
+
             <section className="cbc-welcome-banner">
               <div>
                 <span
@@ -2763,151 +2766,72 @@ export function App() {
 
             {/* 게임 선택 카탈로그 및 매칭 시작 (FR-CAT-01, FR-CAT-02, FR-MATCH-01) */}
             <section className="cbc-lobby-grid" aria-label="추천 게임">
-              {GAME_CATALOG_LIST.map((entry) => {
-                const isSelected =
-                  matchmakingState.selectedGameType === entry.gameType;
-                return (
-                  <article
-                    key={entry.gameType}
-                    className={`cbc-game-card ${isSelected ? "is-selected" : ""}`}
-                    data-testid={`game-card-${entry.gameType}`}
-                    data-selected={isSelected ? "true" : "false"}
-                  >
-                    <div>
-                      <div className="cbc-game-card-top">
-                        <div>
-                          <span className="cbc-game-card-subtitle">
-                            {entry.subtitle}
-                          </span>
-                          <h2 className="cbc-game-card-title">{entry.title}</h2>
-                        </div>
-                        <span
-                          className={`cbc-security-pill ${
-                            entry.playable ? "" : "is-muted"
-                          }`}
-                        >
-                          {entry.playable && <span className="cbc-pulse-dot" />}
-                          {entry.statusBadge}
+              {GAME_CATALOG_LIST.map((entry) => (
+                <article
+                  key={entry.gameType}
+                  className="cbc-game-card"
+                  data-testid={`game-card-${entry.gameType}`}
+                >
+                  <div>
+                    <div className="cbc-game-card-top">
+                      <div>
+                        <span className="cbc-game-card-subtitle">
+                          {entry.subtitle}
                         </span>
+                        <h2 className="cbc-game-card-title">{entry.title}</h2>
                       </div>
+                      <span
+                        className={`cbc-security-pill ${
+                          entry.playable ? "" : "is-muted"
+                        }`}
+                      >
+                        {entry.playable && <span className="cbc-pulse-dot" />}
+                        {entry.statusBadge}
+                      </span>
+                    </div>
 
-                      <p className="m-0 text-sm/5 text-on-surface-variant">
-                        {entry.description}
-                      </p>
+                    <p className="m-0 text-sm/5 text-on-surface-variant">
+                      {entry.description}
+                    </p>
 
-                      {/* 사전 대국 규칙 요약 리스트 (FR-CAT-02) */}
-                      <dl className="cbc-lobby-rule-list">
-                        <div className="cbc-lobby-rule-row">
-                          <dt>보드 크기</dt>
-                          <dd>
-                            {entry.boardSizeLabel} ({entry.boardSubLabel})
-                          </dd>
+                    {/* 사전 대국 규칙 요약 리스트 (FR-CAT-02) */}
+                    <dl className="cbc-lobby-rule-list">
+                      <div className="cbc-lobby-rule-row">
+                        <dt>보드 크기</dt>
+                        <dd>
+                          {entry.boardSizeLabel} ({entry.boardSubLabel})
+                        </dd>
+                      </div>
+                      {entry.rules.slice(0, 3).map((rule) => (
+                        <div key={rule.label} className="cbc-lobby-rule-row">
+                          <dt>{rule.label}</dt>
+                          <dd>{rule.value}</dd>
                         </div>
-                        {entry.rules.slice(0, 3).map((rule) => (
-                          <div key={rule.label} className="cbc-lobby-rule-row">
-                            <dt>{rule.label}</dt>
-                            <dd>{rule.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    </div>
+                      ))}
+                    </dl>
+                  </div>
 
-                    <div className="cbc-lobby-gomoku-actions">
-                      <div className="cbc-game-select-row">
-                        <button
-                          type="button"
-                          className={`cbc-btn-secondary cbc-game-select-btn ${
-                            isSelected ? "is-selected" : ""
-                          }`}
-                          aria-pressed={isSelected}
-                          data-testid={`select-game-${entry.gameType}`}
-                          onClick={() => handleSelectGame(entry.gameType)}
-                        >
-                          {isSelected
-                            ? `${entry.shortTitle} 선택됨`
-                            : `${entry.shortTitle} 선택`}
-                        </button>
-
-                        {entry.playable ? (
-                          <button
-                            type="button"
-                            className="cbc-btn-primary cbc-game-match-btn"
-                            data-testid={`start-matchmaking-${entry.gameType}`}
-                            onClick={() =>
-                              handleStartMatchmaking(entry.gameType)
-                            }
-                          >
-                            {entry.shortTitle} 빠른 매칭 시작
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="cbc-btn-secondary cbc-game-match-btn"
-                            data-testid={`start-matchmaking-${entry.gameType}`}
-                            disabled
-                          >
-                            {entry.shortTitle} 매칭 준비 중
-                          </button>
-                        )}
-                      </div>
-
-                      {entry.gameType === "othello" &&
-                        othelloState.matchId !== null &&
-                        othelloState.snapshot?.gameType === "othello" &&
-                        othelloState.snapshot.status !== "finished" && (
-                          <button
-                            type="button"
-                            className="cbc-btn-primary"
-                            data-testid="return-active-othello-match-btn"
-                            onClick={() => switchView("othello")}
-                          >
-                            진행 중인 오델로 대국(#{othelloState.matchId}) 복귀
-                          </button>
-                        )}
-
-                      {entry.gameType === "gomoku" && (
-                        <>
-                          {gomokuState.matchId !== null &&
-                            gomokuState.snapshot?.status !== "finished" && (
-                              <button
-                                type="button"
-                                className="cbc-btn-primary"
-                                data-testid="return-active-match-btn"
-                                onClick={() => switchView("gomoku")}
-                              >
-                                진행 중인 오목 대국(#{gomokuState.matchId}) 복귀
-                              </button>
-                            )}
-
-                          <form
-                            className="cbc-match-join-form"
-                            onSubmit={handleSubscribeByMatchId}
-                          >
-                            <label htmlFor="matchIdInput" className="sr-only">
-                              대국 번호(matchId) 입력
-                            </label>
-                            <input
-                              id="matchIdInput"
-                              type="number"
-                              min={1}
-                              placeholder="대국 번호 (matchId) 입력"
-                              value={matchIdInput}
-                              onChange={(e) => setMatchIdInput(e.target.value)}
-                              className="cbc-input cbc-match-join-input"
-                            />
-                            <button
-                              type="submit"
-                              className="cbc-btn-secondary cbc-match-join-btn"
-                            >
-                              대국실 입장
-                            </button>
-                          </form>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
+                  {entry.playable ? (
+                    <button
+                      type="button"
+                      className="cbc-btn-primary"
+                      data-testid={`start-matchmaking-${entry.gameType}`}
+                      onClick={() => handleStartMatchmaking(entry.gameType)}
+                    >
+                      {entry.shortTitle} 빠른 매칭 시작
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="cbc-btn-secondary"
+                      data-testid={`start-matchmaking-${entry.gameType}`}
+                      disabled
+                    >
+                      {entry.shortTitle} 매칭 준비 중
+                    </button>
+                  )}
+                </article>
+              ))}
             </section>
           </div>
         )}

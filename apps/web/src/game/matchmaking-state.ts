@@ -7,11 +7,7 @@ import {
 
 /** 매칭 대기열 클라이언트 단계 (SDS 2.7의 7.1, IF-06) */
 export type MatchmakingPhase =
-  | "idle"
-  | "joining"
-  | "queued"
-  | "leaving"
-  | "matched";
+  "idle" | "joining" | "queued" | "leaving" | "matched";
 
 /** 게임 규칙 요약 항목 */
 export interface GameRuleSummaryItem {
@@ -143,7 +139,7 @@ export function getGameCatalogEntry(gameType: GameType): GameCatalogEntry {
 /**
  * 초기 매칭 클라이언트 상태를 생성합니다.
  *
- * @param selectedGameType - 로비에서 기본 선택할 게임 종류 (기본값: `"gomoku"`)
+ * @param selectedGameType - 매칭 화면에 표시할 기본 게임 종류 (기본값: `"gomoku"`)
  */
 export function createInitialMatchmakingState(
   selectedGameType: GameType = "gomoku",
@@ -168,24 +164,6 @@ export function isMatchmakingBusy(state: MatchmakingClientState): boolean {
     state.phase === "queued" ||
     state.phase === "leaving"
   );
-}
-
-/**
- * 로비에서 게임을 선택합니다.
- * 이미 매칭 신청·대기·취소 처리 중일 때는 게임 선택을 바꾸지 않습니다.
- */
-export function selectMatchmakingGame(
-  state: MatchmakingClientState,
-  gameType: GameType,
-): MatchmakingClientState {
-  if (isMatchmakingBusy(state)) {
-    return state;
-  }
-  return {
-    ...state,
-    selectedGameType: gameType,
-    error: null,
-  };
 }
 
 /**
