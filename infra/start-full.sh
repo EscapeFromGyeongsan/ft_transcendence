@@ -13,10 +13,24 @@ env_file=.env.full
 
 sh infra/prepare-full.sh
 
-# Prints KEY the way Compose resolves it: the environment first, then the env
-# file (empty if unset in both).
+compose() {
+  docker compose --env-file "$env_file" --project-directory . \
+    -p cyber-board-cafe-full -f infra/compose.full.yaml "$@"
+}
+
+# Values exactly as Compose resolves them: the environment first, then the env
+# file with its quotes and comments removed. Compose before `config
+# --environment` existed: the environment, then the env file without quotes.
+resolved="$(compose config --environment 2>/dev/null || true)"
+
+# Prints the resolved value of KEY (empty if unset).
 value_of() {
-  printenv "$1" || sed -n "s/^$1=//p" "$env_file" | tail -n 1
+  if [ -n "$resolved" ]; then
+    printf '%s\n' "$resolved" | sed -n "s/^$1=//p" | tail -n 1
+  else
+    printenv "$1" || sed -n "s/^$1=//p" "$env_file" | tail -n 1 |
+      sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\\1/"
+  fi
 }
 
 # Prints this computer's first IPv4 address (empty if none is found).
@@ -101,8 +115,7 @@ if [ -n "$oauth_client" ]; then
   fi
 fi
 
-docker compose --env-file "$env_file" --project-directory . \
-  -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
+compose up --build -d --wait
 
 echo "Running: https://$address:$https_port/"
 if [ "$mode" = lan ]; then

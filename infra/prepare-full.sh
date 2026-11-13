@@ -19,9 +19,11 @@ if [ ! -e "$env_file" ]; then
 fi
 chmod 600 "$env_file"
 
-# Prints the value of KEY in the env file (empty if unset).
+# Prints the value of KEY in the env file (empty if unset), without the quotes
+# Compose allows around it.
 value_of() {
-  sed -n "s/^$1=//p" "$env_file" | tail -n 1
+  sed -n "s/^$1=//p" "$env_file" | tail -n 1 |
+    sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\\1/"
 }
 
 # Fills KEY with a random value only when it is empty or missing.
