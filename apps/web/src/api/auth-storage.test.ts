@@ -31,6 +31,9 @@ function installBrowserStorage() {
   const localStorage = createWebStorage();
   const sessionStorage = createWebStorage();
   vi.stubGlobal("window", { localStorage, sessionStorage });
+  // Model the browser explicitly; Node 26 also provides navigator.locks.
+  // Locking tests install their own deterministic queue with installWebLocks().
+  vi.stubGlobal("navigator", {});
   return { localStorage, sessionStorage };
 }
 
