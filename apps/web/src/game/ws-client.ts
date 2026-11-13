@@ -100,6 +100,7 @@ export interface GameWsClientHandlers {
   onPresence?: (payload: { userId: number; online: boolean }) => void;
   /** 인증 후 친구 관계 변경을 알려 목록 재조회를 요청합니다. */
   onFriendsChanged?: () => void;
+  onChatChanged?: (peerId: number) => void;
   onQueueJoined?: (payload: { gameType: GameType }) => void;
   onQueueLeft?: () => void;
   onQueueMatched?: (payload: WsQueueMatchedPayload) => void;
@@ -438,6 +439,19 @@ export function createGameWsClient(options: GameWsClientOptions): GameWsClient {
           !Array.isArray(parsed.payload)
         ) {
           options.handlers?.onFriendsChanged?.();
+        }
+        break;
+      }
+
+      case "chat.changed": {
+        const peerId = payload.peerId;
+        if (
+          phase === "connected" &&
+          typeof peerId === "number" &&
+          Number.isSafeInteger(peerId) &&
+          peerId > 0
+        ) {
+          options.handlers?.onChatChanged?.(peerId);
         }
         break;
       }

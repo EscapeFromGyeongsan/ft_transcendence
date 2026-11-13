@@ -64,6 +64,13 @@
       "when": 1794569904865,
       "tag": "0008_normalized_nickname",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794582020968,
+      "tag": "0009_chat_messages",
+      "breakpoints": true
     }
   ]
 }

@@ -73,6 +73,7 @@ import { Avatar } from "./profile/Avatar.tsx";
 import { LeaderboardView } from "./profile/LeaderboardView.tsx";
 import { ProfileView } from "./profile/ProfileView.tsx";
 import { FriendsView } from "./friends/FriendsView.tsx";
+import { ChatDock } from "./chat/ChatDock.tsx";
 import { useDialogFocus } from "./ui/use-dialog-focus.ts";
 import { LegalDocumentView, NotFoundView } from "./legal/LegalDocumentView.tsx";
 import {
@@ -307,6 +308,7 @@ export function App() {
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
   const [friendsQuery, setFriendsQuery] = useState("");
   const [friendsRefreshVersion, setFriendsRefreshVersion] = useState(0);
+  const [chatRefreshVersion, setChatRefreshVersion] = useState(0);
 
   // Realtime Gomoku & Matchmaking state
   const wsClientRef = useRef<GameWsClient | null>(null);
@@ -761,6 +763,10 @@ export function App() {
         },
         onFriendsChanged() {
           setFriendsRefreshVersion((version) => version + 1);
+          setChatRefreshVersion((version) => version + 1);
+        },
+        onChatChanged() {
+          setChatRefreshVersion((version) => version + 1);
         },
         onPhaseChange(phase, reconnectAttempt) {
           setGomokuState((prev) =>
@@ -783,6 +789,7 @@ export function App() {
           }
         },
         onAuthOk({ userId, activeMatchId }) {
+          setChatRefreshVersion((version) => version + 1);
           const urlMatchId = parseMatchIdFromLocation();
           const targetMatchId =
             activeMatchId ?? urlMatchId ?? client.getSubscribedMatchId();
@@ -2912,6 +2919,17 @@ export function App() {
           </div>
         )}
       </main>
+      {currentUser &&
+        view !== "login" &&
+        view !== "register" &&
+        view !== "twoFactor" &&
+        view !== "oauthCallback" && (
+          <ChatDock
+            key={currentUser.id}
+            userId={currentUser.id}
+            refreshVersion={chatRefreshVersion}
+          />
+        )}
 
       {/* Logout Confirmation Dialog (20_logout_modal) */}
       {logoutModalOpen && (

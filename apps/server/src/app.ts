@@ -13,6 +13,8 @@ import { createDatabase } from "./db/client.ts";
 import { registerAuthRoutes } from "./api/auth-routes.ts";
 import { registerUserRoutes } from "./api/user-routes.ts";
 import { registerFriendRoutes } from "./api/friend-routes.ts";
+import { registerChatRoutes } from "./api/chat-routes.ts";
+import { createChatService } from "./services/chat-service.ts";
 import { registerStatsRoutes } from "./api/stats-routes.ts";
 import { registerAvatarRoutes } from "./api/avatar-routes.ts";
 import { errorBody } from "./schemas/errors.ts";
@@ -478,6 +480,30 @@ export async function buildApp(
   registerOAuthRoutes(app, getAuth, getOAuth);
   registerUserRoutes(app, getAuth, getUsers, getAccounts);
   registerFriendRoutes(app, getAuth, getFriends);
+  const chat = database ? createChatService(database.db) : undefined;
+  registerChatRoutes(
+    app,
+    getAuth,
+    () => {
+      if (!chat) throw new ServiceUnavailableError();
+      return chat;
+    },
+    (senderId, recipientId) => {
+      for (const [userId, peerId] of [
+        [senderId, recipientId],
+        [recipientId, senderId],
+      ]) {
+        try {
+          connections.sendToUser(userId, {
+            type: "chat.changed",
+            payload: { peerId },
+          });
+        } catch {
+          app.log.warn({ userId }, "Chat notification failed.");
+        }
+      }
+    },
+  );
   registerStatsRoutes(app, getAuth, getStats);
   registerAvatarRoutes(app, getAuth, getAvatars);
   registerRealtimeRoutes(app, getAuth, getGames, connections, realtimeConfig);
