@@ -240,6 +240,10 @@ B의 [#118](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/118) �
 - 사용 코드와 렌더링은 [평가 체크리스트](evaluation/mandatory-checklist.md#스타일링-솔루션-시연-116)의 순서로 두 화면 이상에서 시연한다. [#124 검증 기록](styling-validation.md)과 최종 제출 SHA의 HTTPS/WSS·작성자 외 재현을 구분한다.
 - 최신 master와 #119를 합친 후보의 빌드·실제 API/DB·Chrome 결과와 남은 조건은 [#116 통합 검증](styling-116-integration-validation.md)에 기록한다.
 
+##### 평가 시나리오 결함 대응 (#136)
+
+#143 위에 B의 #142·#126과 A의 후속 수정을 통합했다. OAuth·수동 갱신 안내는 화면 공통 영역에서 표시하고 본인 계정의 42 연결 상태는 `GET /api/users/me.oauth42Linked`로 확인한다. 종료된 대기열과 거절된 경기 재개 경로는 정리하며, 제어권 상실 후에는 재인증·재구독 스냅샷을 받은 뒤에만 착수·기권을 허용한다. 모달 포커스·계정 메뉴 키보드·화면 제목 포커스·턴 live 안내·타이머 알림·reduced motion과 항목별 검증은 [#136 수정 기록](evaluation-136-validation.md)을 따른다. 본인 계정 필드의 공개 범위는 [계약 문서](contracts.md#본인-계정의-인증-수단-표시-136)에 명시한다.
+
 ##### 친구 REST 화면 후속 구현 (#80·#90, 2026-11-12)
 
 `feat/web-friends`는 `/friends` 프런트를 추가하며 #95 `758459e`와 #98 `07a4989`의 소스·리뷰에 맞춰 계약을 대조했다. 두 서버 PR은 미병합이다. 별도 후보의 실제 두 계정 검증은 서버 PR의 병합·출시 조건 해결을 뜻하지 않는다.
