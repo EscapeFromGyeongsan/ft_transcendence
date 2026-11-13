@@ -7,6 +7,7 @@ import {
   test,
 } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { sql } from "drizzle-orm";
 import { buildApp } from "../app.ts";
 import {
   openTestDatabase,
@@ -132,6 +133,21 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     const nickname = await register({ ...account, email: "p2@example.com" });
     expect(nickname.statusCode).toBe(409);
     expect(nickname.json().error.code).toBe("NICKNAME_TAKEN");
+  });
+
+  test("registration rejects an NFC equivalent of a legacy NFD nickname (#133 upgrade)", async () => {
+    await register(account);
+    // 이전 API가 저장할 수 있던 분해형 닉네임을 가진 기존 계정을 재현합니다.
+    await database.db.execute(
+      sql`UPDATE users SET nickname = ${"가나".normalize("NFD")} WHERE id = 1`,
+    );
+    const duplicate = await register({
+      ...account,
+      email: "canonical@example.com",
+      nickname: "가나",
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().error.code).toBe("NICKNAME_TAKEN");
   });
 
   test("nicknames differing only in case or Unicode form are duplicates", async () => {
