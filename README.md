@@ -295,6 +295,25 @@ The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomok
 
 Commits and PRs record individual contributions. The [roadmap](Document/roadmap.md) preserves the original role/schedule plan; the SDS records implementation references. Work uses issues, feature branches and reviewed PRs under [CONTRIBUTING.md](CONTRIBUTING.md).
 
+### Individual Contributions
+
+The entry below records A's implementation work and challenges evidenced by PRs. The other members' entries and the final combined section are tracked in [#125](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/125). The referenced feature and integration PRs remain separate from the code in this documentation checkout.
+
+#### jyoo (A) — Frontend developer, UI/UX and documentation
+
+- **Account and profile screens:** implemented the React clients for registration, login, session restoration, profile/avatar editing, statistics and leaderboards ([#55](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/55), [#57](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/57)). Integrated B's authentication APIs; the server authentication implementation belongs to B.
+- **Game and matchmaking UI:** implemented the Gomoku and Othello boards, legal-move and turn displays, matching controls, reconnect/result screens, and client state handling for server snapshots ([#56](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/56), [#63](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/63), [#73](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/73)). The client displays server decisions; C owns the rules engines and D owns the real-time runtime.
+- **Additional user flows:** implemented legal pages and browser-history routing, OAuth/2FA screens, records-privacy controls and friends UI ([#71](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/71), [#72](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/72), [#79](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/79), [#90](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/90)). Friend invitations remain a separate, unimplemented task (#83).
+- **Integration and verification:** added browser E2E coverage ([#77](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/77)), prepared the Tailwind integration candidate ([#143](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/143)), and integrated B's form/auth fixes with A's evaluation-flow and accessibility fixes ([#144](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/144)). Maintained the frontend SDS/README review and validation records ([#59](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/59)).
+
+Implementation challenges and how they were addressed:
+
+1. **Adding Tailwind without disrupting existing boards.** The UI already depended on custom board geometry and CSS rules. The #116 candidate introduces Tailwind v4 without its reset stylesheet, moves shared controls to `@apply`/utilities, and preserves board-specific CSS. The #143 record separates desktop/tablet/mobile screen checks from unresolved full-acceptance and container checks.
+2. **Recovering control after another tab takes over a match.** Reconnection alone could leave the old tab locked, while ordinary updates from the controlling tab must keep that lock. #144 releases it only after an authenticated connection resubscribes and receives `match.snapshot`. Regression tests were shown to fail before the fix, and the recovery was exercised with two tabs and two users against the actual API/DB for both games.
+3. **Keeping navigation consistent with matchmaking and authentication.** Back/Forward, legal-page navigation and late queue events could leave stale matching state; OAuth failures and busy dialogs also needed explicit recovery. #144 coordinates queue cancellation with navigation, ignores canceled queue responses, restores a valid session after callback failure, and adds dialog/menu keyboard and focus handling. Its validation record distinguishes mocked browser scenarios from actual HTTPS/WSS gameplay.
+
+Suggested evaluation walkthrough: trace a board click from the React board through the command's `stateVersion` to the server snapshot, then demonstrate two-tab takeover and recovery. The source and executed checks are documented in [the #136 validation record](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/c4ef0e4968b06cbe3f7d60db8e75b65f48bdf34f/Document/evaluation-136-validation.md); this is supporting evidence, and each member must still explain their own implementation during evaluation.
+
 ### Modules (16 points)
 
 Major modules are worth 2 points and minor modules 1 point. Details and evidence owners are in the [module matrix](Document/evaluation/module-matrix.md).
