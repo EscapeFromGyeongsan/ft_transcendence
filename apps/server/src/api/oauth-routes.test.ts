@@ -22,6 +22,8 @@ const people: Record<string, { login: string; email: string | null }> = {
   "102": { login: "p1", email: "other@student.42.fr" },
   "103": { login: "taken", email: "p1@example.com" },
   "104": { login: "noemail", email: null },
+  // Longer than users.email (varchar 254).
+  "105": { login: "longmail", email: `${"a".repeat(243)}@student.42.fr` },
 };
 let providerDown = false;
 let providerBadJson = false;
@@ -218,6 +220,9 @@ describe.skipIf(!testDatabaseUrl)("42 OAuth with PostgreSQL", () => {
     const noEmail = await callback("code-104", await startLogin());
     expect(noEmail.statusCode).toBe(422);
     expect(noEmail.json().error.code).toBe("OAUTH_EMAIL_MISSING");
+    const longEmail = await callback("code-105", await startLogin());
+    expect(longEmail.statusCode).toBe(422);
+    expect(longEmail.json().error.code).toBe("OAUTH_EMAIL_MISSING");
   });
 
   test("a signed-in user links 42, then 42 login opens that account", async () => {

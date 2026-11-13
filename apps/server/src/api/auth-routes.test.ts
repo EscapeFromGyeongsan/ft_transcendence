@@ -134,6 +134,37 @@ describe.skipIf(!testDatabaseUrl)("auth with PostgreSQL", () => {
     expect(nickname.json().error.code).toBe("NICKNAME_TAKEN");
   });
 
+  test("nicknames differing only in case or Unicode form are duplicates", async () => {
+    await register({ ...account, nickname: "가나" });
+    const upper = await register({
+      ...account,
+      email: "p2@example.com",
+      nickname: "P1",
+    });
+    expect(upper.statusCode).toBe(201);
+    const lower = await register({
+      ...account,
+      email: "p3@example.com",
+      nickname: "p1",
+    });
+    expect(lower.statusCode).toBe(409);
+    expect(lower.json().error.code).toBe("NICKNAME_TAKEN");
+    // "가나" decomposed into Hangul jamo (NFD).
+    const nfd = await register({
+      ...account,
+      email: "p4@example.com",
+      nickname: "\u1100\u1161\u1102\u1161",
+    });
+    expect(nfd.statusCode).toBe(409);
+    expect(nfd.json().error.code).toBe("NICKNAME_TAKEN");
+    const stored = await register({
+      ...account,
+      email: "p5@example.com",
+      nickname: "\u1103\u1161\u1105\u1161",
+    });
+    expect(stored.json().nickname).toBe("다라");
+  });
+
   test("invalid body returns 422, malformed JSON 400, wrong content type 415", async () => {
     const invalid = await register({
       email: "not-an-email",

@@ -5,28 +5,40 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
-export const users = pgTable("users", {
-  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-  email: varchar("email", { length: 254 }).notNull().unique(),
-  // NULL for accounts created through OAuth only (no password login).
-  passwordHash: text("password_hash"),
-  nickname: varchar("nickname", { length: 32 }).notNull().unique(),
-  avatarUrl: text("avatar_url"),
-  recordsPublic: boolean("records_public").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  // Set on account deletion (DEC-09). The row stays so match history keeps
-  // its user id; email and nickname are replaced with placeholders.
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    email: varchar("email", { length: 254 }).notNull().unique(),
+    // NULL for accounts created through OAuth only (no password login).
+    passwordHash: text("password_hash"),
+    // Stored in NFC; unique without regard to case (see the index below).
+    nickname: varchar("nickname", { length: 32 }).notNull(),
+    avatarUrl: text("avatar_url"),
+    recordsPublic: boolean("records_public").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    // Set on account deletion (DEC-09). The row stays so match history keeps
+    // its user id; email and nickname are replaced with placeholders.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  // "P1" and "p1" would look like the same player, so case does not count.
+  (table) => [
+    uniqueIndex("users_nickname_unique").on(sql`lower(${table.nickname})`),
+  ],
+);
 
 /**
  * 서버 세션입니다. access token이 이 ID(`sid`)를 담습니다.

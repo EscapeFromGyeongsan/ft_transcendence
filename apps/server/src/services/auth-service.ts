@@ -153,7 +153,7 @@ export function createAuthService(
       try {
         const user = await repo.insertUser(db, {
           email: input.email.toLowerCase(),
-          nickname: input.nickname,
+          nickname: input.nickname.normalize("NFC"),
           passwordHash,
         });
         return { ok: true, user };
