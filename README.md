@@ -62,17 +62,19 @@ npm run test:e2e    # E2E tests; starts Vite and the API automatically (run db:u
 Requirements: Docker Engine with Compose v2, `make`, and OpenSSL. From the repository root:
 
 ```sh
-make
+make                 # https://<this computer's IP>:8443/, reachable from another computer
+make HOST=10.12.3.4  # same, with the address given explicitly
+make local           # https://localhost:8443/ on this computer only
 ```
 
-`make` runs `infra/prepare-full.sh`, which creates only what is missing: `.env.full` from `.env.full.example` with random `JWT_SECRET` and `TWO_FACTOR_KEY`, the PostgreSQL password file `infra/secrets/postgres-password`, and a self-signed localhost certificate in `infra/certs`. Existing values and files are never replaced. It then runs:
+Each target runs `infra/prepare-full.sh`, which creates only what is missing: `.env.full` from `.env.full.example` with random `JWT_SECRET` and `TWO_FACTOR_KEY`, the PostgreSQL password file `infra/secrets/postgres-password`, and a self-signed localhost certificate in `infra/certs`. Existing values and files are never replaced. `infra/start-full.sh` then runs `docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`.
 
-```sh
-docker compose --env-file .env.full --project-directory . \
-  -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
-```
+- `make` finds this computer's IPv4 address (`ipconfig getifaddr en0`/`en1` on macOS, the first `hostname -I` address on Linux), binds ports to `0.0.0.0`, and uses a certificate in `infra/certs/lan` whose SAN includes that address. The certificate is recreated when the address changes. If no address is found, it stops and asks for `make HOST=<IP>`.
+- `make local` binds ports to `127.0.0.1` and uses the localhost certificate in `infra/certs`.
+- The binding, certificate directory and 42 redirect URI are passed for that run only; `.env.full` is not changed.
+- With two computers, every browser (including the server computer's) uses the printed `https://<IP>:8443/` address. Check `https://<IP>:8443/api/health` from the other computer first, then accept the self-signed certificate warning once per browser.
 
-`make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID`, `FT_OAUTH_CLIENT_SECRET` and `FT_OAUTH_REDIRECT_URI` are set in `.env.full`. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
+`make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID` and `FT_OAUTH_CLIENT_SECRET` are set in `.env.full`. `make` then uses `https://<IP>:8443/oauth/42/callback` as the redirect URI; `make local` uses `FT_OAUTH_REDIRECT_URI`, or `https://localhost:8443/oauth/42/callback` when it is empty. The URI in use is printed and must be registered in the 42 intra application. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
 
 Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
 

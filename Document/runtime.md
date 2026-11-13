@@ -97,10 +97,21 @@ LAN 접속에서는 다른 컴퓨터가 실제로 사용하는 IP·DNS 이름이
 
 ## 단일 명령 기동
 
-저장소 루트에서 `make` 하나로 준비와 기동을 함께 실행한다. `make`는 먼저 `infra/prepare-full.sh`로 없는 것만 만든다. `.env.full`이 없으면 `.env.full.example`을 복사하고, 비어 있는 `JWT_SECRET`·`TWO_FACTOR_KEY`를 `openssl rand -hex 32`로 채운다. DB 비밀번호 파일이 없으면 만들고, `server.crt`·`server.key`가 둘 다 없으면 `infra/generate-local-cert.sh`를 실행한다. 이미 있는 값·파일은 바꾸지 않는다. 비밀번호 파일은 API·migration 컨테이너가 non-root `node` 사용자로 읽으므로, 스크립트가 그룹·다른 사용자 모두 들어갈 수 없는 디렉터리에 새로 만든 경우에만 `0444`로 둔다. 기존 파일은 권한을 바꾸지 않고, 그 밖의 디렉터리(권한을 확인할 수 없는 경우 포함)의 새 파일은 `0600`으로 두며, 두 경우 모두 안내를 출력한다. 키를 바꾸면 발급된 토큰·저장된 2FA 설정·기존 DB 접속이 깨지기 때문이다. 인증서·개인키 중 하나만 있으면 멈춘다.
+저장소 루트에서 `make` 하나로 준비와 기동을 함께 실행한다(#130). `make`는 다른 컴퓨터도 접속할 수 있게 이 컴퓨터의 IP로 열고, `make HOST=<IP>`는 주소를 직접 정하며, `make local`은 `https://localhost`에서만 연다. 세 target 모두 먼저 `infra/prepare-full.sh`로 없는 것만 만든다. `.env.full`이 없으면 `.env.full.example`을 복사하고, 비어 있는 `JWT_SECRET`·`TWO_FACTOR_KEY`를 `openssl rand -hex 32`로 채운다. DB 비밀번호 파일이 없으면 만들고, `server.crt`·`server.key`가 둘 다 없으면 `infra/generate-local-cert.sh`를 실행한다. 이미 있는 값·파일은 바꾸지 않는다. 비밀번호 파일은 API·migration 컨테이너가 non-root `node` 사용자로 읽으므로, 스크립트가 그룹·다른 사용자 모두 들어갈 수 없는 디렉터리에 새로 만든 경우에만 `0444`로 둔다. 기존 파일은 권한을 바꾸지 않고, 그 밖의 디렉터리(권한을 확인할 수 없는 경우 포함)의 새 파일은 `0600`으로 두며, 두 경우 모두 안내를 출력한다. 키를 바꾸면 발급된 토큰·저장된 2FA 설정·기존 DB 접속이 깨지기 때문이다. 인증서·개인키 중 하나만 있으면 멈춘다.
+
+`infra/start-full.sh`가 준비 뒤 실행 값을 정해 compose에 넘긴다. `.env.full`은 바꾸지 않으므로 다음 실행은 다시 정한다.
+
+| target | 바인딩 | 인증서 | 접속 주소 | 42 redirect URI (`FT_OAUTH_CLIENT_ID`가 있을 때) |
+|---|---|---|---|---|
+| `make` | `0.0.0.0` | `infra/certs/lan`, SAN에 IP 포함. 주소가 바뀌면 다시 생성 | `https://<IP>:8443/` | `https://<IP>:8443/oauth/42/callback` |
+| `make HOST=<IP>` | `0.0.0.0` | 위와 같음 | `https://<IP>:8443/` | 위와 같음 |
+| `make local` | `127.0.0.1` | `infra/certs` (localhost) | `https://localhost:8443/` | `.env.full` 값, 비어 있으면 `https://localhost:8443/oauth/42/callback` |
+
+IP는 macOS에서 `ipconfig getifaddr en0`·`en1`, Linux에서 `hostname -I`의 첫 값으로 찾는다. 찾지 못하면 `make HOST=<IP>`를 쓰라고 안내하고 멈춘다. 두 컴퓨터로 시연할 때는 서버 컴퓨터를 포함한 모든 브라우저가 출력된 IP 주소를 쓴다. 42 redirect URI가 한 origin에만 맞기 때문이다. 다른 컴퓨터에서 먼저 `https://<IP>:8443/api/health`로 방화벽을 확인하고, 각 브라우저에서 자체 서명 인증서 경고를 한 번 수락한다.
 
 ~~~sh
-make        # 준비 후 아래 compose up 실행
+make        # 준비 후 이 컴퓨터의 IP로 compose up
+make local  # 준비 후 localhost로만 compose up
 make down   # 컨테이너 종료, DB·아바타 볼륨 보존
 make logs
 make ps
