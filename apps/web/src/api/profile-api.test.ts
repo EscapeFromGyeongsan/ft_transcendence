@@ -226,13 +226,27 @@ describe("validateTwoFactorCode", () => {
       "abcd-efgh",
       "ABCDEFGH",
       "ABCD EFGH",
+      // The server drops every space and hyphen in a recovery code.
+      "AB CD-EFGH",
+      " ABCD-EFGH ",
+      "A-B-C-D-E-F-G-H",
     ]) {
       expect(validateTwoFactorCode(code)).toBeNull();
     }
   });
 
   it("rejects other formats", () => {
-    for (const code of ["", "12345", "1234567", "ABCD-EFG1", "<script>"]) {
+    // "123 456" is not a TOTP code for the server (exactly 6 digits only).
+    for (const code of [
+      "",
+      "12345",
+      "1234567",
+      "ABCD-EFG1",
+      "<script>",
+      "123 456",
+      // Longer than the server's 16-character limit.
+      "A B C D - E F G H",
+    ]) {
       expect(validateTwoFactorCode(code)).toMatch(/6자리 인증 코드/);
     }
   });

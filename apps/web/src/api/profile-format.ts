@@ -101,11 +101,14 @@ export function validateNickname(nickname: string): string | null {
 }
 
 /**
- * 2FA 코드가 인증 앱의 6자리 숫자나 복구 코드(`ABCD-EFGH`, 대소문자·공백 무관) 형식인지 확인합니다.
+ * 2FA 코드가 인증 앱의 6자리 숫자나 복구 코드(`ABCD-EFGH`) 형식인지 확인합니다.
  * 코드가 맞는지는 서버가 판정합니다.
+ *
+ * @remarks 서버와 같은 기준입니다. 정확히 6자리 숫자면 인증 앱 코드, 그 밖에는 16자 이하에서 공백·하이픈을 모두 지우고 대소문자를 무시한 복구 코드로 봅니다.
  */
 export function validateTwoFactorCode(code: string): string | null {
-  return /^(?:\d{6}|[A-Z2-7]{4}[\s-]?[A-Z2-7]{4})$/i.test(code)
+  return /^\d{6}$/.test(code) ||
+    (code.length <= 16 && /^[A-Z2-7]{8}$/i.test(code.replace(/[\s-]/g, "")))
     ? null
     : "현재 6자리 인증 코드 또는 복구 코드(ABCD-EFGH)를 입력해 주세요.";
 }
