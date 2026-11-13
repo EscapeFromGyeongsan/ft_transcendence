@@ -49,6 +49,141 @@ The browser calls `/api/*` through Vite's development/preview proxy. Fastify rou
 
 Committed migrations `0000`–`0003` include `users`, `sessions`, `refresh_tokens`, OAuth/2FA tables, `games`, `game_players`, `moves`, `game_commands` and the connection probe. Statistics are queried from stored results. `friendships`, privacy and account-deletion migrations exist in open #95, #79 and #89. Each currently starts at `0004`; regenerate the later unmerged migration against the agreed integration order (#96), without rewriting shared/applied migrations. Relationships and constraints are documented in the [SDS](Document/SDS.md).
 
+## Database schema
+
+PostgreSQL 17 with Drizzle ORM. Table definitions live in `apps/server/src/db/schema/` and SQL migrations in `apps/server/drizzle/`. The diagram shows the schema after the open #89 (account deletion), #95 (friends) and #79 (records privacy) migrations are applied in the order planned in #96 (`0004`, `0005`, `0006`).
+
+```mermaid
+erDiagram
+  users ||--o{ sessions : "logs in"
+  sessions ||--o{ refresh_tokens : "rotates"
+  users ||--o{ oauth_accounts : "links 42"
+  users |o--o{ oauth_states : "starts link"
+  sessions |o--o{ oauth_states : "starts link"
+  users ||--o| two_factor_secrets : "enables"
+  users ||--o{ two_factor_recovery_codes : "owns"
+  users ||--o{ two_factor_challenges : "second step"
+  users ||--o{ game_players : "plays"
+  games ||--|{ game_players : "seats"
+  games ||--o{ moves : "records"
+  games ||--o{ game_commands : "deduplicates"
+  users |o--o{ games : "wins"
+  users ||--o{ friendships : "low, high, requester"
+
+  users {
+    bigint id PK
+    varchar email UK "254"
+    text password_hash "Argon2id, NULL for 42-only accounts"
+    varchar nickname UK "32"
+    text avatar_url
+    boolean records_public "default true"
+    timestamptz deleted_at "set on account deletion"
+  }
+  sessions {
+    uuid id PK
+    bigint user_id FK
+    timestamptz expires_at
+    timestamptz revoked_at
+  }
+  refresh_tokens {
+    bigint id PK
+    uuid session_id FK
+    text token_hash UK
+    timestamptz used_at "reuse revokes the session"
+  }
+  oauth_accounts {
+    bigint id PK
+    bigint user_id FK
+    text provider
+    text provider_user_id
+  }
+  oauth_states {
+    text state_hash PK
+    text mode "login or link"
+    bigint user_id FK
+    uuid session_id FK
+    text browser_hash
+  }
+  two_factor_secrets {
+    bigint user_id PK, FK
+    text secret_encrypted "AES-256-GCM"
+    timestamptz enabled_at
+    integer last_used_step
+  }
+  two_factor_recovery_codes {
+    bigint id PK
+    bigint user_id FK
+    text code_hash UK
+    timestamptz used_at
+  }
+  two_factor_challenges {
+    uuid id PK
+    bigint user_id FK
+    text token_hash UK
+    integer failed_attempts
+  }
+  games {
+    bigint id PK
+    text game_type "gomoku or othello"
+    text status "waiting, playing, paused, finished"
+    integer state_version
+    text outcome "win, draw, void"
+    bigint winner_user_id FK
+  }
+  game_players {
+    bigint id PK
+    bigint game_id FK
+    bigint user_id FK
+    text seat "black or white"
+    varchar nickname_snapshot "nickname at match creation"
+    text result "win, loss, draw, void"
+  }
+  moves {
+    bigint id PK
+    bigint game_id FK
+    bigint user_id FK
+    integer turn_number
+    smallint row_idx
+    smallint col_idx
+  }
+  game_commands {
+    bigint id PK
+    bigint game_id FK
+    uuid command_id
+    integer expected_version
+    text status "applied or rejected"
+  }
+  friendships {
+    bigint id PK
+    bigint user_low_id FK
+    bigint user_high_id FK
+    bigint requested_by_id FK
+    text status "pending, accepted, declined"
+  }
+```
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `users` | Account and public profile | `email` and `nickname` unique |
+| `sessions` | Server session; the access token carries its `id` (`sid`) | Revoked on logout or refresh token reuse |
+| `refresh_tokens` | Rotating refresh tokens, hash only | `token_hash` unique |
+| `oauth_accounts` | 42 account linked to a user | One user per provider account, one link per provider per user |
+| `oauth_states` | One-time OAuth `state`, bound to the browser | CHECK: `link` mode needs `user_id` and `session_id`, `login` mode has neither |
+| `two_factor_secrets` | TOTP secret per user | `last_used_step` blocks reuse of the same code |
+| `two_factor_recovery_codes` | Recovery codes, hash only | Used once (`used_at`) |
+| `two_factor_challenges` | Pending second login step, hash only | Discarded after the failed-attempt limit |
+| `games` | Server-confirmed state of one match | CHECK on type, status, turn and outcome; finished matches must have outcome, reason and time; only a win has a winner |
+| `game_players` | Two seats per match and their results | Unique `(game_id, user_id)` and `(game_id, seat)` |
+| `moves` | Confirmed moves; the board is rebuilt from them | Unique `(game_id, turn_number)` and `(game_id, row_idx, col_idx)`; coordinates `0..14` |
+| `game_commands` | One row per processed command | Unique `(game_id, command_id)`, so a resent command is not applied twice |
+| `friendships` | One row per user pair | Unique `(user_low_id, user_high_id)` with `user_low_id < user_high_id`; CHECK on status and timestamps |
+| `connection_probe` | Infrastructure check only | No account or game data |
+
+- Enumerated values use `text` + CHECK instead of PostgreSQL enums, so adding a value only needs a simple migration.
+- Statistics, history and the leaderboard are queried from `games` and `game_players`; no separate statistics table is stored.
+- Secrets are never stored in plain text: passwords as Argon2id hashes, refresh tokens, recovery codes, 2FA challenges and OAuth states as hashes, TOTP secrets encrypted with AES-256-GCM.
+- Account deletion (#89) keeps the `users` row so match history keeps its references. It replaces `email` and `nickname` with `deleted:<id>`, clears the password hash and avatar, revokes sessions and deletes refresh tokens, OAuth and 2FA rows (friendship rows too, in #113). Past matches show `game_players.nickname_snapshot`.
+
 ## Instructions
 
 Choose local development below or the [full application HTTPS workflow](Document/runtime.md). Deployment was merged in #10; its recorded checks and remaining limitations are separate from new validation of this documentation change.
