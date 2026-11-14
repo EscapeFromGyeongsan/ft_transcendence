@@ -2861,6 +2861,14 @@ input {
   color: var(--on-surface);
 }
 
+/* A white quiet zone keeps the code readable for cameras in dark mode too. */
+.cbc-2fa-qr {
+  align-self: center;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background-color: #ffffff;
+}
+
 .cbc-2fa-secret-box {
   padding: 0.625rem 0.75rem;
   border-radius: 0.5rem;
