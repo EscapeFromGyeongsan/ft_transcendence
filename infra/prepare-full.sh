@@ -5,17 +5,30 @@
 # changing them breaks issued tokens, stored 2FA setups or the existing DB.
 set -eu
 
-env_file=.env.full
+env_file=.env
 
 if ! command -v openssl >/dev/null 2>&1; then
   echo "OpenSSL is required to generate secrets and the certificate." >&2
   exit 1
 fi
 
+# Earlier versions kept the make settings in .env.full. Its secrets must be
+# kept, because new ones break issued tokens and stored 2FA setups.
+if [ -e .env.full ]; then
+  if [ -e "$env_file" ]; then
+    echo "Both .env and .env.full exist; make now reads only .env." >&2
+    echo "Copy JWT_SECRET, TWO_FACTOR_KEY, FT_OAUTH_* and any changed values" >&2
+    echo "from .env.full into .env, then delete .env.full." >&2
+    exit 1
+  fi
+  mv .env.full "$env_file"
+  echo "Renamed .env.full to $env_file."
+fi
+
 umask 077
 if [ ! -e "$env_file" ]; then
-  cp .env.full.example "$env_file"
-  echo "Created $env_file from .env.full.example."
+  cp .env.example "$env_file"
+  echo "Created $env_file from .env.example."
 fi
 chmod 600 "$env_file"
 
