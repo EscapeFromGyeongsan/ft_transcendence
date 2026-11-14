@@ -200,7 +200,7 @@ test("#88 real HTTPS accounts, games, records and friends work with keyboard acc
     await page.keyboard.press("Enter");
     const accountMenu = page.getByRole("menu", { name: "계정 메뉴" });
     await expect(accountMenu).toBeVisible();
-    await page.keyboard.press("Tab");
+    // Opening the menu focuses its first item; Tab closes it (#136, #170).
     await expect(accountMenu.getByRole("menuitem").first()).toBeFocused();
     await capture("account-menu");
     await page.keyboard.press("Escape");
