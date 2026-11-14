@@ -4,8 +4,12 @@
 # `make local` starts it on https://localhost only.
 COMPOSE = docker compose --env-file .env --project-directory . \
 	-p cyber-board-cafe-full -f infra/compose.full.yaml
+# clean/fclean address the Compose projects by name only, so they work even
+# when .env is missing or incomplete.
+PROJECTS = cyber-board-cafe-full cyber-board-cafe
+ARTIFACTS = apps/web/dist test-results playwright-report
 
-.PHONY: all up local prepare down logs ps \
+.PHONY: all up local prepare down logs ps clean fclean re \
 	dev test e2e build db-migrate db-generate qa-accounts dev-shell dev-down
 
 all: up
@@ -28,6 +32,29 @@ logs:
 
 ps:
 	$(COMPOSE) ps
+
+# Removes the containers of the application and of development, and the build
+# outputs. The database, avatars and dependencies (volumes) are kept.
+clean:
+	@for project in $(PROJECTS); do \
+		docker compose -p $$project down --remove-orphans; \
+	done
+	rm -rf $(ARTIFACTS)
+
+# Also removes the volumes (database, avatars, dependencies: all stored data)
+# and the images built by `make`. .env, the database password file and the
+# certificates are kept: they hold secrets that cannot be recreated, such as
+# the 42 OAuth client secret.
+fclean:
+	@for project in $(PROJECTS); do \
+		docker compose -p $$project down --volumes --remove-orphans; \
+		docker image ls -q --filter label=com.docker.compose.project=$$project | \
+			sort -u | xargs -r docker image rm -f; \
+	done
+	rm -rf $(ARTIFACTS)
+
+re: fclean
+	@$(MAKE) all
 
 # Development and tests in a Node.js container (infra/dev.sh); the host needs
 # only Docker. They use the development database of infra/compose.yaml, not
