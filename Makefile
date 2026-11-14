@@ -10,7 +10,8 @@ PROJECTS = cyber-board-cafe-full cyber-board-cafe
 ARTIFACTS = apps/web/dist test-results playwright-report
 
 .PHONY: all up local prepare down logs ps clean fclean re \
-	dev test e2e build db-migrate db-generate qa-accounts dev-shell dev-down
+	qa-accounts dev test e2e build db-migrate db-generate dev-qa-accounts \
+	dev-shell dev-down
 
 all: up
 
@@ -32,6 +33,17 @@ logs:
 
 ps:
 	$(COMPOSE) ps
+
+# Creates qa-p1~p4 and qa-outsider (@qa.example.com) in the running `make`
+# application, with QA_PASSWORD from .env. The script runs inside the API
+# container and calls that API directly; existing accounts are kept.
+qa-accounts:
+	@docker exec cyber-board-cafe-full-api-1 true 2>/dev/null || \
+		{ echo "Start the application first: make" >&2; exit 1; }
+	@env_file=.env; . infra/env-value.sh; \
+	docker exec -e QA_PASSWORD="$$(value_of QA_PASSWORD)" \
+		-e QA_API_URL=http://127.0.0.1:3001 cyber-board-cafe-full-api-1 \
+		node scripts/qa-accounts.mjs
 
 # Removes the containers of the application and of development, and the build
 # outputs. The database, avatars and dependencies (volumes) are kept.
@@ -78,7 +90,8 @@ db-migrate:
 db-generate:
 	@sh infra/dev.sh generate "$(NAME)"
 
-qa-accounts:
+# The same QA accounts in the running `make dev` servers.
+dev-qa-accounts:
 	@sh infra/dev.sh qa-accounts
 
 dev-shell:

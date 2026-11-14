@@ -1216,7 +1216,7 @@ sequenceDiagram
     W->>A: POST /api/auth/2fa/setup (Bearer)
     A->>DB: two_factor_secrets UPSERT (암호화 secret, enabled_at NULL)
     A-->>W: 200 secret, otpauthUrl
-    W->>U: QR 표시
+    W->>U: QR 코드(브라우저에서 생성)와 수동 입력용 secret 표시
     U->>W: 인증 앱 6자리 코드
     W->>A: POST /api/auth/2fa/enable
     alt 코드 맞음
@@ -1594,7 +1594,8 @@ flowchart TD
 - DB 연결 자원(`db/client.ts`, `구현됨`): API 인스턴스당 pg Pool 하나, 최대 연결 5, 연결 대기 3초, idle 10초, statement timeout 3초. 연결을 3초 안에 못 얻거나 쿼리가 3초를 넘으면(잠금 대기 포함) 공통 처리기가 503으로 응답한다(#93, master 병합). 서버 종료 시 `onClose`에서 Pool을 닫는다. 성능 측정(NFR-PERF-01) 후 값 조정.
 - master의 `index.ts`는 `API_HOST`와 `PORT`를 읽는다. 로컬 기본값은 `127.0.0.1:3001`이고 Compose는 컨테이너 간 접근을 위해 `0.0.0.0:3001`을 지정한다. 실시간 서버를 통합할 때 시작 코드에서 이 설정과 게임 엔진 등록을 함께 유지한다(#27).
 - PostgreSQL 비밀번호는 Compose secret 파일로 전달한다. API의 `JWT_SECRET`, `TWO_FACTOR_KEY`, `FT_OAUTH_*`는 Compose의 `environment`로 전달한다.
-- 개발 환경은 `infra/compose.yaml`(DB만)과 `npm run dev`를 쓴다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓴다.
+- 개발 환경은 `infra/compose.yaml`의 DB와 `node` 컨테이너(Node 24, `infra/dev.sh`)를 쓴다. `make dev`, `make test`, `make e2e` 등이 컨테이너 안에서 npm 스크립트를 실행하므로 호스트에 Node가 필요 없다. 통합 테스트는 별도 `TEST_DATABASE_URL` DB를 쓰며, `make test`가 `cafe_test`를 만든다.
+- 운영 명령: `make clean`은 컨테이너와 빌드 결과물을, `make fclean`은 볼륨(DB·아바타·의존성)과 빌드한 이미지까지 지운다. `.env`·비밀번호 파일·인증서는 남긴다. `make re`는 `fclean` 후 `make`.
 
 ##### 배포 브랜치의 인증·아바타·WSS 설정 (E 확인, #28·#40)
 
@@ -2024,7 +2025,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    S([npm run dev:server]) --> Env[.env 있으면 로드]
+    S(["API 시작: make의 api 컨테이너, make dev, npm run dev:server"]) --> Env[.env 있으면 로드]
     Env --> Db{DATABASE_URL?}
     Db -->|없음| X1[시작 중단]
     Db -->|있음| Jwt{"JWT_SECRET 32자 이상?"}
@@ -2043,7 +2044,9 @@ flowchart TD
 
 `TWO_FACTOR_KEY`가 없으면 2FA route만 503(`Two-factor is not configured.`)이고, `FT_OAUTH_*`가 없으면 OAuth route만 503(`42 login is not configured.`)이다. 나머지 기능은 동작한다.
 
-#### 2.10.24 QA 계정 준비 `npm run qa:accounts`
+#### 2.10.24 QA 계정 준비 `make qa-accounts`, `make dev-qa-accounts`
+
+`make qa-accounts`는 실행 중인 `make` 앱의 API 컨테이너 안에서, `make dev-qa-accounts`는 `make dev` 컨테이너 안에서 `scripts/qa-accounts.mjs`(`npm run qa:accounts`)를 실행한다. 비밀번호는 `.env`의 `QA_PASSWORD`이며 대상 앱이 실행 중이 아니면 안내 후 종료한다.
 
 ```mermaid
 flowchart TD
@@ -2263,7 +2266,7 @@ flowchart TD
 
 ### 4.1 B·C·D·A 자동 테스트 대응 (`구현됨`)
 
-`npm test`(Vitest) 및 `npm run test:e2e`(Playwright). DB 통합 테스트는 `TEST_DATABASE_URL`이 있을 때만 실행하고, 없으면 건너뛴다. 테스트 DB는 실제 연결된 DB 이름이 `_test`로 끝나야 하며 매 테스트마다 전체 TRUNCATE한다.
+`npm test`(Vitest) 및 `npm run test:e2e`(Playwright). 호스트 Node 없이 `make test`·`make e2e`로 컨테이너 안에서 실행하며, `make test`는 `cafe_test` DB를 만들어 `TEST_DATABASE_URL`을 지정한다. DB 통합 테스트는 `TEST_DATABASE_URL`이 있을 때만 실행하고, 없으면 건너뛴다. 테스트 DB는 실제 연결된 DB 이름이 `_test`로 끝나야 하며 매 테스트마다 전체 TRUNCATE한다.
 
 | 테스트 파일 | 검증 내용 | SRS 근거 | 대체물 (실제가 아닌 것) |
 |---|---|---|---|
