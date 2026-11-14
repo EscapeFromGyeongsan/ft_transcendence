@@ -223,6 +223,9 @@ erDiagram
 | `make down` | Stop the containers; the database and avatar volumes are kept |
 | `make logs` / `make ps` | Follow the logs / show container status |
 | `make prepare` | Only create the missing `.env`, password file and certificate |
+| `make clean` | Remove the application and development containers and the build outputs; the data is kept |
+| `make fclean` | Also remove all data (database, avatars, dependencies) and the images built by `make`; `.env`, the password file and the certificates are kept |
+| `make re` | `make fclean`, then `make` |
 
 | URL (default ports) | Expected result |
 |---|---|
@@ -248,7 +251,7 @@ docker volume rm cyber-board-cafe-full_postgres_data
 make
 ```
 
-To reset all data, also remove `cyber-board-cafe-full_avatars`. Server errors (500, 503, lost database connection) appear in `make logs`.
+To reset all data, also remove `cyber-board-cafe-full_avatars`, or run `make fclean` and then `make` (`make re`). Server errors (500, 503, lost database connection) appear in `make logs`.
 
 ### Local development
 
