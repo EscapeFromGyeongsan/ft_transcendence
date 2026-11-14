@@ -39,6 +39,7 @@ import {
 } from "../api/profile-format.ts";
 import { Avatar } from "./Avatar.tsx";
 import { DeleteAccountDialog } from "./DeleteAccountDialog.tsx";
+import { TwoFactorQrCode } from "./TwoFactorQrCode.tsx";
 import { describeOpponent } from "./account-deletion.ts";
 import { useDialogFocus } from "../ui/use-dialog-focus.ts";
 
@@ -878,9 +879,13 @@ export function ProfileView({
                         1단계: 인증 앱에 시크릿 등록
                       </h3>
                       <p className="m-0 text-[12px] text-on-surface-variant">
-                        인증 앱에서 수동 키 입력을 선택하고 아래 Base32 비밀키를
-                        등록하거나 <code>otpauth://</code> URI를 여세요.
+                        인증 앱으로 QR 코드를 스캔하세요. 스캔할 수 없으면 수동
+                        키 입력을 선택해 아래 Base32 비밀키를 등록하거나{" "}
+                        <code>otpauth://</code> URI를 여세요.
                       </p>
+                      <TwoFactorQrCode
+                        otpauthUrl={twoFactorSetupData.otpauthUrl}
+                      />
                       <div className="cbc-2fa-secret-box">
                         <span className="cbc-2fa-secret-label">
                           수동 입력용 Base32 시크릿
