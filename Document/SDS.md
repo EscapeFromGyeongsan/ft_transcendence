@@ -31,7 +31,7 @@
 |---|---|---|
 | 인증·프로필·경기 저장, 오목·오델로 엔진 | #11·#15·#12·#45·#58 | master 병합 |
 | 시스템 종료 저장·시작 시 무효화, REST 계약, WS 인증, 상태 전환·세션 폐기 callback | #32·#33·#41·#51 | master 병합. 활성 경기(`auth.ok.activeMatchId`)·구독·매칭은 #42·#43·#49·#50 |
-| 전체 앱 컨테이너·HTTPS·API_HOST·아바타 volume | #10 (`7788e5e`, #40 포함) | master 병합. 과거 WSS 증거의 통합 SHA·한계는 [실행 기록](runtime-wss-validation.md) 참조 |
+| 전체 앱 컨테이너·HTTPS·API_HOST·아바타 volume | #10 (`7788e5e`, #40 포함) | master 병합. 과거 WSS 증거의 통합 SHA·한계는 실행 기록 참조 |
 | 구독·명령·매칭·재접속 서버 | #42 `b843f5c`, #43 `8c3d167`, #49 `55afc38`, #50 `80715d9` | master 병합 (#147). `queue.*`는 #49, heartbeat·이탈 시계·`player.*`·paused는 #50 |
 | 인증·대국·프로필·매칭·약관 UI | #55 `b431f05` → #56 `a61fba6` → #57 `0a4ebb3` → #63 `c25f624` → #71 `011b5a8` | master 병합 (#147) |
 | OAuth/2FA·오델로 UI | #72 `e28c223`, #73 `3d06126` | master 병합 (#147) |
@@ -284,7 +284,7 @@ flowchart TD
   - `index.css`는 cascade layer 순서를 Tailwind theme → `styles.css`(components) → Tailwind utilities로 둔다. Tailwind preflight(전역 reset)는 `styles.css`의 base 규칙과 겹쳐 넣지 않는다.
   - 공통 폼(`flex flex-col gap-5` 등), 라벨, 부제, 프로필 레이아웃(`lg:grid-cols-[340px_1fr]`)은 컴포넌트의 Tailwind utility class로 쓴다(#119).
   - 여러 화면이 공유하는 버튼·입력·카드·모달·앱 레이아웃 19개 규칙은 `styles.css`의 `.cbc-*` 클래스 안에서 `@apply`로 Tailwind utility를 쓴다(#124, 예: `.cbc-input { @apply w-full rounded-lg py-3 pr-11 pl-4; … }`). components layer 안에서 펼쳐지므로 `cbc-btn-primary cbc-btn-compact`처럼 겹쳐 쓰는 클래스의 우선순위가 그대로다. 색상·테두리·상태 효과와 게임판 좌표·돌 같은 화면 고유 규칙은 CSS로 유지한다.
-  - 평가 시연 위치와 순서는 [mandatory-checklist.md](evaluation/mandatory-checklist.md)의 "스타일링 솔루션 시연", 검증 기록은 [styling-validation.md](styling-validation.md)(#124)에 둔다.
+  - 평가 시연 위치와 순서는 mandatory-checklist.md의 "스타일링 솔루션 시연", 검증 기록은 styling-validation.md(#124)에 둔다.
   - 디자인 토큰은 `styles.css` `:root`의 CSS 변수이고, `index.css`의 `@theme inline`이 Tailwind 색·글꼴 이름(`text-on-surface-variant`, `font-display` 등)으로 연결한다. 주요 값: 배경 `--surface` `#fcf9f2`, 본문 `--on-surface` `#1c1c18`, 보조 문구 `--on-surface-variant` `#41493a`, 주 강조 `--primary` `#2f6c00`·`--primary-container` `#70b644`, 오류 `--error` `#ba1a1a`, 제목 글꼴 `Epilogue`, 본문 글꼴 `Plus Jakarta Sans`(`Pretendard`·`Apple SD Gothic Neo` 폴백).
 - **게임 목록·플레이 가능 상태 및 사전 규칙 안내 (`FR-CAT-01`, `FR-CAT-02`)**:
   - `game/matchmaking-state.ts`의 `GAME_CATALOG`를 로비·매칭 화면이 공유한다. master에서 두 종목 모두 `playable: true`이며 서버 엔진 등록은 `apps/server/src/engines.ts`에 있다.
@@ -455,7 +455,7 @@ flowchart TD
 
 ##### 토큰 보관 방식 (A·B 합의 확정)
 
-아래 IF-02 계약은 #55 `b431f05`에서 구현·검증 후 게시했고 #56 → #57 → #63 → #71 `011b5a8`까지 전파했다. access token은 메모리 전용이며 refresh만 저장한다. 이전 token pair 저장 형식은 refresh-only로 이전하고, Web Locks로 같은 origin의 공유 refresh 회전을 직렬화한다. Web Locks 미지원 환경과 복제된 sessionStorage 탭의 동기화는 보장하지 않는다. #72·#73 등 나머지 웹 브랜치에는 이 수정 전파가 남아 있다. 실행 범위는 [인증 검증 기록](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/b431f05fa9a19055b5a82e8da0e2e6b345f2e4ad/Document/auth-web-validation.md)을 따른다.
+아래 IF-02 계약은 #55 `b431f05`에서 구현·검증 후 게시했고 #56 → #57 → #63 → #71 `011b5a8`까지 전파했다. access token은 메모리 전용이며 refresh만 저장한다. 이전 token pair 저장 형식은 refresh-only로 이전하고, Web Locks로 같은 origin의 공유 refresh 회전을 직렬화한다. Web Locks 미지원 환경과 복제된 sessionStorage 탭의 동기화는 보장하지 않는다. #72·#73 등 나머지 웹 브랜치에는 이 수정 전파가 남아 있다. 실행 범위는 인증 검증 기록을 따른다.
 
 5장 미결정 항목이었던 토큰 보관·전달 방식을 다음과 같이 확정한다(1.1 Security design과 일치):
 
@@ -509,12 +509,12 @@ B의 [#118](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/118) �
 - 로그인 폼의 `flex flex-col gap-5`, 친구 검색 필드의 `flex min-w-48 flex-1 flex-col gap-1.5`, 프로필의 `lg:grid-cols-[340px_1fr]`처럼 JSX에서 유틸리티를 직접 사용한다(#119).
 - 공통 버튼·입력·카드·모달·앱 레이아웃 19개 규칙은 `.cbc-*` 클래스 안에서 `@apply`를 사용한다(#124). 예: `.cbc-input { @apply w-full rounded-lg py-3 pr-11 pl-4; … }`. 게임판 좌표·돌과 상태별 색상·테두리는 화면 고유 CSS를 함께 사용한다.
 - `@theme inline`은 기존 CSS 변수를 Tailwind 색상·글꼴에 연결한다. 배경 `--surface: #fcf9f2`, 본문 `--on-surface: #1c1c18`, 주 강조 `--primary: #2f6c00`, 제목 `Epilogue`, 본문 `Plus Jakarta Sans`다.
-- 사용 코드와 렌더링은 [평가 체크리스트](evaluation/mandatory-checklist.md#스타일링-솔루션-시연-116)의 순서로 두 화면 이상에서 시연한다. [#124 검증 기록](styling-validation.md)과 최종 제출 SHA의 HTTPS/WSS·작성자 외 재현을 구분한다.
-- 최신 master와 #119를 합친 후보의 빌드·실제 API/DB·Chrome 결과와 남은 조건은 [#116 통합 검증](styling-116-integration-validation.md)에 기록한다.
+- 사용 코드와 렌더링은 평가 체크리스트의 순서로 두 화면 이상에서 시연한다. #124 검증 기록과 최종 제출 SHA의 HTTPS/WSS·작성자 외 재현을 구분한다.
+- 최신 master와 #119를 합친 후보의 빌드·실제 API/DB·Chrome 결과와 남은 조건은 #116 통합 검증에 기록한다.
 
 ##### 평가 시나리오 결함 대응 (#136)
 
-#143 위에 B의 #142·#126과 A의 후속 수정을 통합했다. OAuth·수동 갱신 안내는 화면 공통 영역에서 표시하고 본인 계정의 42 연결 상태는 `GET /api/users/me.oauth42Linked`로 확인한다. 종료된 대기열과 거절된 경기 재개 경로는 정리하며, 제어권 상실 후에는 재인증·재구독 스냅샷을 받은 뒤에만 착수·기권을 허용한다. 모달 포커스·계정 메뉴 키보드·화면 제목 포커스·턴 live 안내·타이머 알림·reduced motion과 항목별 검증은 [#136 수정 기록](evaluation-136-validation.md)을 따른다. 본인 계정 필드의 공개 범위는 [계약 문서](contracts.md#본인-계정의-인증-수단-표시-136)에 명시한다.
+#143 위에 B의 #142·#126과 A의 후속 수정을 통합했다. OAuth·수동 갱신 안내는 화면 공통 영역에서 표시하고 본인 계정의 42 연결 상태는 `GET /api/users/me.oauth42Linked`로 확인한다. 종료된 대기열과 거절된 경기 재개 경로는 정리하며, 제어권 상실 후에는 재인증·재구독 스냅샷을 받은 뒤에만 착수·기권을 허용한다. 모달 포커스·계정 메뉴 키보드·화면 제목 포커스·턴 live 안내·타이머 알림·reduced motion과 항목별 검증은 #136 수정 기록을 따른다. 본인 계정 필드의 공개 범위는 계약 문서에 명시한다.
 
 ##### 친구 REST 화면 후속 구현 (#80·#90, 2026-11-12)
 
@@ -529,7 +529,7 @@ B의 [#118](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/118) �
 - 초기 조회 실패를 빈 목록으로, 미확인 온라인 상태를 false로 바꾸지 않는다. 마지막 조회 시점 기준임을 안내하며 명시적 null은 확인 불가로 보존한다. #95는 온라인 집계가 주입되지 않으면 503을 반환하며, master의 `buildApp()`은 연결 목록의 `isUserOnline`을 주입한다. WS 연결이 끊기면 온라인 상태를 확인 불가로 표시하고, 인증 연결 복구 후 목록을 다시 읽는다.
 - 인증 후 `presence { userId, online }`와 `friends.changed {}`를 받으면 목록을 다시 읽는다. 알림 값으로 직접 덮지 않는다. 서버의 온라인 registry·변경 알림 연결은 master의 `buildApp()`에서 이뤄진다. 탈퇴 후 알림 경합은 `friend-account-deletion.test.ts`(커밋 후 상대 통지)와 `presence.test.ts`(`friends.changed` 뒤 이전 친구에게 `presence` 없음)가 확인한다. 초대·재대국은 이번 제출 범위 제외 (#81·#83·#62)이며, 채팅은 #165에서 별도로 구현됐다.
 
-검증 범위·결과·응답 대체와 실제 서버의 구분은 [친구 화면 검증 기록](friends-web-validation.md)을 따른다.
+검증 범위·결과·응답 대체와 실제 서버의 구분은 친구 화면 검증 기록을 따른다.
 
 #### 3. Backend architecture (B)
 
@@ -1030,7 +1030,7 @@ flowchart TD
 
 #### 8. API contract
 
-상세 요청·응답·상태 코드는 [contracts.md 11장](contracts.md)(#33, master 병합), 이 문서 2.10(기능별 처리 흐름)과 Swagger(`/docs`)를 대조한다. 모든 route는 가능한 상태 코드를 `schema.response`에 선언했다. 게임 명령·snapshot·결과 타입은 [공통 게임 계약 (PR #6)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6)의 contracts.md를 따른다.
+상세 요청·응답·상태 코드는 contracts.md 11장(#33, master 병합), 이 문서 2.10(기능별 처리 흐름)과 Swagger(`/docs`)를 대조한다. 모든 route는 가능한 상태 코드를 `schema.response`에 선언했다. 게임 명령·snapshot·결과 타입은 [공통 게임 계약 (PR #6)](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/6)의 contracts.md를 따른다.
 
 | 영역 | Endpoint | 담당 | 상태 |
 |---|---|---|---|
@@ -1049,7 +1049,7 @@ flowchart TD
 
 #### 9. WebSocket contract (D)
 
-인증·앱 ping은 #41, 구독은 #42, 명령은 #43, 매칭은 #49, heartbeat·재접속은 #50, presence는 #98, `chat.changed`는 #165가 구현했고 모두 master에 병합됐다. 초대(`invite.*`)는 B 초안이며 이번 제출 범위 제외 (#81·#83·#62)다. 이벤트 이름은 이슈 #16~#20을 따른다. 문서화 명세 19장의 대문자 이름(`PLACE_STONE` 등)은 쓰지 않는다. payload 타입은 [contracts.md](contracts.md)(PR #6)를 그대로 쓴다.
+인증·앱 ping은 #41, 구독은 #42, 명령은 #43, 매칭은 #49, heartbeat·재접속은 #50, presence는 #98, `chat.changed`는 #165가 구현했고 모두 master에 병합됐다. 초대(`invite.*`)는 B 초안이며 이번 제출 범위 제외 (#81·#83·#62)다. 이벤트 이름은 이슈 #16~#20을 따른다. 문서화 명세 19장의 대문자 이름(`PLACE_STONE` 등)은 쓰지 않는다. payload 타입은 contracts.md(PR #6)를 그대로 쓴다.
 
 Endpoint: `wss://<host>/api/ws` (Nginx가 upgrade 전달, #28).
 
@@ -1376,7 +1376,7 @@ sequenceDiagram
     end
 ```
 
-- 과거 고정 SHA의 [WSS 검증](runtime-wss-validation.md)에서는 감지가 약 30초여서 20초 목표 차이를 보고했다. 최신 통합에서 다시 측정하기 전에는 목표 달성으로 기록하지 않는다.
+- 과거 고정 SHA의 WSS 검증에서는 감지가 약 30초여서 20초 목표 차이를 보고했다. 최신 통합에서 다시 측정하기 전에는 목표 달성으로 기록하지 않는다.
 - 종료 경로도 착수와 같은 경기 행 잠금을 쓴다. 이탈 만료와 마지막 착수가 겹쳐도 결과는 하나만 확정된다.
 - `paused` 전환을 `games.status`에 저장하는 이유: 그 사이 들어온 착수를 `apply()`가 `GAME_NOT_ACTIVE`로 거절하게 하기 위해서다. 이 갱신은 `GameCommandService.setStatus(matchId, from, to)`(B)를 쓴다. 현재 상태가 `from`일 때만 바꾸고 바꿨는지를 돌려준다. 그래서 경기 종료 직후 들어온 이탈 처리가 `finished`를 덮어쓰지 않는다.
 
@@ -1550,7 +1550,7 @@ sequenceDiagram
 
 #### 16. Deployment design (E)
 
-PR #10(`infra/compose.full.yaml`)은 master `6965b9c`에 병합됐다. 실행·검증 범위는 [runtime.md](runtime.md)와 [runtime-wss-validation.md](runtime-wss-validation.md)를 따른다.
+PR #10(`infra/compose.full.yaml`)은 master `6965b9c`에 병합됐다. 실행·검증 범위는 runtime.md와 runtime-wss-validation.md를 따른다.
 
 ```mermaid
 flowchart TD
@@ -2111,7 +2111,7 @@ flowchart TD
 - `StatsService.getStats/getMatches`에 인증된 조회자의 `viewerId`를 필수로 넘긴다. 한 트랜잭션에서 대상 사용자 행을 `FOR SHARE`로 읽고 권한을 검사한 뒤 전적을 읽어, 설정 변경과 조회의 순서를 DB에서 정한다. 없는 대상은 404, 타인의 비공개 전적은 데이터 없이 403 `RECORDS_PRIVATE`다. 두 API 응답은 `Cache-Control: no-store`다.
 - 기본 프로필의 닉네임·아바타, 리더보드, 상대방 본인의 전적은 유지한다. 이메일·공개 설정은 타인의 기본 프로필에 추가 노출하지 않는다.
 - 내 프로필 토글은 처리 중 비활성화하고 서버 응답 이후 반영한다. 실패하면 저장된 값을 유지하고 오류를 표시한다. 다른 사용자의 비공개 안내는 기본 프로필과 함께 표시하며 통계·업적·최근 대국 및 이전 조회 데이터는 숨긴다.
-- 상세 요청·응답·상태 코드는 [contracts 11.4](contracts.md#114-전적-공개-설정과-조회-권한-fr-pro-04-dec-05), 실제 DB·브라우저 증거는 [검증 기록](profile-records-privacy-validation.md)을 따른다.
+- 상세 요청·응답·상태 코드는 contracts 11.4, 실제 DB·브라우저 증거는 검증 기록을 따른다.
 
 #### 2.10.27 회원 탈퇴 `DELETE /api/users/me` (B, #89 `구현됨`, #84)
 
@@ -2368,9 +2368,9 @@ flowchart TD
 | `NFR-UX-01` | 최신 안정 Google Chrome에서 주요 흐름이 동작해야 한다. | 2.2.2 | `apps/web/src/`, `config/playwright.config.ts` | 웹 #55·#56·#57·#63·#71~#73; 브라우저 #77 | `AT-11`, `T00`~`T09`, Chrome 버전·콘솔 기록 | 화면 브랜치 구현; 최신 안정 Chrome의 전체 주요 흐름·콘솔 인수 별도 |
 | `NFR-UX-02` | 화면은 다양한 기기 크기에서 명확하고 반응형이며 접근 가능해야 한다. | 2.2.2 | `apps/web/src/game/GomokuMatchView.tsx`, `game/OthelloMatchView.tsx`, `profile/ProfileView.tsx`, `App.tsx`, `styles.css` | 이슈 #22, #64 / PR #71 (`c404491`), #65 / PR #72 (`e28c223`), #66 / PR #73 (`3d06126`) | `AT-11`, `T09` 키보드·라벨·포커스 및 360×800·768×1024·1440×900 제안 크기 | 키보드·반응형·모달 포커스 브랜치 구현; 전체 화면의 실제 브라우저 인수 별도 |
 | `NFR-UX-03` | 사용자 작업에는 처리 중·성공·실패·빈 상태를 구별하는 피드백이 있어야 한다. | 2.2.2 | `apps/web/src/App.tsx`, `api/errors.ts`, `game/GomokuMatchView.tsx`, `profile/ProfileView.tsx`, `profile/LeaderboardView.tsx` | 웹 #55·#56·#57·#63·#71~#73 | `AT-11`, `T01`, `T02`, `T04`, `T09` 로딩·성공·실패·빈 상태 | 피드백 UI 브랜치 구현; 오류 원문 비노출·재시도 안내 및 화면별 실제 인수 별도 |
-| `NFR-UX-04` | CSS 프레임워크 또는 스타일링 솔루션을 사용해야 한다. | 2.2.2, `cyber_board_cafe_stitch_2026-10-28/DESIGN.md` | `apps/web/vite.config.ts`, `apps/web/src/index.css`, `App.tsx`·`profile/ProfileView.tsx`·`friends/FriendsView.tsx`의 Tailwind class, `styles.css`의 `@apply` | 이슈 #116 / PR #119 (`45a6351`), #124 (`50e3f55`), 검증 [styling-validation.md](styling-validation.md) | `AT-11`, `T09` | PR #119·#124 리뷰 중. 표준 CSS만으로는 평가표 미충족(#116) |
+| `NFR-UX-04` | CSS 프레임워크 또는 스타일링 솔루션을 사용해야 한다. | 2.2.2, `cyber_board_cafe_stitch_2026-10-28/DESIGN.md` | `apps/web/vite.config.ts`, `apps/web/src/index.css`, `App.tsx`·`profile/ProfileView.tsx`·`friends/FriendsView.tsx`의 Tailwind class, `styles.css`의 `@apply` | 이슈 #116 / PR #119 (`45a6351`), #124 (`50e3f55`), 검증 styling-validation.md | `AT-11`, `T09` | PR #119·#124 리뷰 중. 표준 CSS만으로는 평가표 미충족(#116) |
 | `NFR-CONC-01` | 여러 사용자의 동시 로그인·행동을 충돌이나 데이터 손상 없이 처리해야 한다. | 2.6 (정상 착수), 2.8 (명령·동시성), 2.8 (결과 확정), 2.10.20 | `apps/server/src/services/game-command-service.ts`, `repositories/game-repository.ts`, `apps/web/src/game/GomokuMatchView.tsx`(`pendingCommand`) | PR #11 (`29d5a3e`), 이슈 #22 (`98218d9`) | `AT-09`, `game-command-service.test.ts`, `T04`, `T05`, `B-IT-06`, `B-IT-07`, `B-IT-09` | `구현됨` |
-| `NFR-PERF-01` | 승인된 기준 부하에서 일반 요청과 실시간 상태 전달이 지연 목표를 만족해야 한다. | 4.3.2 | 통합 API·WS 실행 환경, `scripts/measure-perf.mjs` (`npm run test:perf`) | SRS `349e9e4`, `DEC-10` 승인 확인 필요 | `AT-10`, `T05`와 구분한 4.3.2 부하 측정 | SRS 수치는 제안이며 승인 전 합격 기준 아님; master `531f8a1`(#147 이전)에서 측정, 수치는 [perf/README.md](perf/README.md). `54fa651` 재측정 안 함 |
+| `NFR-PERF-01` | 승인된 기준 부하에서 일반 요청과 실시간 상태 전달이 지연 목표를 만족해야 한다. | 4.3.2 | 통합 API·WS 실행 환경, `scripts/measure-perf.mjs` (`npm run test:perf`) | SRS `349e9e4`, `DEC-10` 승인 확인 필요 | `AT-10`, `T05`와 구분한 4.3.2 부하 측정 | SRS 수치는 제안이며 승인 전 합격 기준 아님; master `531f8a1`(#147 이전)에서 측정, 수치는 perf/README.md. `54fa651` 재측정 안 함 |
 | `NFR-REC-01` | 네트워크 지연·일시 단절에서도 잘못된 확정 상태를 만들지 않아야 한다. | 2.2.2, 2.5.9, 2.6.13, 2.8 (명령·동시성) | `apps/server/src/api/ws-routes.ts`, `services/game-command-service.ts`, `apps/web/src/App.tsx`, `game/ws-client.ts` | PR #11 (`29d5a3e`), PR #41·#42·#43·#49·#50, 웹 #55·#56 | `AT-06`, `T01`, `T04` | `구현됨` (master 병합) |
 | `NFR-OPS-01` | 완료된 데이터는 정상 서비스 재기동 이후에도 보존되어야 한다. | 2.9.16, 2.10.22 | `apps/server/src/app.ts`, `index.ts`, `infra/compose.full.yaml`, `scripts/check-db.mjs` | PR #10 (`7788e5e`, master 병합), PR #11 (`29d5a3e`), PR #15 (`26c253d`), 이슈 #28·PR #40 | `AT-01`, `app.test.ts`, `T00`, `T07`, `T08`, `B-IT-10` | Health API `구현됨`, 전체 컨테이너 PR #10·#40 |
 | `NFR-OPS-02` | 서버는 기동 준비·DB 장애·종료를 진단 가능하게 처리해야 한다. 개발용 통합 실행도 시작 실패·종료 시 자신이 시작한 관련 프로세스를 정리해야 한다. | 2.2.3, 2.9, 2.10.23 | `scripts/dev.mjs`, `apps/server/src/index.ts`, `scripts/container-start.mjs`, `apps/web/vite.config.ts` | master의 실행 코드, PR #10·#40; SRS PR #2 실행 실패 보고 | `AT-01`, `AT-14`, `T00` 시작 실패·정상 종료·잔류 프로세스·재실행 확장, `T10` 실행 문서 | 실행·종료 처리 코드와 과거 runtime 기록 존재; 개발 통합 실행의 실패 후 포트·하위 프로세스 정리 재현 별도 |
@@ -2402,7 +2402,7 @@ flowchart TD
 | `AT-07` | 오델로 | 초기 배치·흑 선공·8방향/복수 방향 뒤집기·불법 착수·자동 패스·양쪽 행동 불가·돌 수 승패/동수 무승부. 실제 PC 두 대의 매칭/친구 초대→원격 완주→복구→오델로 전적·통계 | `T03` 오델로 변형, `T04`, `T06` 초대 변형, `T07`, `T08` | 엔진 #58, UI #73·서버 등록/E2E #77 master 병합; 초대는 이번 제출 범위 제외 (#81·#83·#62), 준비 및 실제 두 PC 전체 인수 별도 |
 | `AT-08` | 전적·통계 | 실제 정상 경기·기권·무승부·무효 데이터를 만들고 게임별 집계·업적 경계·순위 비교 | `T07`, `T08`, `B-IT-08` | API·DB 테스트와 실제 두 게임 정상·기권·무승부·무효 데이터 인수는 구분 |
 | `AT-09` | 동시성·격리 | 두 경기 동시 진행, 외부 사용자 행동, 중복 요청, 두 게임 상태 혼선 없음 | `T04`, `T05`, `B-IT-06`, `B-IT-07`, `B-IT-09` | DB 경합 테스트 존재; 서로 다른 두 게임의 실제 동시 실행·전송 격리 인수 별도 |
-| `AT-10` | 성능 | 승인된 부하와 네트워크 조건에서 처리·전파 지연 및 실패율 기록 | 4.3.2 별도 부하 측정; `T05` 기능 경합 시험과 분리 | DEC-10 승인 전; master `531f8a1`(#147 이전)에서 측정한 수치만 기록([perf/README.md](perf/README.md)); 제안 수치로 합격 선언하지 않음 |
+| `AT-10` | 성능 | 승인된 부하와 네트워크 조건에서 처리·전파 지연 및 실패율 기록 | 4.3.2 별도 부하 측정; `T05` 기능 경합 시험과 분리 | DEC-10 승인 전; master `531f8a1`(#147 이전)에서 측정한 수치만 기록(perf/README.md); 제안 수치로 합격 선언하지 않음 |
 | `AT-11` | UI·정책 | 최신 Chrome, 좁은 화면, 키보드, 콘솔 확인, 약관·개인정보 페이지와 실제 동작 대조 | `T09`, `T02` 프로필 UI 변형 | 웹 브랜치·부분 브라우저 증거와 최신 Chrome 전체 흐름·정책 대조 인수는 구분 |
 | `AT-12` | 설계·확장 설명 | 계정/방/게임 규칙/저장 경계와 금수·장목 확장 지점 및 검증 계획 설명 | `T10` 구조·규칙 확장 설명 | 엔진 분리 코드는 존재; 작성자가 아닌 팀원의 확장 지점·검증 계획 설명 별도 |
 | `AT-13` | 제출 문서·팀 이해 | 영어 README로 비작성자 실행, 역할·기여·모듈·AI 사용 및 작은 변경 방법 설명 | `T10` README 재현·개인 기여·작은 변경 | README 초안; 실제 역할·모듈·AI 사용 증빙 및 전원 설명 인수 별도 |

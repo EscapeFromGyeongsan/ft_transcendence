@@ -1,8 +1,8 @@
 # TEST_PLAN
 
-2026-11-13 #136 실행 기록: #143 위에 #142·#126을 통합하고 A 담당 세션·OAuth 안내·대국 제어권·방문 기록·접근성 결함을 수정했다. 새 단위/브라우저 회귀와 실제 API·DB·두 탭 대국 검증은 [#136 검증 기록](evaluation-136-validation.md)을 따른다. #88 전체 인수·최종 제출 승인과 구분한다.
+2026-11-13 #136 실행 기록: #143 위에 #142·#126을 통합하고 A 담당 세션·OAuth 안내·대국 제어권·방문 기록·접근성 결함을 수정했다. 새 단위/브라우저 회귀와 실제 API·DB·두 탭 대국 검증은 #136 검증 기록을 따른다. #88 전체 인수·최종 제출 승인과 구분한다.
 
-2026-11-13 #116 실행 기록: 최신 master `742ba64`와 #119 `c51bf27`을 합친 후보에서 production build, 새 DB migration 7개, 단위·DB 테스트 513개가 통과했다. Chrome의 실제 HTTPS/WSS 12개 화면(1440×900·768×1024·360×800)에서 가로 넘침과 콘솔 오류·경고가 없었다. 전체 E2E는 최초 57 통과·5 실패·12 제외였고, 실패 항목 재실행에서 3개 통과·프로필 2개는 HTTP 429로 남았다. [상세 기록과 캡처](styling-116-integration-validation.md)를 참조한다. 최종 제출 SHA·Docker/Nginx·작성자 외 재현을 확인하지 않았으므로 #88 전체 완료로 표시하지 않는다.
+2026-11-13 #116 실행 기록: 최신 master `742ba64`와 #119 `c51bf27`을 합친 후보에서 production build, 새 DB migration 7개, 단위·DB 테스트 513개가 통과했다. Chrome의 실제 HTTPS/WSS 12개 화면(1440×900·768×1024·360×800)에서 가로 넘침과 콘솔 오류·경고가 없었다. 전체 E2E는 최초 57 통과·5 실패·12 제외였고, 실패 항목 재실행에서 3개 통과·프로필 2개는 HTTP 429로 남았다. 상세 기록과 캡처를 참조한다. 최종 제출 SHA·Docker/Nginx·작성자 외 재현을 확인하지 않았으므로 #88 전체 완료로 표시하지 않는다.
 
 상태: 테스트 계획 (2026-11-14 문서 동기화, master `54fa651`). Vitest + 실제 PostgreSQL로 DB 통합을 검증한다. 아래 시나리오는 통과 결과가 아니며, 실제 실행 명령·검증 환경·결과는 각 PR의 `Test Result`에 기록한다. `구현됨`, 브랜치 통합, 실제 서버 실행, 비작성자 재현을 구분한다.
 
@@ -41,7 +41,7 @@
 
 | ID | 입력/행동 | 기대 결과·데이터 확인 |
 |---|---|---|
-| T00 실행 | [runtime.md](runtime.md)대로 `.env.full`·비밀번호 파일·인증서를 준비하고 `docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`; 같은 옵션으로 `ps`; HTTPS URL 접속 | 필요한 서비스 정상, UI/API 접속, 외부 HTTPS 및 WS transport의 WSS 확인, DB 포트 외부 비공개. 같은 full-app 옵션의 `logs --no-color`는 민감값 제거 후 보관 |
+| T00 실행 | runtime.md대로 `.env.full`·비밀번호 파일·인증서를 준비하고 `docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`; 같은 옵션으로 `ps`; HTTPS URL 접속 | 필요한 서비스 정상, UI/API 접속, 외부 HTTPS 및 WS transport의 WSS 확인, DB 포트 외부 비공개. 같은 full-app 옵션의 `logs --no-color`는 민감값 제거 후 보관 |
 | T01 인증 | p1/p2를 각기 가입·로그인. 같은 이메일 재가입, 잘못된 비밀번호, 로그아웃 후 보호 API 요청 | 별개 userId/세션, DB에 비밀번호 해시 저장, 중복 가입/잘못된 인증 거절. 원문 비밀번호·해시 내용은 캡처하지 않음 |
 | T02 프로필 | p1 닉네임 수정·PNG 아바타 업로드, p2가 프로필 조회, 기본 아바타 확인. 허용되지 않은 형식·초과 크기·타인 수정 요청 | 새로고침 후 유지, 기본 이미지 표시, 서버에서 부적절한 요청 거절. PNG/JPEG, 2 MiB 이하, 가로·세로 각각 1024px 이하(#15) |
 | T03 한 판 | PC1 p1과 PC2 p2가 오목 자동 매칭을 신청한다. `queue.matched` 후 같은 matchId를 구독하고 서버가 배정한 흑/백을 확인한다. 흑 `(7,3),(7,4),(7,5),(7,6),(7,7)`, 백 `(0,0),(0,2),(0,4),(0,6)`을 번갈아 입력(0-based 행/열) | 별도 준비 단계 없이 시작, 흑 5개로 종료, 두 PC 동일 상태, 흑 승/백 패와 참가자·시각이 DB에 한 번 저장. 차례 밖/이미 찬 칸 입력은 거절. p1이 반드시 흑이라고 가정하지 않음 |
@@ -78,7 +78,7 @@ T03의 준비 단계 없는 시작은 현재 구현 검증이다. 기준 SRS의 
 | 전적 공개 E2E | `origin/feat/profile-records-privacy` `8b93fb5` (PR #79), `tests/profile.spec.ts` | 실제 두 계정·대국 후 비공개 403·재공개·새로고침을 검증하는 병합 전 코드 |
 | 친구 UI·REST·presence | UI #90 `d589b93`, REST #95 `758459e`, presence #98 `07a4989` | #90 브라우저 테스트는 API/WS 대체이며 실제 친구 인수 증거가 아님. #95 실제 PostgreSQL·HTTP, #98 registry·WS 기록도 상호 연결 검증과 구분 |
 | 인증 저장·복구 및 약관 회귀 | #55 `b431f05`의 `tests/auth.spec.ts`, #71 `011b5a8`의 `tests/legal-routing-regression.spec.ts` | 인증은 실제 API·DB desktop/mobile 8개, 법률 라우팅은 HTTP·WS 대체 desktop/mobile 10개 통과 기록. 활성 대국의 문서 유지·Back/Forward·다른 대국 복원·360px 푸터를 확인했으며 실제 대국 서버 인수 증거와 구분 |
-| HTTPS/WSS 실행 기록 | master의 [runtime-validation.md](runtime-validation.md), [runtime-wss-validation.md](runtime-wss-validation.md) | #10 병합. WSS는 고정된 과거 통합 SHA의 기록이며 약 30초 감지/20초 목표 차이가 남음. 현재 통합 인수와 다름 |
+| HTTPS/WSS 실행 기록 | master의 runtime-validation.md, runtime-wss-validation.md | #10 병합. WSS는 고정된 과거 통합 SHA의 기록이며 약 30초 감지/20초 목표 차이가 남음. 현재 통합 인수와 다름 |
 | 오목·오델로 엔진 | `packages/game-engine/src/{gomoku,othello}/*.test.ts`, 오델로 PR #58 | 규칙 검증. WS·실제 서버 등록·DB 저장 통합은 별도 |
 
 현재 Playwright 설정(`config/playwright.config.ts`)은 `E2E_BASE_URL`이 없으면 `npm run dev`를 기동하고, 있으면 그 배포 대상을 사용한다. `*acceptance-88.spec.ts`는 기본 설정에서 제외되며 `config/playwright.acceptance.config.ts`에 HTTPS `E2E_BASE_URL`과 `E2E_TLS_SPKI`를 지정해 실행한다. 테스트를 실행하지 않고 코드 존재나 다른 작성자의 보고만으로 `통과`를 기록하지 않는다.
@@ -130,10 +130,10 @@ T03의 준비 단계 없는 시작은 현재 구현 검증이다. 기준 SRS의 
 
 결과: **부분 검증 완료, 최종 인수 보류**. 위 계획·과거 PR별 기록과 이번 실행 결과를 구분한다. 실제 빌드한 제품 SHA는 `e10d4c58bfb5cce14768f2b81c12cdef39488967`, 브랜치는 `test/acceptance-88`이다. master 병합·배포 완료를 의미하지 않는다.
 
-- [인수 기록·AT-01~17 매핑·결함·재현](acceptance-88-validation.md)
-- [비밀값을 제외한 실행별 JSON 증거](acceptance-88-evidence.json)
-- [AT-14 개발 실행·종료·설정 일관성](acceptance-88-at14.md)
-- [통합 출처·migration·원본 한계](../CANDIDATE-PROVENANCE.md)
+- 인수 기록·AT-01~17 매핑·결함·재현
+- 비밀값을 제외한 실행별 JSON 증거
+- AT-14 개발 실행·종료·설정 일관성
+- 통합 출처·migration·원본 한계
 
 별도 PostgreSQL에서 43파일·484개 테스트가 건너뜀 없이 통과했다. Chrome 157.0.8103.52에서 1440×900 / 768×1024 / 360×800 실제 두 계정·오목/오델로·전적·친구·키보드·HTTPS/WSS 정상 흐름이 통과했고, 해당 흐름의 콘솔 warning/error·pageerror·실패 요청·HTTP 오류는 0이다. 인증/탈퇴/친구/프로필/두 게임 완주·복귀, 누적 60초 이탈과 두 경기 격리, 실제 2FA 설정·복구·해제를 별도로 확인했다. 환경·계정/경기 ID·기대/실제 결과·검증자·리뷰 상태·수치·원시 기록 위치는 위 문서/JSON을 기준으로 한다.
 
@@ -143,11 +143,11 @@ T03의 준비 단계 없는 시작은 현재 구현 검증이다. 기준 SRS의 
 
 ### 후속 검증: #110 탈퇴·친구 결합
 
-제품 `d591bf6`에서 B88-01을 수정했다. 전용 PostgreSQL 44파일·497개 및 실제 HTTPS 친구·탈퇴 6개가 실패·skip 없이 통과했다. 활성 사용자 잠금과 탈퇴/요청·수락·거절 경합, rollback, commit 뒤 인증 WebSocket 알림을 포함한다. [검증 기록](deleted-friends-validation.md)·[JSON 증거](deleted-friends-evidence.json)를 기준으로 하며, 위 `108a570`의 실패 기록은 당시 증거로 보존한다. #111·초대·외부 인수 조건은 미완료다.
+제품 `d591bf6`에서 B88-01을 수정했다. 전용 PostgreSQL 44파일·497개 및 실제 HTTPS 친구·탈퇴 6개가 실패·skip 없이 통과했다. 활성 사용자 잠금과 탈퇴/요청·수락·거절 경합, rollback, commit 뒤 인증 WebSocket 알림을 포함한다. 검증 기록·JSON 증거를 기준으로 하며, 위 `108a570`의 실패 기록은 당시 증거로 보존한다. #111·초대·외부 인수 조건은 미완료다.
 
 ### 2026-11-13 후속: T08 통계 경계·AT-09 혼합 경기
 
-제품 `0c1892b`에서 새 실제 계정의 10경기6승4패·첫 승·4/10→10/10, 11경기 진행도 상한과 cursor 전적, 승률/ID 동률 정렬을 확인했다. 통계 21경기의 참가자 결과 42건·상대·종료 시간은 실제 DB와 일치했다. Chrome 새로고침 뒤 업적·집계 유지와 오목/오델로 동시 경기의 메시지·명령 격리도 확인했다. 두 배치 모두 실패·skip·retry 0이다. [후속 검증](acceptance-88-stats-validation.md)·[JSON 증거](acceptance-88-stats-evidence.json)를 참고한다. 무승부·재시작 무효와 최종 통합 SHA 인수는 남아 있다.
+제품 `0c1892b`에서 새 실제 계정의 10경기6승4패·첫 승·4/10→10/10, 11경기 진행도 상한과 cursor 전적, 승률/ID 동률 정렬을 확인했다. 통계 21경기의 참가자 결과 42건·상대·종료 시간은 실제 DB와 일치했다. Chrome 새로고침 뒤 업적·집계 유지와 오목/오델로 동시 경기의 메시지·명령 격리도 확인했다. 두 배치 모두 실패·skip·retry 0이다. 후속 검증·JSON 증거를 참고한다. 무승부·재시작 무효와 최종 통합 SHA 인수는 남아 있다.
 
 ## 7. #161 최종 인수 실행 (2026-11-14, master)
 
