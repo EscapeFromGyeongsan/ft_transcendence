@@ -31,6 +31,7 @@
 
 - **기준 메모 규칙**: [M]과 [C]의 동작이 다른 곳은 "기준" 줄에 두 쪽을 짧게 적었습니다. 제출 master는 두 쪽이 합쳐진 결과이므로, 시연 전 실제 빌드에서 어느 쪽 동작인지 확인합니다.
 - [C]의 realtime 서버 코드는 [M]보다 오래됐습니다(1008 상한 없음, 종료 후 duplicate 처리 차이). 탈퇴·친구·전적 비공개는 [C]에만 있습니다.
+- 2026-11-14 master `54fa651`(#147 병합)에는 [C], [#123], [#119/#124], [#126], [#127], [#120]과 #165 친구 1:1 채팅, #166 로비 정리가 모두 들어 있습니다. 로비·대국 진입·오류 표시(6.11절, 7.2~7.3절, 10.1절 일부)와 닉네임 중복 규칙(migration 0007·0008)은 `54fa651` 기준으로 고쳤습니다. 그 밖의 `file:line`은 조사 사본 기준이라 줄 번호가 달라졌을 수 있습니다.
 
 ---
 
@@ -54,7 +55,7 @@
 
 | 확인 | 내용 |
 |---|---|
-| 최종 master로 배포 | [M] 그대로는 웹이 제목 한 줄(`apps/web/src/App.tsx:1-3` [M]). 웹이 통합된 최종 커밋으로 배포 |
+| 최종 master로 배포 | master `54fa651`에는 실제 웹 앱이 들어 있음(#147). [M] `531f8a1`처럼 웹이 제목 한 줄인 이전 커밋으로 배포하지 않음 |
 | #123 브랜치 단독 배포 금지 | [#123] base `6ed44fd`에는 `apps/server/src/index.ts`의 `gameEngines` import/전달(`index.ts:5,52-53` [M])이 없음. `rulesByGameType` 기본 `{}`(`apps/server/src/app.ts:107` [M]) → 경기 생성 시 `No rules registered for ${gameType}.` throw(`apps/server/src/services/game-command-service.ts:168-171` [M]) → 매칭 실패. 최신 master와 합친 뒤 배포 |
 | 한 컴퓨터에 사본 하나 | project 이름 `-p cyber-board-cafe-full` 고정(`Makefile:3-4`, `compose.full.yaml:1`). 다른 디렉터리에서 `make`하면 같은 컨테이너를 그 디렉터리 빌드로 재생성, volume(`cyber-board-cafe-full_postgres_data`, `..._avatars`) 공유 |
 | 저장소 루트에서 실행 | `--project-directory .`와 prepare의 상대 경로. 하위 디렉터리에서는 Makefile이 없어 실패 |
@@ -73,7 +74,7 @@ docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-fu
 ```
 
 - `down -v`는 `postgres_data`·`avatars` volume을 지워 계정·전적·아바타가 모두 사라집니다. `.env.full`, 비밀번호 파일, 인증서는 호스트 파일이라 남습니다(`Document/runtime.md:165`).
-- migration 세트가 다른 브랜치를 오간 volume([C] 0000~0006 vs [M] 0000~0003)도 같은 방법으로 정리합니다. 이미 적용된 migration이 폴더에 없을 때 drizzle-kit 동작은 코드로 확인 불가이고, 스키마와 코드가 어긋나면 런타임 500이 날 수 있습니다.
+- migration 세트가 다른 브랜치를 오간 volume([C] 0000~0006, [M] 0000~0003, 현재 master 0000~0009)도 같은 방법으로 정리합니다. 이미 적용된 migration이 폴더에 없을 때 drizzle-kit 동작은 코드로 확인 불가이고, 스키마와 코드가 어긋나면 런타임 500이 날 수 있습니다.
 
 ### 2.4 `.env.full`
 
@@ -140,7 +141,7 @@ docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-fu
 
 - README 첫 줄 `*This project has been created as part of the 42 curriculum by jyoo, yunhpark, yoshin, sipyeon, dong-hki.*`([M] `README.md:1`).
 - [M] README 섹션: Description, Technical stack, Instructions, Environment variables, Structure, Documentation.
-- #118(`docs/readme-db-schema` 브랜치) README에는 추가로 Features and integration status, Game rules, Database schema, Testing, Team/modules/project management, Documentation and resources, AI usage, Known limitations가 있습니다.
+- master `54fa651` README 섹션: Description, Features and integration status, Game rules, Technical stack and architecture, Database schema, Instructions, Environment variables, Testing, Team/modules and project management, Structure, Documentation and resources, AI usage, Known limitations.
 - 과목 VI장 필수(Team Information, Project Management, Technical Stack, Database Schema, Features List, Modules, Individual Contributions, Resources·AI 사용)가 최종 master README에 모두 있는지 평가 전에 확인합니다.
 - `.env`, `.env.*`는 git 제외, 예시 파일만 커밋(`.gitignore:4-5,17`). `.env.full`은 Docker build context에서도 제외(`.dockerignore:10-13`).
 
@@ -405,7 +406,7 @@ sequenceDiagram
 |---|---|---|
 | 프런트 | React(SPA, 라우터 라이브러리 없이 `history.pushState`) + Vite | `apps/web/src/App.tsx:398-524` [C] |
 | 백 | Fastify, JSON Schema 검증, `@fastify/websocket`, `@fastify/rate-limit`, `@fastify/swagger` | `apps/server/src/app.ts` |
-| DB | PostgreSQL 17 + Drizzle ORM, migration `apps/server/drizzle/` ([M] 0000~0003, [C] 0000~0006) | `apps/server/src/db/schema/*.ts` |
+| DB | PostgreSQL 17 + Drizzle ORM, migration `apps/server/drizzle/` (master `54fa651` 0000~0009) | `apps/server/src/db/schema/*.ts` |
 
 DB 테이블과 관계([C] `apps/server/src/db/schema/`):
 
@@ -479,7 +480,7 @@ DB 테이블과 관계([C] `apps/server/src/db/schema/`):
 ### 4.13 영어 README·AI 사용 공개·기여 설명 (VI)
 
 - 첫 줄 이탤릭 문구는 2.9절. 필수: Description, Instructions, Resources(AI 사용 포함), Team Information, Project Management, Technical Stack, Database Schema, Features List, Modules(점수 계산), Individual Contributions. README는 영어여야 합니다.
-- [M] README에는 Description, Technical stack, Instructions, Environment variables, Structure, Documentation이 있고, Team·modules·project management, Database schema, AI usage, Known limitations는 #118 브랜치에 있습니다. 최종 master에서 섹션 존재를 확인합니다.
+- master `54fa651` README에는 Description, Technical stack and architecture, Instructions, Database schema, Team/modules and project management, Documentation and resources, AI usage, Known limitations 등이 있습니다(2.9절). 최종 master에서 섹션 존재를 확인합니다.
 
 ---
 
@@ -665,7 +666,7 @@ DB 테이블과 관계([C] `apps/server/src/db/schema/`):
 | 상황 | 동작 | 근거 |
 |---|---|---|
 | 로그아웃 상태로 `/friends`, `/me`, `/leaderboard`, `/users/3`, `/matching` | 로그인 화면, URL `/login`. 원래 목적지를 기억하지 않아 로그인 후 항상 로비 | `App.tsx:239-247,407-431,1198,1286` |
-| 비로그인 `/match/5` | gomokuState 초기값 matchId 5 → 로그인 후 서버 활성 대국이 없어도 로비에 "진행 중인 오목 대국(#5) 복귀" 버튼이 보일 수 있음 | `App.tsx:301-303,114-120,2584-2594`, 실행 확인 필요 |
+| 비로그인 `/match/5` | gomokuState 초기값 matchId 5. 복귀 버튼은 같은 matchId의 미종료 snapshot이 있을 때만 보여, 서버 활성 대국이 없으면 버튼 없음 | `App.tsx:143,322-335,2674-2692` |
 | 사용자 이동 vs 자동 전환 | 이동은 pushState, 초기 복구·WS 자동 전환은 replaceState | `App.tsx:256-257,314-315,416-427` |
 | 로그인 상태에서 back으로 `/login`·`/signup` | lobby + URL `/` replace | `App.tsx:442-524` |
 | 비로그인 forward로 보호 경로 | login | |
@@ -718,11 +719,11 @@ schema: `email` format email ≤254, `password` 8~128, `nickname` `^[\p{L}\p{N}_
 | 이메일·닉네임 둘 다 중복 | | 409 `EMAIL_TAKEN` | | PG가 먼저 위반한 제약 |
 | 이메일 앞뒤 공백 | `" sp@x.com"` | 422 `/email must match format "email"` | "올바른 이메일 주소를 입력해 주세요." | 서버는 trim 안 함. 로그인 화면은 `.trim()`(`App.tsx:1182`) |
 | `<script>@x.com` | | 422 | | 이메일로 XSS 저장 불가 |
-| 닉네임 대소문자만 다름 | `Local1Nick` | **201** 별도 계정 | | UNIQUE가 대소문자 구분(`db/schema/users.ts:17`, `drizzle/0001...sql:97`). 검색은 대소문자 무시라 둘 다 나옴 |
+| 닉네임 대소문자만 다름 | `Local1Nick` | 409 `NICKNAME_TAKEN` (코드) | 닉네임 필드 "이미 사용 중인 닉네임입니다." | UNIQUE가 `lower(normalize(nickname, NFC))`라 대소문자 무시(`db/schema/users.ts:39-41`, `drizzle/0007_case_insensitive_nickname.sql`, `0008_normalized_nickname.sql`) |
 | 닉네임 완전 중복 | | 409 `NICKNAME_TAKEN` | 닉네임 필드 "이미 사용 중인 닉네임입니다." | |
 | 한글 `한글닉` | | 201 | | `\p{L}` |
 | 한글 32자 / 33자 | | 201 / 422 | | 코드포인트 기준, varchar(32)와 일치 |
-| 한글 NFD | `"한글".normalize("NFD")` | **201**, 화면상 "한글"과 같음 | | 정규화 없음 → 시각적 중복 가능 |
+| 한글 NFD | `"한글".normalize("NFD")` | NFC "한글"이 이미 있으면 409 `NICKNAME_TAKEN` (코드) | | UNIQUE가 NFC 정규화 후 비교(`0008_normalized_nickname.sql`) |
 | 이모지/공백/`<script>`/`x'--`/1자/`deleted:1` | | 422 | "닉네임은 2~32자의 문자, 숫자, 밑줄(_), 하이픈(-)만 사용할 수 있습니다." | `:` 차단으로 탈퇴 placeholder `deleted:<id>`와 겹치지 않음 |
 | 비밀번호 7/8/128/129 | | 422/201/201/422 | "비밀번호는 8자 이상 128자 이하로 입력해 주세요." | |
 | 비밀번호 공백 8개 | | 201 | | 복잡도 규칙 없음 |
@@ -801,7 +802,7 @@ schema: `email` format email ≤254, `password` 8~128, `nickname` `^[\p{L}\p{N}_
 - 보호 요청 401 → refresh 1회 → 재시도(`:634-646`). 동시 401은 refresh Promise 공유 + Web Locks `cbc.auth.refresh`(`:550-556`).
 - 재시도 후에도 401 → 저장 토큰 삭제(`:648-651`). **`authApi`가 `onAuthFailure` 없이 생성**(`:968`)되어 자동으로 로그인 화면으로 가지 않고, 각 화면이 "로그인이 필요하거나 세션이 만료되었습니다. 다시 로그인해 주세요."만 표시, 헤더는 로그인 상태로 보임. 새로고침하면 로그인 화면.
 - refresh 자체 429·5xx → 토큰 유지(`:538-545`).
-- 계정 메뉴 "세션 토큰 갱신": 성공 notice "세션 토큰이 성공적으로 갱신되었습니다.", 401이면 로그인 화면 + 오류, 429·5xx면 로그인 유지 + 오류(`App.tsx:1294-1317`). **notice/error는 lobby·login 화면에서만 렌더**(`App.tsx:1686-1694,2347-2357`)라 프로필·친구·리더보드·대국 화면에서 누르면 결과가 안 보입니다.
+- 계정 메뉴 "세션 토큰 갱신": 성공 notice "세션 토큰이 성공적으로 갱신되었습니다.", 401이면 로그인 화면 + 오류, 429·5xx면 로그인 유지 + 오류(`App.tsx:1480-1503`). notice는 모든 화면, error는 login·register·twoFactor·oauthCallback을 뺀 화면의 `<main>` 위쪽에 렌더합니다(`App.tsx:1827-1847`).
 
 #### 로그아웃 `POST /api/auth/logout` (`auth-routes.ts:237-259`, `app.ts:158-168`)
 
@@ -955,7 +956,7 @@ sequenceDiagram
 | `recordsPublic: "false"` / `null` / `0` | | 422 | | 문자열 boolean 차단 |
 | 닉네임 중복 + recordsPublic 같이 | `{nickname:"한글닉", recordsPublic:false}` | 409 `NICKNAME_TAKEN`, recordsPublic 그대로 true | | 한 UPDATE로 원자적(`user-repository.ts:18-29`) |
 | 자기 닉네임 그대로 | | 200 | 웹은 요청 전 "현재 닉네임과 동일합니다." | |
-| 다른 사용자 닉네임의 대소문자 변형 | | 200 (코드) | | UNIQUE 대소문자 구분 |
+| 다른 사용자 닉네임의 대소문자 변형 | | 409 `NICKNAME_TAKEN` (코드) | | UNIQUE 대소문자 무시(`user-service.ts:32-33`) |
 | 닉네임 숫자 `12345` | | 200 `"12345"` | | coerce |
 | 형식 오류 / 배열 본문 | | 422 | | |
 | 미인증 | | 401 | | 인증이 본문 검증보다 먼저 |
@@ -1157,10 +1158,10 @@ PUT `/api/users/me/avatar`: multipart `file` 1개, PNG/JPEG, 2 MiB(2097152 B) �
 
 ### 6.11 로비
 
-- 게임 카드 두 개 모두 `playable: true`라 "준비 중" 분기(`App.tsx:818-823,2566-2577`)는 도달 불가. "오목 선택"/"오델로 선택" → "오목 선택됨", `aria-pressed`, 카드 `is-selected`. 카드 제목 "오목 (15 × 15 자유룰)"/"오델로 (8 × 8 표준 보드)", 배지 "실시간 대국 가능", 규칙 앞 3개(`matchmaking-state.ts:61-126,177-189`).
-- 대국 번호 입력 폼(오목 카드 안): placeholder "대국 번호 (matchId) 입력", "대국실 입장". `type=number min=1` 브라우저 검증(0·음수·소수 말풍선) + 빈 값/파싱 실패 시 "유효한 대국 번호(양의 정수 matchId)를 입력해 주세요."(`App.tsx:2596-2632,854-865`). 오델로 번호도 일단 gomoku view → snapshot 후 othello.
-- 로비 오류 배너: matchmaking 오류 "[CODE] message" + "닫기". `gomokuState.gameError`도 로비에 표시되지만 `othelloState.gameError`는 표시 안 함(`App.tsx:2359-2390`).
-- 복귀 버튼: "진행 중인 오목 대국(#N) 복귀"(조건 `matchId !== null && status !== finished`, snapshot null이어도 보임), "진행 중인 오델로 대국(#N) 복귀"(snapshot gameType othello & 미종료일 때만)(`App.tsx:2582-2608`).
+- 게임 카드 두 개 모두 `playable: true`라 "준비 중" 분기(`App.tsx:994-1000,2830-2839`)는 도달 불가. 카드마다 "오목 빠른 매칭 시작"/"오델로 빠른 매칭 시작" 버튼이 그 게임 대기열에 바로 들어갑니다(별도 게임 선택 단계 없음, #166). 카드 제목 "오목 (15 × 15 자유룰)"/"오델로 (8 × 8 표준 보드)", 배지 "실시간 대국 가능", "보드 크기" + 규칙 앞 3개(`App.tsx:2775-2841`, `matchmaking-state.ts:57-128`).
+- 대국 번호 입력 폼·"대국실 입장" 버튼은 없습니다(#166에서 제거). 진행 중인 대국은 로비 맨 위 복귀 버튼이나 참가자가 `/match/<id>`를 직접 여는 방법으로 돌아갑니다.
+- 로비 오류 배너: matchmaking 오류 "[CODE] message" + "닫기". matchmaking 오류가 없을 때만 대국 오류(`gomokuState.gameError ?? othelloState.gameError`)를 "[CODE] message"로 표시(`App.tsx:330,2643-2672`).
+- 복귀 버튼: 로비 맨 위 "진행 중인 오목 대국(#N) 복귀"/"진행 중인 오델로 대국(#N) 복귀". 조건은 그 게임 state의 snapshot이 같은 matchId이고 미종료일 때(snapshot null이면 안 보임)(`App.tsx:331-335,2674-2692`).
 
 ### 6.12 클라이언트 폼 검증 요약
 
@@ -1178,7 +1179,6 @@ PUT `/api/users/me/avatar`: multipart `file` 1개, PNG/JPEG, 2 MiB(2097152 B) �
 | 아바타 | MIME png/jpeg, 2 MiB | 6.5절 | 해상도·magic bytes | `profile-format.ts:68-86` |
 | 탈퇴 | 빈 값·길이 | 6.9절 | 비밀번호·코드 일치 | `account-deletion.ts:60-89` |
 | 친구 검색 | 빈 값이면 버튼 disabled, `maxLength=32` | | 형식 | `FriendsView.tsx:244-305` |
-| 대국 번호 | `type=number min=1` + 파싱 | "유효한 대국 번호(양의 정수 matchId)를 입력해 주세요." | 존재·참가자 | `App.tsx:2596-2615` |
 
 ---
 
@@ -1265,11 +1265,11 @@ close code와 웹 반응:
 
 | 상황 | 조작 | 코드 동작 | 화면 | 설명 포인트 |
 |---|---|---|---|---|
-| 매칭 시작 | "오목 빠른 매칭 시작"/"오델로 빠른 매칭 시작" | `handleStartMatchmaking`(`App.tsx:813-837`) → phase `joining` → `queue.join {gameType}`(`ws-client.ts:723-726`) → 서버 gameType `gomoku|othello` + 엔진 등록 확인(`ws-routes.ts:147-153,428-432`), `matchmaking.join` → DB 미완료 경기 확인 → push → `queue.joined`(`services/matchmaking.ts:123-149`, `ws-routes.ts:433-436`) | URL `/matching`, "오목 일반 매칭 대기실", eyebrow "실시간 대전 매칭 · gomoku-freestyle-v1", joining "매칭 대기열에 등록하는 중입니다..." / queued "대전 상대를 찾는 중입니다...", chip "대기열 진입 중"/"상대 탐색 중", 레이더 "탐색 중", "경과 시간: MM:SS" 1초 갱신, 링 45초 주기, "동일 게임 1:1 선착순 매칭", "흑·백 무작위 배정 · 즉시 대국 시작", 오른쪽 규칙 dl + "내 오목 전적 기록"(실패 시 조용히 0), WS pill "매칭 서버 연결됨"/"연결 동기화 중"(`MatchmakingView.tsx:47-115,167-169,280-292`) | 엔진 등록 `engines.ts:15-26`. 잘못된 gameType은 `error INVALID_MESSAGE "Invalid gameType."` |
-| WS 미연결 상태 시작 | | 오류 + `reconnectNow()`(`App.tsx:826-831`) | 로비 alert "실시간 게임 서버에 연결하는 중입니다. 잠시 후 다시 시도해 주세요." | |
+| 매칭 시작 | "오목 빠른 매칭 시작"/"오델로 빠른 매칭 시작" | `handleStartMatchmaking`(`App.tsx:990-1012`) → phase `joining` → `queue.join {gameType}`(`ws-client.ts:723-726`) → 서버 gameType `gomoku|othello` + 엔진 등록 확인(`ws-routes.ts:147-153,428-432`), `matchmaking.join` → DB 미완료 경기 확인 → push → `queue.joined`(`services/matchmaking.ts:123-149`, `ws-routes.ts:433-436`) | URL `/matching`, "오목 일반 매칭 대기실", eyebrow "실시간 대전 매칭 · gomoku-freestyle-v1", joining "매칭 대기열에 등록하는 중입니다..." / queued "대전 상대를 찾는 중입니다...", chip "대기열 진입 중"/"상대 탐색 중", 레이더 "탐색 중", "경과 시간: MM:SS" 1초 갱신, 링 45초 주기, "동일 게임 1:1 선착순 매칭", "흑·백 무작위 배정 · 즉시 대국 시작", 오른쪽 규칙 dl + "내 오목 전적 기록"(실패 시 조용히 0), WS pill "매칭 서버 연결됨"/"연결 동기화 중"(`MatchmakingView.tsx:47-115,167-169,280-292`) | 엔진 등록 `engines.ts:15-26`. 잘못된 gameType은 `error INVALID_MESSAGE "Invalid gameType."` |
+| WS 미연결 상태 시작 | | 오류 + `reconnectNow()`(`App.tsx:1001-1008`) | 로비 alert "실시간 게임 서버에 연결하는 중입니다. 잠시 후 다시 시도해 주세요." | |
 | busy 중 재클릭 | | 차단(`matchmaking-state.ts:198`) | | `queue.matched`가 `queue.joined`보다 먼저 와도 matched 유지(`:224-226`) |
 | 짝짓기 | 두 번째 사람 join | 게임 종류별 FIFO, waiting 2명이면 동기적으로 `matching` → `createMatch`(`matchmaking.ts:75-82`), 흑백 `Math.random() < 0.5`(`:85`), 경기는 바로 `playing`·흑 차례(`game-command-service.ts:197-223`), 이탈 시계 시작(`matchmaking.ts:92`, `ws-routes.ts:318`), 두 사용자 **모든 인증 연결**에 `queue.matched {matchId, gameType}`(`matchmaking.ts:93-99`) | 클라이언트 `subscribedMatchId` 설정 후 즉시 subscribe(`ws-client.ts:456-468`), sessionStorage 저장, 게임 화면 이동, URL `/match/:id`(`App.tsx:688-735`). snapshot 전 "대국 정보 동기화 중" / "서버로부터 확정된 대국 스냅샷을 불러오고 있습니다." | 수동 조작 없음 |
-| 같은 사용자 중복 join | 대기 중 다시 / 두 탭 동시 | `entries`나 `joining`에 있으면 `ALREADY_ACTIVE`(`matchmaking.ts:128`) | "[ALREADY_ACTIVE] 이미 참가 중인 대국이 있거나 매칭 대기열에 등록되어 있습니다.", 매칭 화면이면 로비로(`App.tsx:758-768`). 같은 오류가 gomoku gameError에도 들어가 로비에 **배너 두 개**(`App.tsx:2406-2412`) | 자기 자신과 매칭 불가 |
+| 같은 사용자 중복 join | 대기 중 다시 / 두 탭 동시 | `entries`나 `joining`에 있으면 `ALREADY_ACTIVE`(`matchmaking.ts:128`) | "[ALREADY_ACTIVE] 이미 참가 중인 대국이 있거나 매칭 대기열에 등록되어 있습니다.", 매칭 화면이면 로비로. 대국 오류(gameError)는 지워 로비 배너는 matchmaking 오류 하나(`App.tsx:934-946,2643-2672`) | 자기 자신과 매칭 불가 |
 | 경기 중 join | devtools | `findActiveMatchId`가 `waiting|playing|paused` → `ALREADY_ACTIVE`(`matchmaking.ts:133-139`, `repositories/game-repository.ts:69-82`) | 위와 같음 | UI는 auth.ok 때 경기로 보내므로 보통 devtools로만 |
 | 매칭 취소 | "매칭 취소 및 로비로 이동" 또는 **Esc** | phase `leaving` → `queue.leave` → 대기 중이면 빼고 `queue.left`, 아니어도 `left`(`matchmaking.ts:158-165`, `ws-routes.ts:449-464`) | leaving 중 "매칭 취소 처리 중...", "매칭 취소를 처리하는 중입니다...", chip "취소 요청 중", 레이더 "취소 중" → 로비 "매칭 대기열 등록이 취소되었습니다."(`App.tsx:683-687,839-848`). 안내 "단축키: Esc 키로 매칭을 취소할 수 있습니다" | 미연결이면 즉시 idle + 로비 + notice |
 | leave가 join DB 확인과 겹침 | | `cancelled` 기록 → join이 `cancelled` → join 연결에도 `queue.left`(`matchmaking.ts:136-138,159`, `ws-routes.ts:436-438`) | | |
@@ -1287,14 +1287,14 @@ close code와 웹 반응:
 | 상황 | 코드 동작 | 화면 | 설명 포인트 |
 |---|---|---|---|
 | 참가자 `match.subscribe` | matchId 검증(1 이상 safe int, 아니면 `INVALID_MESSAGE`) → `getMatch` → 참가자 확인 → 구독 등록 + controller를 이 연결로 → 이전 controller에 `session.replaced {matchId}` → snapshot 읽기 → `match.snapshot`(requestId 포함) → 미종료면 이탈 시계 연결 수 +1(`ws-routes.ts:469-535`) | 보드 표시 | 구독 등록 후 snapshot을 읽어 그 사이 갱신을 놓치지 않음. 클라이언트는 `game.updated`는 버전이 더 높을 때만, `match.snapshot`은 같거나 높을 때 반영(`gomoku-state.ts:290-305`) |
-| 비참가자(관전 시도) | 로비 대국 번호 입력 또는 URL `/match/<남의 id>` → `error NOT_PARTICIPANT "Only players of this match can subscribe." {matchId}`(`:487-496`) | 빈 15×15 전부 disabled, 턴 "대국 정보 동기화 중", 배너 "NOT_PARTICIPANT 이 대국의 참가자가 아니므로 착수할 수 없습니다."(구독 거부인데 "착수" 문구), 카드 "대기 중"/"대기 중", 기권 disabled | **관전 기능 없음** |
-| 없는 경기 | `error NOT_FOUND "Match not found."`(`:481-486,517-523`) | "NOT_FOUND 요청한 대국을 찾을 수 없습니다." 같은 빈 화면. 로비로 나가면 `[NOT_FOUND]` 배너 두 개 + "진행 중인 오목 대국(#id) 복귀" 버튼(snapshot null) | **그 id가 sessionStorage에 남아** 새로고침하거나 `/`로 가도 같은 오류 화면(`App.tsx:873,659`). 서버 activeMatchId가 있으면 그쪽. 실행 확인 필요 |
+| 비참가자(관전 시도) | URL `/match/<남의 id>` → `error NOT_PARTICIPANT "Only players of this match can subscribe." {matchId}`(`:487-496`) | 웹은 구독 id와 sessionStorage 저장값을 지우고 두 게임 state를 초기화한 뒤 로비로 이동(URL replace), 상단 오류 배너 "이 대국의 참가자가 아니므로 착수할 수 없습니다."(구독 거부인데 "착수" 문구)(`App.tsx:908-932`) | **관전 기능 없음** |
+| 없는 경기 | `error NOT_FOUND "Match not found."`(`:481-486,517-523`) | 비참가자와 같은 처리: 로비 + 상단 오류 배너 "요청한 대국을 찾을 수 없습니다.", 복귀 버튼 없음(snapshot 없음)(`App.tsx:908-932,331-335`) | sessionStorage 저장값도 지워 새로고침해도 오류 화면이 반복되지 않음 |
 | `/match/abc`, `/match/0` | 웹 라우팅에서 404 화면 | | |
 | 끝난 경기 구독(참가자) | 허용, finished snapshot, 이탈 시계에 안 셈(`:526-534`) | 결과 오버레이 | |
 | 다른 진행 중 경기가 있는데 다른 경기 구독 | 참가자 확인만 → 허용(`:487`) | | |
 | `match.unsubscribe` | 구독·권한 해제, 이탈 시계 -1, 아무도 안 보면 gameType 캐시 삭제, `match.unsubscribed`. 구독 안 한 경기도 성공(`:537-551`) | 결과 후 "나가기"(finished일 때만 unsubscribe), "다시 하기"(unsubscribe 후 매칭)(`App.tsx:938-956,989-1010`) | 진행 중 "나가기"는 unsubscribe 없이 로비로만 → 연결 유지돼 이탈 아님. 경기 중 unsubscribe를 직접 보내면 마지막 연결이면 이탈 시작 |
-| 수동 입장 `openMatch` | 다른 대국 구독 중이면 unsubscribe → sessionStorage 저장 → state 생성 → view(othello snapshot id 일치 시만 othello) → subscribe, 전송 실패 시 `reconnectNow`(`App.tsx:867-904`) | | |
-| popstate `/match/:id` | `openMatch`(`App.tsx:479-485`) | | |
+| 수동 입장 `openMatch` | 다른 대국 구독 중이면 unsubscribe → sessionStorage 저장 → state 생성 → view(othello snapshot id 일치 시만 othello) → subscribe, 전송 실패 시 `reconnectNow`(`App.tsx:1030-1068`). 로비 대국 번호 입력은 없어졌고(#166) popstate에서만 호출. 첫 로드의 `/match/:id`는 `parseInitialMatchId`로 WS 구독 대상에 넣음(`App.tsx:143,756`) | | |
+| popstate `/match/:id` | `openMatch`(`App.tsx:625-630`) | | |
 
 snapshot 내용: `{matchId, gameType, rulesVersion, stateVersion, status, players:{black,white}, board, currentPlayerId, result}`(`game-command-service.ts:473-505`). board는 저장된 착수 기록을 엔진으로 재생(`:501`, E `gomoku/rules.ts:36-38`, `othello/rules.ts:51-53`). result는 진행 중 `null`, 종료 시 `{outcome:"win", winnerId, reason}` 또는 `{outcome:"draw"|"void", winnerId:null, reason}`. rulesVersion `gomoku-freestyle-v1`, `othello-standard-v1`(E `gomoku/rules.ts:10`, `othello/rules.ts:10`).
 
@@ -1323,7 +1323,7 @@ stateVersion: 생성 시 0(`db/schema/games.ts:33` `default(0)`), 적용된 명�
 | INTERNAL_ERROR | | | "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." |
 | 그 외 | | | 서버 message, 없으면 "게임 요청 처리 중 오류가 발생했습니다." |
 
-- 배너: `role="alert"`에 영문 코드 + 문구 + "닫기"(`aria-label="오류 알림 닫기"`)(`GomokuMatchView.tsx:337-359`). 다음 `game.updated`나 새 명령 시 사라짐(`gomoku-state.ts:479-483,514`). 서버 영문 message(예 "It is not your turn.")는 화면에 안 나옴. 일반 `error`(구독 오류 등)는 gomoku·othello·matchmaking state 셋 모두에 들어감(`App.tsx:758-761`).
+- 배너: `role="alert"`에 영문 코드 + 문구 + "닫기"(`aria-label="오류 알림 닫기"`)(`GomokuMatchView.tsx:337-359`). 다음 `game.updated`나 새 명령 시 사라짐(`gomoku-state.ts:479-483,514`). 서버 영문 message(예 "It is not your turn.")는 화면에 안 나옴. 일반 `error`는 매칭 중이거나 `ALREADY_ACTIVE`/`ALREADY_MATCHED`면 matchmaking state에만, 그 밖에는 gomoku·othello state에 들어감. 구독 오류 `NOT_FOUND`/`NOT_PARTICIPANT`는 로비로 보내고 상단 배너로 표시(`App.tsx:908-950`).
 - 엔진이 공개 목록 밖 코드를 내면 기록 없이 롤백(서버 버그 처리)(`game-command-service.ts:327-334`). 저장된 rulesVersion과 등록 버전이 다르면 예외 롤백(`:316-320`). `GAME_NOT_ACTIVE`의 `waiting`은 실제로 안 생김(경기는 처음부터 `playing`).
 
 중복 commandId:
@@ -1509,9 +1509,9 @@ broadcast와 유실 복구: commit 후 snapshot을 한 번 직렬화해 전체 �
 
 | 상황 | 결과 (실행 확인) | 설명 |
 |---|---|---|
-| 대소문자만 다름 `Local1Nick` vs `local1nick` | 201(공존) | UNIQUE가 대소문자 구분(`db/schema/users.ts:17`, `drizzle/0001...sql:97`). 검색은 대소문자 무시라 둘 다 나옴 |
-| NFD 한글 | 201, 화면상 "한글"과 같음 | 정규화 없음 |
-| PATCH로 다른 사람 닉네임 대소문자 변형 | 200 (코드) | 가입과 같은 UNIQUE |
+| 대소문자만 다름 `Local1Nick` vs `local1nick` | 409 `NICKNAME_TAKEN` (코드) | UNIQUE가 `lower(normalize(nickname, NFC))`(`db/schema/users.ts:39-41`, migration 0007·0008) |
+| NFD 한글 | 409 `NICKNAME_TAKEN` (코드) | NFC 정규화 후 비교(migration 0008) |
+| PATCH로 다른 사람 닉네임 대소문자 변형 | 409 (코드) | 가입과 같은 UNIQUE |
 | 이메일 대소문자 | 409 | 소문자화 후 저장(`auth-service.ts:155`) |
 
 ### 8.4 인증·토큰·rate limit
@@ -1635,22 +1635,22 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 | 2 | 42 연결 성공 notice 안 보임 | 연결 후 프로필로 가지만 성공 문구 없음 | App이 notice를 설정하지만 ProfileView가 받지 않습니다. 성공 여부는 로그아웃 후 42 로그인으로 확인합니다 | `App.tsx:1042-1044`, `ProfileView.tsx:44-62` [C] | 코드 |
 | 3 | 프로필이 42 연결 상태를 표시하지 않음, "연결됨" chip 도달 불가 | 이미 연결돼도 "연결하기" 버튼 | 서버는 `OAUTH_ALREADY_LINKED`를 콜백에서만 반환합니다 | `ProfileView.tsx:551-554,957-978`, 서버 `oauth-service.ts:195-197`, `oauth-routes.ts:46-49,143-147` [C] | 코드 |
 | 4 | OAuth→2FA 안내 문구 안 보임 | 2FA 화면만 뜸 | 2FA 화면이 noticeMessage를 렌더하지 않습니다 | `App.tsx:1051-1053,2246-2305` [C] | 코드 |
-| 5 | "세션 토큰 갱신" 결과가 lobby·login 외에서 안 보임 | 프로필·친구·리더보드·대국에서 눌러도 반응 없어 보임 | notice/error 렌더 위치가 두 화면뿐입니다 | `App.tsx:1294-1317,1686-1694,2347-2357` [C] | 코드 |
+| 5 | (master에서 해결) "세션 토큰 갱신" 결과가 lobby·login 외에서 안 보임 | 해당 없음 | notice는 모든 화면, error는 login·register·twoFactor·oauthCallback을 뺀 화면의 `<main>` 위쪽에 렌더합니다 | `App.tsx:1480-1503,1827-1847` | 코드 |
 | 6 | 42 연결 콜백 실패 시 "로그인 화면으로 돌아가기"만, 누르면 토큰이 남은 채 로그인 화면 | 로그아웃처럼 보이지만 새로고침하면 복구 | 콜백 경로가 getMe를 하지 않아 currentUser가 비어 있습니다 | `App.tsx:1016-1072,1638-1645` [C] | 코드(새로고침 복구는 실행 확인 필요) |
 | 7 | `session.replaced` 후 "이 탭으로 다시 연결"을 눌러도 계속 잠김 | 권한은 서버에서 돌아오지만 화면은 착수·기권 비활성 | 화면 state의 `sessionReplaced`를 되돌리는 곳이 초기 생성뿐입니다. 새로고침하면 풀립니다 | `gomoku-state.ts:446,712`, `othello-state.ts:415,682`, `ws-client.ts:706` [C] | 코드(실행 확인 필요) |
-| 8 | 없는·남의 matchId 오류 뒤 sessionStorage에 남음 | 새로고침·`/` 이동 후에도 같은 오류 화면 | 오류 시 저장값을 지우지 않습니다. 탭을 닫거나 다른 대국을 열면 바뀝니다 | `App.tsx:873,659` [C] | 코드(실행 확인 필요) |
+| 8 | (master에서 해결) 없는·남의 matchId 오류 뒤 sessionStorage에 남음 | 해당 없음 | `NOT_FOUND`/`NOT_PARTICIPANT`면 구독 id·저장값을 지우고 로비로 보냅니다 | `App.tsx:908-932` | 코드 |
 | 9 | 비로그인 deep link 목적지 미기억 | 로그인 후 항상 로비 | return URL 미구현 | `App.tsx:1198,1286` [C] | 코드 |
-| 10 | 비로그인 `/match/5` 진입 후 로그인 → 로비에 "#5 복귀" 버튼 가능 | 가짜 복귀 버튼 | 초기 state에 URL matchId가 들어갑니다 | `App.tsx:301-303,2584-2594` [C] | 실행 확인 필요 |
+| 10 | (master에서 해결) 비로그인 `/match/5` 진입 후 로그인 → 로비에 "#5 복귀" 버튼 가능 | 해당 없음 | 초기 state에 URL matchId가 들어가도 복귀 버튼은 같은 matchId의 미종료 snapshot이 있을 때만 보입니다 | `App.tsx:322-335,2674-2692` | 코드 |
 | 11 | 네트워크 끊긴 상태 새로고침 시 저장 토큰 삭제 | 로그아웃됨 | fetch TypeError를 transient로 보지 않습니다 | `errors.ts:58-62`, `App.tsx:1137-1145` [C] | 실행 확인 필요 |
 | 12 | 로그아웃 모달이 진행 중에도 배경 클릭으로 닫힘, 실패 시 오류·성공 배너 동시 | 혼란 | 로그아웃 실패여도 로컬 세션은 종료합니다 | `App.tsx:1377-1386,2647-2652` [C] | 코드 |
 | 13 | 로그아웃이 profileUserId·playerNicknames·challengeToken을 안 지움 | 화면 영향은 코드로 확인 불가 | | `App.tsx:1372-1388` vs `1323-1340` [C] | 코드 |
-| 14 | ALREADY_ACTIVE 시 로비 배너 두 개, 오델로 gameError는 로비에 안 보임 | 중복 표시 | 일반 error를 세 state에 모두 넣습니다 | `App.tsx:758-761,2359-2390,2406-2412` [C] | 코드 |
+| 14 | (master에서 해결) ALREADY_ACTIVE 시 로비 배너 두 개, 오델로 gameError는 로비에 안 보임 | 해당 없음 | 매칭 오류면 gameError를 지우고, 로비 대국 오류는 `gomokuState.gameError ?? othelloState.gameError`를 matchmaking 오류가 없을 때만 보여 줍니다 | `App.tsx:330,934-946,2643-2672` | 코드 |
 | 15 | NOT_PARTICIPANT 문구가 "착수할 수 없습니다" | 구독 거부인데 착수 문구 | 관전 기능 없음 | `gomoku-state.ts:405-406` [C] | 코드 |
 | 16 | popstate는 대기열을 정리하지 않음, 콜백 경로로 back 시 "처리 중..." 고정 | 뒤로가기 후 대기열에 남을 수 있음 | switchView만 leaveQueue | `App.tsx:449-513,470-472` [C] | 코드 |
 | 17 | 약관 "돌아가기"가 push라 back 연타 시 왕복 | | `history.back`이 아닙니다 | `App.tsx:354-369` [C] | 코드 |
 | 18 | 대국 새로고침 시 오델로면 오목판이 잠깐 | 깜빡임 | snapshot 전 기본 view가 gomoku | `App.tsx:662-670,727-734,1128` [C] | 코드상 추정 |
 | 19 | 헤더 pill이 `session_replaced`를 "동기화 중"으로 표시 | | | `App.tsx:1418-1427` [C] | 코드 |
-| 20 | 진행 중 "나가기"는 구독 유지, 경기 정지 | 상대가 기다림(턴 제한 없음) | 이탈로 세지 않도록 연결을 유지합니다. 복귀는 로비 버튼·대국 번호·auth.ok | `App.tsx:938-946` [C] | 코드 |
+| 20 | 진행 중 "나가기"는 구독 유지, 경기 정지 | 상대가 기다림(턴 제한 없음) | 이탈로 세지 않도록 연결을 유지합니다. 복귀는 로비 복귀 버튼·참가자의 `/match/<id>`·auth.ok | `App.tsx:1101-1109` | 코드 |
 | 21 | 리더보드 상위 50명만, 페이지 없음, 내 순위는 50위 안일 때만 | | API는 limit 최대 100 | `LeaderboardView.tsx:12,36-57` [C] | 코드 |
 | 22 | 리더보드·전적 표 상대 아바타는 항상 이니셜, 대국 카드는 닉네임만 | | avatarUrl을 넘기지 않습니다. 친구 화면은 실제 이미지 | `LeaderboardView.tsx:119,156`, `ProfileView.tsx:1143-1157` [C] | 코드 |
 | 23 | 아바타 삭제 확인 단계 없음 | | | `ProfileView.tsx:628-635` [C] | 코드 |
@@ -1681,7 +1681,7 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 | 43 | OAuth 닉네임 후보 3개 모두 충돌하면 500 | 확률 매우 낮음 | | `oauth-service.ts:36-44` | 코드 |
 | 44 | 알 수 없는 필드 조용히 제거 | 422가 아님 | Ajv 기본 removeAdditional. 권한 필드가 없어 상승 불가. PATCH me만 422 | 8.2절 | 실행 |
 | 45 | 숫자→문자열 강제 변환 | | Ajv coerceTypes | 8.2절 | 실행 |
-| 46 | 대소문자·NFD 닉네임 중복 | 시각적 중복 계정 | UNIQUE 대소문자 구분, 정규화 없음 | 8.3절 | 실행 |
+| 46 | (master에서 해결) 대소문자·NFD 닉네임 중복 | 해당 없음 | UNIQUE가 `lower(normalize(nickname, NFC))`(migration 0007·0008) | 8.3절 | 코드 |
 | 47 | 동시 refresh는 서버 단독으로 세션 폐기 | 탭 두 개가 같은 토큰으로 동시에 갱신하면 로그아웃 | 웹 Web Locks로 직렬화. 탭 복제 + 유지 OFF는 막지 못할 수 있음 | `auth-repository.ts:124-143`, `auth-client.ts:507-512,550-556` [C] | 실행(서버) / 실행 확인 필요(탭 복제) |
 | 48 | PNG 헤더만 검사, 0×0이 `IMAGE_TOO_BIG` | 깨진 이미지 업로드 가능 | 제공 시 `nosniff`라 실행되지 않습니다 | `core/image.ts:13-15`, `avatar-service.ts:74-81` | 실행 |
 | 49 | 422가 Ajv 메시지·정규식 노출 | | 500은 고정 문구 | `app.ts:285-298` [C] | 실행 |
@@ -1706,7 +1706,7 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 
 | # | 항목 | 영향 | 질문받으면 할 설명 | 근거 | 확인 방법 |
 |---|---|---|---|---|---|
-| 66 | [M] 웹 placeholder | 제목 한 줄 | 웹이 통합된 최종 커밋으로 배포 | `apps/web/src/App.tsx:1-3` [M] | 코드 |
+| 66 | (master에서 해결) [M] 웹 placeholder | 해당 없음 | master `54fa651`에 웹 앱이 들어 있음(#147) | `apps/web/src/App.tsx` | 코드 |
 | 67 | [#123] base에 엔진 등록 없음 | 매칭 실패 | 최신 master와 합친 뒤 배포 | `index.ts:5,52-53` [M], `app.ts:107`, `game-command-service.ts:168-171` [M] | 코드 |
 | 68 | 같은 project 이름 공유 | 다른 사본이 컨테이너·volume 공유 | 한 컴퓨터 한 사본 | `Makefile:3-4`, `compose.full.yaml:1` | 코드 |
 | 69 | 남은 volume + 새 비밀번호 | migrate 실패 | `down -v` | 2.3절 | 코드(오류 문구는 코드로 확인 불가) |
@@ -1746,7 +1746,7 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 | 98 | `CANDIDATE-PROVENANCE.md` 친구·탈퇴 결함 1~3번 | 현재 코드에는 필터·관계 삭제가 있음(실행 확인) | http 9장 |
 | 99 | README·`runtime.md`의 "실제 WSS 검증 대기" | `Document/runtime-wss-validation.md`가 별도로 존재(내용 미확인) | deploy 10장 |
 | 100 | contracts.md 버전 차이 | [M] 문서에는 404 행과 WS 12.4~12.8(구독·명령·매칭·재접속·presence) 상세가 있고, [C] 문서는 11.4·11.5가 추가됐지만 WS는 #41 기준 오래된 내용. `GET /api/health` Swagger 설명은 [M]에만 | http 13장 |
-| 101 | contracts.md 11.5 "두 서버 PR은 미병합" | #98(presence)은 [M]에 merge됨(531f8a1 "Merge pull request #98 from .../feat/presence"). 친구 서버는 [C]에 있음. 통합 빌드에 포함됐는지는 별도 확인 필요 | web 7.2 |
+| 101 | contracts.md 11.5 "두 서버 PR은 미병합" | #98(presence)과 친구 서버(`api/friend-routes.ts`)는 모두 master `54fa651`에 있음 | web 7.2 |
 
 ---
 
@@ -1814,10 +1814,10 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
     A. 서버 JSON Schema가 422로 거절합니다. 알 수 없는 필드는 Ajv 기본값으로 조용히 제거되고(예: `isAdmin:true`는 무시하고 201), 권한 필드 자체가 없어 영향이 없습니다. 이메일 변경 시도처럼 프로필 PATCH의 알 수 없는 필드는 422입니다(`user-routes.ts:83-98` [C]).
 
 20. **Q. 프런트에서도 검증하나요?**
-    A. 약관 동의, 닉네임 규칙([#126]), 2FA 해제 코드 형식([#126]), 아바타 MIME·크기, 탈퇴 입력 길이, 대국 번호를 클라이언트에서 검사합니다. 이메일 형식·비밀번호 길이는 서버만 검증하고, 서버 422의 path로 해당 필드 아래 문구를 보여 줍니다(6.12절).
+    A. 약관 동의, 닉네임 규칙([#126]), 2FA 해제 코드 형식([#126]), 아바타 MIME·크기, 탈퇴 입력 길이를 클라이언트에서 검사합니다. 이메일 형식·비밀번호 길이는 서버만 검증하고, 서버 422의 path로 해당 필드 아래 문구를 보여 줍니다(6.12절).
 
 21. **Q. 닉네임 `Alice`와 `alice`가 둘 다 있을 수 있나요?**
-    A. 네. UNIQUE가 대소문자를 구분합니다(`db/schema/users.ts:17`). 이메일은 소문자로 저장해 대소문자 무시입니다. 검색은 대소문자 무시라 둘 다 나옵니다.
+    A. 아니요. 닉네임 UNIQUE가 `lower(normalize(nickname, NFC))`라 대소문자·NFC 정규화 차이를 무시하고 409 `NICKNAME_TAKEN`입니다(`db/schema/users.ts:39-41`, migration 0007·0008). 이메일은 소문자로 저장해 대소문자 무시입니다.
 
 22. **Q. 비밀번호 규칙이 약하지 않나요?**
     A. 길이 8~128자만 검사합니다(`auth-routes.ts` schema). 복잡도 규칙은 없어 공백 8개도 가입됩니다(실행 확인).

@@ -99,8 +99,6 @@ MOD-03 User Interaction은 기본 채팅(#165)이 들어와 주장한다(#167). 
 
 - Public API
 - SSR
-- OAuth 2.0
-- 2FA
 - Tournament
 - Spectator
 - Gamification

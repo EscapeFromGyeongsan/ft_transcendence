@@ -497,9 +497,9 @@ POST·PATCH·DELETE는 route가 본문을 쓰지 않아도 본문을 보내면 �
 | `GET /api/media/avatars/{name}` (PR #15) | 200 | 404 (`NOT_FOUND`), 422, 500, 503 |
 | `GET /api/users?nickname=` (#95) | 200 | 401, 422, 429, 500, 503 |
 | `GET /api/friends` (#95) | 200 | 401, 500, 503 |
-| `GET /api/chat/conversations` (채팅 테스트 후보) | 200 | 401, 500, 503 |
-| `GET /api/chat/conversations/{peerId}/messages` (채팅 테스트 후보) | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
-| `POST /api/chat/conversations/{peerId}/messages` (채팅 테스트 후보) | 201 (신규), 200 (같은 전송 ID 재시도) | 400, 401, 404 (`NOT_FOUND`), 413, 415, 422, 429, 500, 503 |
+| `GET /api/chat/conversations` | 200 | 401, 500, 503 |
+| `GET /api/chat/conversations/{peerId}/messages` | 200 | 401, 404 (`NOT_FOUND`), 422, 500, 503 |
+| `POST /api/chat/conversations/{peerId}/messages` | 201 (신규), 200 (같은 전송 ID 재시도) | 400, 401, 404 (`NOT_FOUND`), 413, 415, 422, 429, 500, 503 |
 | `POST /api/friends/requests` (#95) | 201 (새 요청), 200 (맞요청 수락) | 400, 401, 404 (`USER_NOT_FOUND`), 409 (`ALREADY_FRIENDS`, `REQUEST_PENDING`, `REQUEST_DECLINED`, `FRIEND_REQUEST_CONFLICT`), 413, 415, 422, 429, 500, 503 |
 | `POST /api/friends/requests/{requestId}/accept` (#95) | 200 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
 | `POST /api/friends/requests/{requestId}/decline` (#95) | 204 | 400, 401, 403 (`FORBIDDEN`), 404 (`NOT_FOUND`), 409 (`REQUEST_NOT_PENDING`), 413, 415, 422, 429, 500, 503 |
@@ -537,7 +537,7 @@ SDS 2.10.26의 제안을 구현한 상태이며 B의 스키마·API 검토는 �
 
 ### 11.5 친구 웹 클라이언트 (#80·#90)
 
-친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 기능은 #147 통합 후보에 포함됐고 상태 코드는 11.3 표를 따른다(#158). 이 절은 #90이 소비하는 클라이언트 계약이다.
+친구 REST·스키마 구현은 E의 [#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/95) `758459e`, 온라인 집계·알림은 [#98](https://github.com/EscapeFromGyeongsan/ft_transcendence/pull/98) `07a4989`와 대조했다. 두 서버 기능은 #147로 master에 병합됐고 상태 코드는 11.3 표를 따른다(#158). 이 절은 #90이 소비하는 클라이언트 계약이다.
 
 | 클라이언트 동작 | 대조한 #95 계약 |
 |---|---|
@@ -696,10 +696,10 @@ REST 상태 코드는 11장(B, #33)에 둔다. 이 장은 실시간 연결의 �
 - 두 메시지 모두 목록 갱신 신호다. 놓친 알림은 다시 보내지 않으므로, 클라이언트는 재연결이나 화면 진입 때 `GET /api/friends`로 다시 조회한다.
 
 
-### 12.9 친구 채팅 (테스트 후보)
+### 12.9 친구 채팅 (#165)
 
 채팅 목록은 현재 수락된 친구의 `friendshipId`, `userId`, `nickname`, `lastMessageAt`을 반환합니다. 대화 이력은 상대 ID별로 최근 50건을 오래된 순으로 반환하며, 응답의 `nextBefore`를 다음 요청의 `before`에 넣어 이전 메시지를 읽습니다. 메시지 필드는 `id`, `senderId`, `text`, `createdAt`입니다.
 
 전송 본문은 `{ text, clientId }`입니다. 텍스트는 앞뒤 공백을 제외해 저장하며, 최대 1,000자입니다. 같은 친구 관계와 발신자의 동일 UUID `clientId`는 기존 메시지를 반환합니다. 새 메시지가 PostgreSQL에 커밋되면 두 사용자의 인증된 소켓에 `chat.changed { peerId }`를 전송합니다. 이 이벤트는 이력 재조회 신호이며, 소켓 재인증과 패널을 다시 열 때도 이력을 조회합니다.
 
-메시지 읽기·전송은 현재 수락된 친구만 할 수 있습니다. 친구 관계를 삭제하거나 회원이 탈퇴하면 해당 관계의 메시지도 삭제됩니다. 이 동작은 테스트 후보의 보존 정책입니다.
+메시지 읽기·전송은 현재 수락된 친구만 할 수 있습니다. 친구 관계를 삭제하거나 회원이 탈퇴하면 해당 관계의 메시지도 삭제됩니다.
