@@ -477,6 +477,6 @@ Codex has assisted with implementation, tests, code review and documentation. Th
 ## Known limitations
 
 - Friend game invitations, rematch and Advanced chat features (blocking, game invites from chat, typing indicators) are not implemented.
-- The final acceptance run (#88) on the submission SHA, including two-PC play, is still required.
-- NFR-PERF-01 was measured on master `531f8a1` ([record](Document/perf/README.md)), not on the #147 candidate.
+- The final acceptance run (#161) passed on master at 1440×900 and 768×1024 ([record](Document/TEST_PLAN.md)); two-PC play (#163) is still required.
+- NFR-PERF-01 was measured on master `531f8a1` ([record](Document/perf/README.md)), not on the current master.
 - Asset/font attribution review and independent README reproduction remain required before submission.
