@@ -223,7 +223,7 @@ erDiagram
 | `make down` | Stop the containers; the database and avatar volumes are kept |
 | `make logs` / `make ps` | Follow the logs / show container status |
 | `make prepare` | Only create the missing `.env`, password file and certificate |
-| `make qa-accounts` | Create the QA accounts `qa-p1`–`qa-p4` and `qa-outsider` (`@qa.example.com`, password `QA_PASSWORD` in `.env`) in the running application; existing accounts are kept |
+| `make qa-accounts` | Create the QA accounts `qa-p1`–`qa-p4` and `qa-outsider` (`@qa.example.com`, password `QA_PASSWORD` in `.env`, `qwer1234` by default) in the running application; existing accounts are kept |
 | `make clean` | Remove the application and development containers and the build outputs; the data is kept |
 | `make fclean` | Also remove all data (database, avatars, dependencies) and the images built by `make`; `.env`, the password file and the certificates are kept |
 | `make re` | `make fclean`, then `make` |
