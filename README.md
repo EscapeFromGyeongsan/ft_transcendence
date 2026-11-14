@@ -321,6 +321,8 @@ npm run test:e2e
 
 The two-session Gomoku and Othello scenarios are `tests/gomoku.spec.ts` and `tests/othello.spec.ts`; set `E2E_BASE_URL` to run against a deployed target instead of the local dev server. Legal-page and profile/records-privacy browser E2E are `tests/legal.spec.ts` and `tests/profile.spec.ts`. `tests/friends-integration.spec.ts` and `tests/account-deletion.spec.ts` skip unless `E2E_FRIENDS_INTEGRATION` or `E2E_ACCOUNT_DELETION_INTEGRATION=1` is set with a dedicated DB. `tests/friends-ui.spec.ts` (#90) replaces REST/auth/WS responses and therefore does not demonstrate real friend CRUD or presence integration. The `tests/auth.spec.ts` (#55) suite also verifies refresh-only storage and multi-tab restoration against the real API/DB. The `tests/legal-routing-regression.spec.ts` (#71) legal/history suite replaces HTTP/WS responses, including its different-match Back/Forward regression, so it does not prove actual game-server integration. Record commands, commit, environment, skips and results using the [test plan](Document/TEST_PLAN.md).
 
+The final acceptance runs (#88, #161) passed on master at 1440×900 and 768×1024, including play between two computers on the network; the [test plan](Document/TEST_PLAN.md) holds the records.
+
 ## Team, modules and project management
 
 | Member | Responsibility and implementation areas |
@@ -482,6 +484,5 @@ Codex has assisted with implementation, tests, code review and documentation. Th
 ## Known limitations
 
 - Friend game invitations, rematch and Advanced chat features (blocking, game invites from chat, typing indicators) are not implemented.
-- The final acceptance run (#161) passed on master at 1440×900 and 768×1024 ([record](Document/TEST_PLAN.md)); two-PC play (#163) is still required.
 - NFR-PERF-01 was measured on master `531f8a1`, not on the current master.
 - Asset/font attribution review and independent README reproduction remain required before submission.
