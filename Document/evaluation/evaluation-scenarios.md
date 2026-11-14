@@ -64,51 +64,52 @@
 ### 2.3 이전 실행 흔적 정리 (volume)
 
 - 상황: 같은 컴퓨터에서 예전에 띄운 적이 있고 새로 clone한 경우.
-- 문제: 새 clone에는 `infra/secrets/postgres-password`가 없어 prepare가 새 비밀번호를 만들지만(`prepare-full.sh:62-67`), 이름이 같은 DB volume은 남아 재사용됩니다(`compose.full.yaml:19-20,118-120`). PostgreSQL은 데이터 디렉터리가 비어 있을 때만 초기 비밀번호를 적용합니다(`Document/runtime.md:68`). 결과는 migrate 인증 실패 → `service "migrate" didn't complete successfully` 류 오류 → api·web 미기동. 정확한 오류 문구는 drizzle-kit/postgres 출력이라 코드로 확인 불가.
+- 문제: 새 clone에는 `infra/secrets/postgres-password`가 없어 prepare가 새 비밀번호를 만들지만(`prepare-full.sh:75-80`), 이름이 같은 DB volume은 남아 재사용됩니다(`compose.full.yaml:19-20,118-120`). PostgreSQL은 데이터 디렉터리가 비어 있을 때만 초기 비밀번호를 적용합니다(`Document/runtime.md:68`). 결과는 migrate 인증 실패 → `service "migrate" didn't complete successfully` 류 오류 → api·web 미기동. 정확한 오류 문구는 drizzle-kit/postgres 출력이라 코드로 확인 불가.
 - 조치(보존할 데이터가 없을 때):
 
 ```sh
 docker compose -p cyber-board-cafe-full down -v
 # compose 파일 보간까지 맞춘 전체 형식 (deploy 노트 0-4)
-docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml down -v
+docker compose --env-file .env --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml down -v
 ```
 
-- `down -v`는 `postgres_data`·`avatars` volume을 지워 계정·전적·아바타가 모두 사라집니다. `.env.full`, 비밀번호 파일, 인증서는 호스트 파일이라 남습니다(`Document/runtime.md:165`).
+- `down -v`는 `postgres_data`·`avatars` volume을 지워 계정·전적·아바타가 모두 사라집니다. `.env`, 비밀번호 파일, 인증서는 호스트 파일이라 남습니다(`Document/runtime.md:165`).
 - migration 세트가 다른 브랜치를 오간 volume([C] 0000~0006, [M] 0000~0003, 현재 master 0000~0009)도 같은 방법으로 정리합니다. 이미 적용된 migration이 폴더에 없을 때 drizzle-kit 동작은 코드로 확인 불가이고, 스키마와 코드가 어긋나면 런타임 500이 날 수 있습니다.
 
-### 2.4 `.env.full`
+### 2.4 `.env`
 
-`make`가 없으면 `.env.full.example`을 복사하고 비어 있는 비밀값만 채웁니다. 직접 편집한 값은 그대로 둡니다.
+`make`와 로컬 개발이 루트 `.env` 하나를 함께 씁니다. `.env`가 없으면 `make`가 `.env.example`을 복사하고 비어 있는 비밀값만 채웁니다(`prepare-full.sh:28-33,62-66`). 직접 편집한 값은 그대로 둡니다. 예전 `.env.full`만 있으면 `.env`로 이름을 바꾸고, 두 파일이 모두 있으면 합치라고 안내하고 exit 1입니다(`prepare-full.sh:15-26`).
 
-| 키 | 기본(`.env.full.example` 줄) | 평가 전 확인 |
+| 키 | 기본(`.env.example` 줄) | 평가 전 확인 |
 |---|---|---|
-| `POSTGRES_USER` / `POSTGRES_DB` | `cafe` / `cafe_full` (:3-4) | 비우면 Compose가 시작 전에 오류(`compose.full.yaml:9-10`) |
-| `POSTGRES_PASSWORD_FILE` | `./infra/secrets/postgres-password` (:5) | 비우면 prepare는 기본 경로에 만들지만 Compose `:?` 보간(`compose.full.yaml:116`)에서 실패 |
-| `CERT_DIR` | `./infra/certs` (:6) | 비우면 같은 불일치(`compose.full.yaml:95`) |
-| `JWT_SECRET` | 빈 값 (:10) | 비면 `make`가 `openssl rand -hex 32`로 생성(`prepare-full.sh:23-47`). 직접 넣은 32자 미만 값은 api가 `Set JWT_SECRET in .env to a random string of 32+ characters.` throw(`apps/server/src/index.ts:13-18` [M]) |
-| `TWO_FACTOR_KEY` | 빈 값 (:13) | 비면 `make`가 생성 → make 경로에서는 2FA가 항상 켜짐. 1~31자면 api 기동 실패(`index.ts:19-24` [M]) |
-| `FT_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI` | 빈 값 (:15-17) | 셋 다 있거나 셋 다 없어야 함. 일부만 있으면 `Set all of FT_OAUTH_CLIENT_ID, ... or none.` throw(`index.ts:25-34` [M]) |
-| `TRUST_PROXY` | `uniquelocal` (:19) | Nginx 사설 peer만 신뢰 |
-| `BIND_ADDRESS` | `127.0.0.1` (:24) | 두 대 평가면 `0.0.0.0` |
-| `HTTP_PORT` / `HTTPS_PORT` | 8080 / 8443 (:25-26) | 충돌 시 변경. `PUBLIC_HTTPS_PORT`가 따라감(`compose.full.yaml:88`) |
-| `LOCAL_CERT_SAN` | (파일에 없음) | **셸 환경 변수로만** 읽음. `.env.full`에 써도 무시(`generate-local-cert.sh:10`, `prepare-full.sh:81`) |
-| `AVATAR_DIR` | (example :20 주석) | Compose가 `/data/avatars`로 고정, `.env.full` 값은 무시(`compose.full.yaml:59`) |
-| `API_HOST` / `PORT` | `0.0.0.0` / `3001` 고정 | PORT 1~65535 정수, API_HOST 공백 불가(`compose.full.yaml:51-52`, `apps/server/src/listen-options.ts:1-11` [M]) |
-| `DATABASE_URL` | 컨테이너에서 생성 | `.env.full`에 넣어도 사용 안 함(`scripts/container-start.mjs:20-24`) |
-| `--env-file` 의미 | | Compose 보간 입력일 뿐 컨테이너에 자동 전달되지 않음. 셸 환경 변수가 `.env.full`보다 우선(`Document/runtime.md:173,188`) |
+| `POSTGRES_USER` / `POSTGRES_DB` | 전체 앱은 `cafe` / `cafe_full` 고정(`compose.full.yaml:9-10`) | `.env`의 값(:33,35)은 로컬 개발 DB용이라 전체 앱은 쓰지 않음 |
+| `POSTGRES_PASSWORD_FILE` | `./infra/secrets/postgres-password` (:22) | 비우면 prepare가 기본 경로로 채움(`prepare-full.sh:65`) |
+| `CERT_DIR` | `./infra/certs` (:23) | 비우면 prepare가 기본 경로로 채움(`prepare-full.sh:66`) |
+| `JWT_SECRET` | 빈 값 (:9) | 비면 `make`가 `openssl rand -hex 32`로 생성(`prepare-full.sh:40-62`). 직접 넣은 32자 미만 값은 api가 `Set JWT_SECRET in .env to a random string of 32+ characters.` throw(`apps/server/src/index.ts:13-18` [M]) |
+| `TWO_FACTOR_KEY` | 빈 값 (:12) | 비면 `make`가 생성 → make 경로에서는 2FA가 항상 켜짐. 1~31자면 api 기동 실패(`index.ts:19-24` [M]) |
+| `FT_OAUTH_CLIENT_ID/SECRET` | 빈 값 (:16-17) | 둘 다 있거나 둘 다 없어야 함. 있으면 `make`가 redirect URI를 `https://<주소>:<HTTPS_PORT>/oauth/42/callback`으로 정해 넘김(`start-full.sh`) |
+| `FT_OAUTH_REDIRECT_URI` | 빈 값 (:18) | 로컬 개발 전용. `make`·`make local`은 쓰지 않음 |
+| `TRUST_PROXY` | 전체 앱은 `uniquelocal` 고정(`compose.full.yaml:61`) | `.env` 값(:44)은 로컬 개발용 |
+| `BIND_ADDRESS` | `127.0.0.1` (:26) | `make`는 `0.0.0.0`, `make local`은 `127.0.0.1`을 실행마다 넘김. docker compose를 직접 쓸 때만 사용 |
+| `HTTP_PORT` / `HTTPS_PORT` | 8080 / 8443 (:27-28) | 충돌 시 변경. `PUBLIC_HTTPS_PORT`가 따라감(`compose.full.yaml:92`) |
+| `LOCAL_CERT_SAN` | (파일에 없음) | **셸 환경 변수로만** 읽음. `.env`에 써도 무시(`generate-local-cert.sh:10`) |
+| `AVATAR_DIR` | `data/avatars` (:46) | 로컬 개발용. Compose가 `/data/avatars`로 고정(`compose.full.yaml:62`) |
+| `API_HOST` / `PORT` | `0.0.0.0` / `3001` 고정 | PORT 1~65535 정수, API_HOST 공백 불가(`compose.full.yaml:54-55`, `apps/server/src/listen-options.ts:1-11` [M]) |
+| `DATABASE_URL` | 컨테이너에서 생성 | `.env` 값(:38)은 로컬 개발용, 전체 앱은 사용 안 함(`scripts/container-start.mjs:20-24`) |
+| `--env-file` 의미 | | Compose 보간 입력일 뿐 컨테이너에 자동 전달되지 않음. 셸 환경 변수가 `.env`보다 우선 |
 | CRLF 줄끝 | | Windows 편집기로 저장하면 `value_of`가 `\r` 포함 값을 "비어 있지 않음"으로 봄. Compose 쪽 처리는 코드로 확인 불가 |
 
 ### 2.5 인증서
 
 | 확인 | 방법 | 이유 |
 |---|---|---|
-| 존재·쌍 | `ls infra/certs/` | 하나만 있으면 `Only one of ./infra/certs/server.crt and server.key exists.` exit 1(`prepare-full.sh:82-85`) |
-| 만료일 | `openssl x509 -enddate -noout -in infra/certs/server.crt` | 유효기간 **30일**(`generate-local-cert.sh:18-28`). 만료돼도 `make`는 재생성하지 않음(`prepare-full.sh:80-85`) → `ERR_CERT_DATE_INVALID` |
+| 존재·쌍 | `ls infra/certs/` | 하나만 있으면 `Only one of ./infra/certs/server.crt and server.key exists.` exit 1(`prepare-full.sh:95-98`) |
+| 만료일 | `openssl x509 -enddate -noout -in infra/certs/server.crt` | 유효기간 **30일**(`generate-local-cert.sh:18-28`). 만료돼도 `make`는 재생성하지 않음(`prepare-full.sh:93-98`) → `ERR_CERT_DATE_INVALID` |
 | SAN | `openssl x509 -noout -ext subjectAltName -in infra/certs/server.crt` | 기본은 `DNS:localhost,IP:127.0.0.1,IP:::1`. 두 대 평가면 서버 IP 포함 필요 |
 
 ### 2.6 42 OAuth 앱
 
-- 42 intra 앱의 redirect URI와 `.env.full`의 `FT_OAUTH_REDIRECT_URI`를 같게 둡니다. 한 대: `https://localhost:8443/oauth/42/callback`, 두 대: `https://<서버IP>:8443/oauth/42/callback`.
+- 42 intra 앱에는 `make`가 출력한 redirect URI를 등록합니다. 한 대(`make local`): `https://localhost:8443/oauth/42/callback`, 두 대(`make`): `https://<서버IP>:8443/oauth/42/callback`.
 - 웹이 받는 callback 경로는 `/oauth/42/callback`, `/auth/oauth/42/callback`(+끝 `/`)입니다(`apps/web/src/legal/legal-routing.ts:84-97` [C]).
 - 42가 redirect URI를 어떻게 비교하는지는 42 쪽 동작이라 코드로 확인 불가입니다.
 - 설정하지 않으면 42 버튼은 503(화면: "서버 또는 데이터베이스에 일시적으로 연결할 수 없습니다.")입니다. 이 경우 Swagger로 "미설정 시 503"을 설명합니다.
@@ -143,7 +144,7 @@ docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-fu
 - [M] README 섹션: Description, Technical stack, Instructions, Environment variables, Structure, Documentation.
 - master `54fa651` README 섹션: Description, Features and integration status, Game rules, Technical stack and architecture, Database schema, Instructions, Environment variables, Testing, Team/modules and project management, Structure, Documentation and resources, AI usage, Known limitations.
 - 과목 VI장 필수(Team Information, Project Management, Technical Stack, Database Schema, Features List, Modules, Individual Contributions, Resources·AI 사용)가 최종 master README에 모두 있는지 평가 전에 확인합니다.
-- `.env`, `.env.*`는 git 제외, 예시 파일만 커밋(`.gitignore:4-5,17`). `.env.full`은 Docker build context에서도 제외(`.dockerignore:10-13`).
+- `.env`, `.env.*`는 git 제외, 예시 파일만 커밋(`.gitignore:4-5,17`). `.env`는 Docker build context에서도 제외(`.dockerignore:10-13`).
 
 ---
 
@@ -153,7 +154,7 @@ docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-fu
 
 ```mermaid
 flowchart LR
-  A["make"] --> B["prepare-full.sh: .env.full, 비밀값, DB 비밀번호 파일, 인증서"]
+  A["make"] --> B["prepare-full.sh: .env, 비밀값, DB 비밀번호 파일, 인증서"]
   B --> C["docker compose up --build -d --wait"]
   C --> D["db healthy"] --> E["migrate exit 0"] --> F["api healthy"] --> G["web healthy"]
   G --> H["Running: https://localhost:8443/"]
@@ -162,20 +163,20 @@ flowchart LR
 | 순서 | 조작 | 코드 동작 | 화면/출력 | 설명 포인트 |
 |---|---|---|---|---|
 | 1 | 저장소 루트에서 `make` | `all: up`(`Makefile:8`) → `up: prepare`(:10) → `sh infra/prepare-full.sh`(:16) | | 단일 명령 기동 |
-| 2 | (prepare) | `set -eu`(:6), openssl 확인(:10-13), `umask 077`(:15), `.env.full` 없으면 example 복사(:16-19), `chmod 600 .env.full`(:20) | `.env.full` 0600 | 비밀값 파일 권한 |
-| 3 | (prepare) | `JWT_SECRET`, `TWO_FACTOR_KEY` 비었으면 64자 hex 생성, `mktemp`→`mv`(:23-47) | `Generated JWT_SECRET in .env.full.` | 기존 값은 건드리지 않음 |
+| 2 | (prepare) | `set -eu`(:6), openssl 확인(:10-13), `umask 077`(:15), `.env` 없으면 example 복사(:16-19), `chmod 600 .env`(:20) | `.env` 0600 | 비밀값 파일 권한 |
+| 3 | (prepare) | `JWT_SECRET`, `TWO_FACTOR_KEY` 비었으면 64자 hex 생성, `mktemp`→`mv`(:23-47) | `Generated JWT_SECRET in .env.` | 기존 값은 건드리지 않음 |
 | 4 | (prepare) | 비밀번호 파일 없으면 디렉터리(0700) + `openssl rand -hex 32`(:61-67), 새 디렉터리면 파일 0444(:68-73) | `infra/secrets/` | DB 비밀번호는 Docker secret 파일 |
 | 5 | (prepare) | crt·key 둘 다 없으면 `generate-local-cert.sh`(:80-81): RSA 3072, 30일, CN=localhost, `CA:FALSE`, `serverAuth`(:18-28) | `Created server.crt and server.key in ./infra/certs (valid for 30 days).` | |
-| 6 | (compose) | `docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`(:3-4,11) | 빌드 로그 | |
+| 6 | (compose) | `docker compose --env-file .env --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`(:3-4,11) | 빌드 로그 | |
 | 7 | (기동 순서) | db `pg_isready`(2s, 30회, start 10s) → migrate(`restart: "no"`) → api(`/api/health/db` node fetch, 5s, 12회, start 15s) → web(`wget --no-check-certificate https://127.0.0.1/api/health/db`, 5s, 12회, start 10s)(`compose.full.yaml:23-28,31-43,67-79,102-111`) | | web healthcheck가 DB까지 봄 |
 | 8 | (api 부팅) | listen 전 `app.inject('/api/health/db')`(`apps/server/src/index.ts:55-64` [M]) → 미완료 경기 void(:65-73) | 로그 `Voided N unfinished match(es) on restart.`, `Fastify API listening on http://0.0.0.0:3001` | |
 | 9 | 완료 | `HTTPS_PORT` 마지막 값으로 URL 출력(`Makefile:12-13`) | `Running: https://localhost:8443/` | |
 | 10 | 브라우저 접속 | | 인증서 경고 → "고급 → 계속" | 자체 서명 |
 
-- 재실행(idempotency): `.env.full`·비밀값·비밀번호 파일·인증서가 있으면 그대로 둡니다(`prepare-full.sh:16-20,29-31,74-76,80-85`). Compose는 매번 `up --build`라 캐시로 재빌드하고 바뀐 서비스만 재생성합니다. migrate는 미적용 migration만 적용합니다(`Document/runtime.md:135`).
+- 재실행(idempotency): `.env`·비밀값·비밀번호 파일·인증서가 있으면 그대로 둡니다(`prepare-full.sh:29-33,42-44,87-89,93-98`). Compose는 매번 `up --build`라 캐시로 재빌드하고 바뀐 서비스만 재생성합니다. migrate는 미적용 migration만 적용합니다(`Document/runtime.md:135`).
 - **평가 도중 `make` 재실행 주의**: api가 재생성되면 진행 중 경기가 모두 void(`server_restart`)됩니다(7.11절).
 - `COPY . .` 다음 `npm ci`(`infra/Dockerfile:5-6`)라 파일 하나만 바꿔도 의존성 재설치(시간·네트워크).
-- 셸에서 `HTTPS_PORT=9443 make`하면 셸 값이 `.env.full`보다 우선하지만 Makefile URL 출력은 `.env.full`만 읽어 출력 URL이 실제 포트와 다를 수 있습니다(`Document/runtime.md:173,188`).
+- 셸에서 `HTTPS_PORT=9443 make`하면 셸 값이 `.env`보다 우선하지만 Makefile URL 출력은 `.env`만 읽어 출력 URL이 실제 포트와 다를 수 있습니다(`Document/runtime.md:173,188`).
 
 ### 3.2 두 대 컴퓨터 (LAN)
 
@@ -183,7 +184,7 @@ flowchart LR
 sequenceDiagram
   participant S as 서버 PC
   participant O as 다른 PC
-  S->>S: .env.full BIND_ADDRESS=0.0.0.0, FT_OAUTH_REDIRECT_URI=https://IP:8443/oauth/42/callback
+  S->>S: .env BIND_ADDRESS=0.0.0.0, FT_OAUTH_REDIRECT_URI=https://IP:8443/oauth/42/callback
   S->>S: 기존 crt/key 이동 후 LOCAL_CERT_SAN="...,IP:서버IP" make
   O->>S: curl -k https://IP:8443/api/health
   S-->>O: 200 {"status":"ok"}
@@ -194,11 +195,11 @@ sequenceDiagram
 | 순서 | 조작 | 코드 근거 | 확인 |
 |---|---|---|---|
 | 1 | 서버 PC의 LAN IP 확인 | | 이후 `<IP>` |
-| 2 | `.env.full`에 `BIND_ADDRESS=0.0.0.0` (또는 서버 IP) | 기본 `127.0.0.1`이면 다른 PC는 connection refused/timeout(`.env.full.example:24`, `compose.full.yaml:91-92`) | |
-| 3 | `.env.full`에 `FT_OAUTH_REDIRECT_URI=https://<IP>:8443/oauth/42/callback` (+ 42 앱 redirect URI 같은 값) | redirect URI는 하나(`index.ts:25-39` [M]), authorize URL에 그대로(`apps/server/src/core/oauth-42.ts:57-63,85` [M]) | |
-| 4 | 기존 `infra/certs/server.crt`·`server.key`를 다른 곳으로 옮김 | 쌍이 있으면 재생성 안 함(`prepare-full.sh:80`, `generate-local-cert.sh:13-16`) | |
+| 2 | `.env`에 `BIND_ADDRESS=0.0.0.0` (또는 서버 IP) | 기본 `127.0.0.1`이면 다른 PC는 connection refused/timeout(`.env.example:26`, `compose.full.yaml:91-92`) | |
+| 3 | `.env`에 `FT_OAUTH_REDIRECT_URI=https://<IP>:8443/oauth/42/callback` (+ 42 앱 redirect URI 같은 값) | redirect URI는 하나(`index.ts:25-39` [M]), authorize URL에 그대로(`apps/server/src/core/oauth-42.ts:57-63,85` [M]) | |
+| 4 | 기존 `infra/certs/server.crt`·`server.key`를 다른 곳으로 옮김 | 쌍이 있으면 재생성 안 함(`prepare-full.sh:93`, `generate-local-cert.sh:13-16`) | |
 | 5 | `LOCAL_CERT_SAN="DNS:localhost,IP:127.0.0.1,IP:::1,IP:<IP>" make` | SAN은 셸 변수로만 읽음 | `openssl x509 -noout -ext subjectAltName ...` |
-| 6 | 실행 중 인증서를 바꿨다면 web 재생성 | web은 시작 시 인증서를 읽음. 설정 변화가 없으면 `make`가 web을 재생성하지 않을 수 있음(Compose 동작, 코드로 확인 불가) → `docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml restart web` | |
+| 6 | 실행 중 인증서를 바꿨다면 web 재생성 | web은 시작 시 인증서를 읽음. 설정 변화가 없으면 `make`가 web을 재생성하지 않을 수 있음(Compose 동작, 코드로 확인 불가) → `docker compose --env-file .env --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml restart web` | |
 | 7 | 다른 PC에서 방화벽·경로 확인 `curl -k https://<IP>:8443/api/health` | 호스트 방화벽, 42 네트워크의 클라이언트 간 차단, Docker iptables는 코드로 확인 불가 | `{"status":"ok"}` |
 | 8 | 모든 참가자(서버 PC 포함)가 `https://<IP>:8443/`로 접속 | flowToken·refresh token이 origin별 저장(5.4절) | 인증서 경고 수락 |
 | 9 | WSS | WS URL은 `location.host` 기준 `wss://<host>:<port>/api/ws`(`apps/web/src/game/ws-client.ts:156-166` [C]) | 같은 origin이라 mixed content 없음. 페이지 예외 수락 뒤 WSS도 연결(브라우저 예외 범위는 코드로 확인 불가) |
@@ -213,25 +214,25 @@ sequenceDiagram
 | 상황 | 조작 | 코드 동작 (file:line) | 화면/출력 | 대응·설명 |
 |---|---|---|---|---|
 | 남은 volume + 새 비밀번호 | 새 clone 후 `make` | 2.3절 | migrate 실패, `make` 실패 | `down -v` 후 `make`, 또는 예전 비밀번호 파일 복원 |
-| 비밀번호 파일 삭제·변경(volume 유지) | | 새 비밀번호 생성(`prepare-full.sh:62-67`) | 동일 | `POSTGRES_USER`/`POSTGRES_DB` 변경도 기존 DB에 반영 안 됨(`runtime.md:68`) |
-| `.env.full` 삭제 | | 새 `JWT_SECRET`·`TWO_FACTOR_KEY` 생성 | 기존 access token 무효, **기존 2FA 설정 복호화 불가**(`prepare-full.sh:3-5`, `.env.full.example:12`) | DB 비밀번호는 파일이라 무관 |
+| 비밀번호 파일 삭제·변경(volume 유지) | | 새 비밀번호 생성(`prepare-full.sh:75-80`) | 동일 | `POSTGRES_USER`/`POSTGRES_DB` 변경도 기존 DB에 반영 안 됨(`runtime.md:68`) |
+| `.env` 삭제 | | 새 `JWT_SECRET`·`TWO_FACTOR_KEY` 생성 | 기존 access token 무효, **기존 2FA 설정 복호화 불가**(`prepare-full.sh:3-5`, `.env.example:11`) | DB 비밀번호는 파일이라 무관 |
 | 포트 사용 중 | | web만 포트 공개(`compose.full.yaml:90-92`) | db·migrate·api 정상, web에서 `port is already allocated` | `HTTP_PORT`/`HTTPS_PORT` 변경. 1024 미만은 rootless Docker에서 실패 가능(코드로 확인 불가) |
 | openssl 없음 | | `prepare-full.sh:10-13` | `make: *** [prepare] Error 1`, 파일 생성 없음 | 설치 |
 | docker 없음 | | prepare 다음 `docker compose` | `docker: No such file or directory`, prepare 파일은 남음 | |
 | daemon 꺼짐 | | | `Cannot connect to the Docker daemon ...` | |
 | Compose v1만 | | | `docker: 'compose' is not a docker command` | |
-| `.env.full` 일부만 채움 | | 2.4절 표 | | |
-| `JWT_SECRET=abc` | | api throw(`index.ts:13-18` [M]) | api exit, web 미기동. 메시지는 `.env`라고 하지만 실제는 `.env.full` | |
-| `JWT_SECRET=""`(따옴표만) | | `value_of`가 `""`를 값으로 봄(`prepare-full.sh:23-25,29`) | Compose가 빈 문자열로 해석하면 `${JWT_SECRET:?...}`(`compose.full.yaml:53`) 오류 | dotenv 파싱은 코드로 확인 불가 |
+| `.env` 일부만 채움 | | 2.4절 표 | | |
+| `JWT_SECRET=abc` | | api throw(`index.ts:13-18` [M]) | api exit, web 미기동. | |
+| `JWT_SECRET=""`(따옴표만) | | `value_of`가 `""`를 값으로 봄(`prepare-full.sh:36-38,42`) | Compose가 빈 문자열로 해석하면 `${JWT_SECRET:?...}`(`compose.full.yaml:53`) 오류 | dotenv 파싱은 코드로 확인 불가 |
 | `TWO_FACTOR_KEY=''` | | Compose가 빈 값으로 넘기면 `container-start.mjs:29`가 삭제 → 2FA 비활성 | 2FA route 503 | |
 | OAuth 3개 중 일부 | | `index.ts:25-34` [M] throw | api 실패 | |
-| 같은 키 여러 줄 | | `tail -n 1`로 마지막 값, awk는 모든 줄 교체(`prepare-full.sh:24,35-37`) | | Compose도 보통 마지막 값(코드로 확인 불가) |
+| 같은 키 여러 줄 | | `tail -n 1`로 마지막 값, awk는 모든 줄 교체(`prepare-full.sh:37,48-50`) | | Compose도 보통 마지막 값(코드로 확인 불가) |
 | `POSTGRES_PASSWORD_FILE` 절대 경로(`/tmp/pw`) | | other-x 있는 디렉터리라 새 파일 0600 + 안내(`:56-60,68-73`) | 컨테이너 `node`가 못 읽으면 `Cannot read the database password file.`(`scripts/container-start.mjs:15-19`) → migrate exit 1 | UID 같으면 읽힐 수 있음(코드로 확인 불가) |
 | 경로 `~/...` | | 셸 확장 없음 → 저장소 안에 문자 그대로 `~` 디렉터리(`:61,65`) | | Compose 해석은 코드로 확인 불가 |
 | 저장소 안, `infra/secrets` 밖 경로 | | `.dockerignore`는 `infra/secrets`, `*.key` 등만 제외(`.dockerignore:14-20`), `COPY . .`(`infra/Dockerfile:5`) | 비밀번호가 이미지 레이어에 포함, `.gitignore`도 `infra/secrets/`만 제외(:17) | 기본 경로 유지 |
 | 비밀번호 파일이 비었거나 여러 줄 | | `apps/server/src/db/container-url.ts:9-15` | `The database password file must contain one non-empty line.` | 끝 LF/CRLF 하나 허용, 공백은 보존 |
 | 비밀번호 특수문자 | | `encodeURIComponent`(`container-url.ts:16-23`) | 정상 | `$`·예약문자·공백 실제 연결 성공 기록(`runtime-validation.md`) |
-| crt/key 한쪽만 | | `prepare-full.sh:82-85` | `Only one of ...` / `Restore the pair or move both away before running make.` | 둘 다 옮긴 뒤 `make` |
+| crt/key 한쪽만 | | `prepare-full.sh:95-98` | `Only one of ...` / `Restore the pair or move both away before running make.` | 둘 다 옮긴 뒤 `make` |
 | 인증서 30일 만료 | | 재생성 안 함 | `ERR_CERT_DATE_INVALID` | 둘 다 옮기고 `make` |
 | `CERT_DIR` 디렉터리 없음 | | `create_host_path: false`(`compose.full.yaml:93-99`) | Compose 오류 | |
 | 타입 오류 | | `tsc --noEmit` | web 이미지 빌드 실패 | |
@@ -251,7 +252,7 @@ sequenceDiagram
 | `make logs` | `logs -f` | Ctrl+C로 종료 | 내용이 적음 |
 | `make ps` | `compose ps` | exited migrate는 `-a` 없이 안 보임 | |
 | `make re`/`clean`/`fclean` | 정의 없음(`Makefile:6` `.PHONY: all up prepare down logs ps`) | `No rule to make target` | volume 초기화는 직접 `down -v` |
-| `.env.full` 없이 `make down/logs/ps` | 모두 `--env-file .env.full`(`Makefile:3,20,23,26`) | `:?` 보간에서 실패 가능 | |
+| `.env` 없이 `make down/logs/ps` | 모두 `--env-file .env`(`Makefile:3,20,23,26`) | `:?` 보간에서 실패 가능 | |
 | 코드 수정 후 재배포 | `make` = `up --build` | 변경 서비스만 재생성 | 스키마 변경 시 웹·API를 먼저 멈추고 migration 후 기동 권장(`runtime.md:141,221`) |
 | DB 직접 확인 | `docker compose ... exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"` | | API(3001)·DB(5432)는 호스트에 노출 안 됨, `data` 네트워크 internal(`compose.full.yaml:122-125`) |
 | 해시 시연 | psql `select password_hash from users limit 1;` | `$argon2id$v=19$m=19456,t=2,p=1$...` | |
@@ -467,8 +468,8 @@ DB 테이블과 관계([C] `apps/server/src/db/schema/`):
 | 2 | 화면 우회: Swagger "Try it out"이나 curl로 `nickname:"<script>"` | 422 `VALIDATION_ERROR` | `auth-routes.ts:20-24` |
 | 3 | 아바타에 GIF 선택 | 클라이언트 "PNG 또는 JPEG 이미지만 업로드할 수 있습니다."(요청 없음) | `profile-format.ts:68-86` [C] |
 | 4 | curl로 GIF를 `image/png`로 위장 | 415 "The file is not a PNG or JPEG." | magic bytes 검사 (실행 확인) |
-| 5 | `git check-ignore .env.full` / `git ls-files | grep env` | `.env.full`은 무시, `.env.example`·`.env.full.example`만 추적 | `.gitignore:4-5` |
-| 6 | `.env.full.example` | 비밀값 비어 있음, `make`가 생성 | 2.4절 |
+| 5 | `git check-ignore .env` / `git ls-files | grep env` | `.env`는 무시, `.env.example`만 추적 | `.gitignore:4-5` |
+| 6 | `.env.example` | 비밀값 비어 있음, `make`가 생성 | 2.4절 |
 
 - 클라이언트 검증 범위는 6.12절 표. [C]는 회원가입에서 약관 동의만 검사, 프로필 닉네임은 동일값·빈값만, 2FA 해제는 길이 6 이상만입니다. [#126]이 닉네임 규칙과 2FA 해제 코드 형식 검사를 추가했습니다. 이메일·비밀번호는 모든 브랜치에서 서버만 검증합니다.
 
@@ -1540,17 +1541,17 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 | 항목 | 내용 | 근거 |
 |---|---|---|
 | `.env` git 제외 | `.env`, `.env.*` 무시, 예시만 커밋 | `.gitignore:3-5,15` |
-| Docker build context | `.env.full`, `infra/secrets`, `*.key` 제외 | `.dockerignore:10-20` |
+| Docker build context | `.env`, `infra/secrets`, `*.key` 제외 | `.dockerignore:10-20` |
 | DB 비밀번호 | Docker secret 파일, Compose 변수 치환을 거치지 않음 | `compose.full.yaml:114-116` |
 | 비밀값 생성 | `make`가 없는 값만 `openssl rand -hex 32` | `prepare-full.sh` |
-| 권한 | `.env.full` 0600, `infra/secrets/` 0700, 비밀번호 파일 0444(새 디렉터리), 인증서 0600 | 3.1절 |
+| 권한 | `.env` 0600, `infra/secrets/` 0700, 비밀번호 파일 0444(새 디렉터리), 인증서 0600 | 3.1절 |
 | 위험 경로 | 비밀번호 파일을 저장소 안 `infra/secrets` 밖에 두면 이미지 레이어·커밋 위험 | 3.3절 |
 | HTTPS | Nginx TLSv1.2/1.3, HTTP 308, API·DB 포트 미공개 | 3.5절 |
 | HSTS·CSP | 없음 | Nginx `add_header` 없음 |
 | WS Origin | 검사 없음, 토큰을 첫 메시지로 요구 | `ws-routes.ts` [M] |
 | `X-Forwarded-For` 위조 | Nginx가 `$remote_addr`로 덮어씀 → rate limit 우회 불가(실행 확인) | `api-proxy.conf:7-8` |
 | `TRUST_PROXY` | 기본 `loopback`, Docker `uniquelocal`. 잘못된 문자열일 때 proxy-addr 동작은 코드로 확인 불가 | `index.ts:46`, `compose.full.yaml:58` |
-| 키 교체 | `TWO_FACTOR_KEY` 교체 시 기존 2FA 복호화 불가, `JWT_SECRET` 교체 시 기존 access 무효 | `.env.full.example:12` |
+| 키 교체 | `TWO_FACTOR_KEY` 교체 시 기존 2FA 복호화 불가, `JWT_SECRET` 교체 시 기존 access 무효 | `.env.example:11` |
 
 ---
 
@@ -1710,13 +1711,13 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 | 67 | [#123] base에 엔진 등록 없음 | 매칭 실패 | 최신 master와 합친 뒤 배포 | `index.ts:5,52-53` [M], `app.ts:107`, `game-command-service.ts:168-171` [M] | 코드 |
 | 68 | 같은 project 이름 공유 | 다른 사본이 컨테이너·volume 공유 | 한 컴퓨터 한 사본 | `Makefile:3-4`, `compose.full.yaml:1` | 코드 |
 | 69 | 남은 volume + 새 비밀번호 | migrate 실패 | `down -v` | 2.3절 | 코드(오류 문구는 코드로 확인 불가) |
-| 70 | 인증서 30일, 자동 재생성 없음 | 만료 시 `ERR_CERT_DATE_INVALID` | 둘 다 옮기고 `make` | `generate-local-cert.sh:18-28`, `prepare-full.sh:80-85` | 코드 |
-| 71 | 인증서 한쪽만 있으면 make 실패 | | | `prepare-full.sh:82-85` | 코드 |
-| 72 | `LOCAL_CERT_SAN`은 셸 변수만 | `.env.full`에 써도 무시 | | `generate-local-cert.sh:10` | 코드 |
+| 70 | 인증서 30일, 자동 재생성 없음 | 만료 시 `ERR_CERT_DATE_INVALID` | 둘 다 옮기고 `make` | `generate-local-cert.sh:18-28`, `prepare-full.sh:93-98` | 코드 |
+| 71 | 인증서 한쪽만 있으면 make 실패 | | | `prepare-full.sh:95-98` | 코드 |
+| 72 | `LOCAL_CERT_SAN`은 셸 변수만 | `.env`에 써도 무시 | | `generate-local-cert.sh:10` | 코드 |
 | 73 | restart 정책 없음 | 죽으면 안 뜸 | `make` 재실행 | `compose.full.yaml` | 코드 |
 | 74 | Fastify logger 꺼짐 | 500·503 원인이 로그에 없음 | 응답 code와 health로 설명 | `index.ts:47-48` [M] | 코드 |
-| 75 | 기동 실패 메시지가 개발용 | "Set JWT_SECRET in .env", "Run npm run db:up ..." | 실제 파일은 `.env.full` | `index.ts:11,15-17,62` [M] | 코드 |
-| 76 | `POSTGRES_PASSWORD_FILE`/`CERT_DIR` 빈 값이면 prepare 성공, Compose 실패 | | | `prepare-full.sh:49-50,78-81`, `compose.full.yaml:95,116` | 코드 |
+| 75 | 기동 실패 메시지가 개발용 | "Run npm run db:up ..." | 전체 앱에는 해당 없음 | `index.ts:11,15-17,62` [M] | 코드 |
+| 76 | `POSTGRES_PASSWORD_FILE`/`CERT_DIR` 빈 값이면 prepare 성공, Compose 실패 | | | `prepare-full.sh:62-63,91-94`, `compose.full.yaml:95,116` | 코드 |
 | 77 | 저장소 안 `infra/secrets` 밖 비밀번호 파일은 이미지 레이어 포함·커밋 위험 | | 기본 경로 유지 | `.dockerignore:14-20`, `Dockerfile:5`, `.gitignore:17` | 코드 |
 | 78 | Swagger가 production에서도 노출 | | 평가용 문서. 인증이 필요한 route는 토큰 없이는 401 | `app.ts:295-305` [M] | 실행(200) |
 | 79 | Google Fonts 외부 요청 | 오프라인이면 콘솔 실패, 대체 폰트 | | `index.html:7-12` [C] | 코드 |
@@ -1755,7 +1756,7 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 ### 11.1 배포·인프라
 
 1. **Q. 어떻게 실행하나요? 명령 하나로 되나요?**
-   A. 저장소 루트에서 `make` 한 번입니다. prepare가 `.env.full`, `JWT_SECRET`, `TWO_FACTOR_KEY`, DB 비밀번호 파일, 자체 서명 인증서 중 없는 것만 만들고(`infra/prepare-full.sh`), `docker compose ... up --build -d --wait`로 db → migrate → api → web이 healthy가 될 때까지 기다린 뒤 URL을 출력합니다(`Makefile:10-16`).
+   A. 저장소 루트에서 `make` 한 번입니다. prepare가 `.env`, `JWT_SECRET`, `TWO_FACTOR_KEY`, DB 비밀번호 파일, 자체 서명 인증서 중 없는 것만 만들고(`infra/prepare-full.sh`), `docker compose ... up --build -d --wait`로 db → migrate → api → web이 healthy가 될 때까지 기다린 뒤 URL을 출력합니다(`Makefile:10-16`).
 
 2. **Q. 컨테이너는 몇 개고 어떤 순서인가요?**
    A. db(postgres 17), migrate(drizzle-kit, 1회), api(Fastify), web(Nginx). db healthy → migrate 성공 종료 → api healthy(`/api/health/db`) → web healthy 순서입니다(`compose.full.yaml:23-28,31-43,67-79,102-111`).
@@ -1779,7 +1780,7 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
    A. `make logs`. Fastify logger를 켜지 않아(`index.ts:47-48` [M]) 기동 메시지와 기동 실패 stack 정도만 나옵니다. 오류 원인은 응답의 `error.code`와 `/api/health/db`로 설명합니다.
 
 9. **Q. 비밀값은 어디에 두나요? git에 올라가나요?**
-   A. `.env.full`(0600)과 `infra/secrets/postgres-password`이고 둘 다 git·Docker build context에서 제외됩니다(`.gitignore:4-5,17`, `.dockerignore:10-20`). 커밋되는 것은 `.env.example`, `.env.full.example`뿐이며 비밀값은 비어 있고 `make`가 생성합니다. DB 비밀번호는 Docker secret 파일로 전달합니다.
+   A. `.env`(0600)과 `infra/secrets/postgres-password`이고 둘 다 git·Docker build context에서 제외됩니다(`.gitignore:4-5,17`, `.dockerignore:10-20`). 커밋되는 것은 `.env.example`뿐이며 비밀값은 비어 있고 `make`가 생성합니다. DB 비밀번호는 Docker secret 파일로 전달합니다.
 
 10. **Q. 처음부터 깨끗하게 다시 띄우려면?**
     A. `docker compose -p cyber-board-cafe-full down -v`(또는 2.3절 전체 형식)로 volume을 지우고 `make`합니다. Makefile에는 `re`/`clean`/`fclean`이 없습니다(`Makefile:6`).
