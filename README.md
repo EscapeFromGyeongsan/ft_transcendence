@@ -223,6 +223,7 @@ erDiagram
 | `make down` | Stop the containers; the database and avatar volumes are kept |
 | `make logs` / `make ps` | Follow the logs / show container status |
 | `make prepare` | Only create the missing `.env`, password file and certificate |
+| `make qa-accounts` | Create the QA accounts `qa-p1`–`qa-p4` and `qa-outsider` (`@qa.example.com`, password `QA_PASSWORD` in `.env`) in the running application; existing accounts are kept |
 | `make clean` | Remove the application and development containers and the build outputs; the data is kept |
 | `make fclean` | Also remove all data (database, avatars, dependencies) and the images built by `make`; `.env`, the password file and the certificates are kept |
 | `make re` | `make fclean`, then `make` |
@@ -276,7 +277,7 @@ The API checks the database before listening and marks unfinished matches void o
 
 `infra/compose.yaml` starts the development PostgreSQL, bound to `127.0.0.1:5432` by default, and the `node` container reaches it as `db` (the container overrides `DATABASE_URL` and `TEST_DATABASE_URL`). A named volume preserves data. Initialization credentials apply to a new volume; editing `.env` does not change existing database credentials. This database is separate from the `make` application above, and the development workflow does not enable HTTPS.
 
-Sign up through the web page, then sign in and open your profile or leaderboard. The APIs can also be explored through Swagger UI. To prepare test accounts through the real API, set a private `QA_PASSWORD` and run `make qa-accounts` while `make dev` is running. It creates `qa-p1`–`qa-p4` and `qa-outsider` with `@qa.example.com` addresses; it does not reset existing passwords.
+Sign up through the web page, then sign in and open your profile or leaderboard. The APIs can also be explored through Swagger UI. To prepare test accounts through the real API, set a private `QA_PASSWORD` and run `make dev-qa-accounts` while `make dev` is running (`make qa-accounts` does the same for the `make` application). It creates `qa-p1`–`qa-p4` and `qa-outsider` with `@qa.example.com` addresses; it does not reset existing passwords.
 
 ```sh
 make build                       # type-check and build apps/web/dist
