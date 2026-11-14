@@ -40,7 +40,7 @@ The [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md) contain curren
 ## Technical stack and architecture
 
 - Node.js `>=22.12.0` (package engine requirement), TypeScript, npm workspaces; recent implementation reports use Node.js `26.13.0`.
-- Frontend: React, Vite, History API routing and Tailwind CSS v4, wired in `apps/web/vite.config.ts` and `apps/web/src/index.css`. Components use utility classes directly (e.g. `flex flex-col gap-5` on the login form, PR #119); shared buttons, inputs and cards use `@apply` in `apps/web/src/styles.css` (PR #124), which also keeps screen-specific rules such as the boards and the design tokens. Where to show this during evaluation: [mandatory checklist](Document/evaluation/mandatory-checklist.md#스타일링-솔루션-시연-116).
+- Frontend: React, Vite, History API routing and Tailwind CSS v4, wired in `apps/web/vite.config.ts` and `apps/web/src/index.css`. Components use utility classes directly (e.g. `flex flex-col gap-5` on the login form, PR #119); shared buttons, inputs and cards use `@apply` in `apps/web/src/styles.css` (PR #124), which also keeps screen-specific rules such as the boards and the design tokens.
 - Backend: Fastify, JSON Schema validation and Swagger UI.
 - Database: PostgreSQL 17, Drizzle ORM, Drizzle Kit migrations and `pg`.
 - Security: Argon2id passwords, signed access tokens, rotating opaque refresh tokens and encrypted TOTP secrets.
@@ -199,7 +199,58 @@ erDiagram
 
 ## Instructions
 
-Choose local development below or the [full application HTTPS workflow](Document/runtime.md). Deployment was merged in #10; its recorded checks and remaining limitations are separate from new validation of this documentation change.
+`make` builds and starts the whole application (web, API and PostgreSQL behind HTTPS Nginx) in Docker. This is the way to run it for evaluation. Local development without containers is described after it.
+
+### Run with make
+
+**Prerequisites:** Docker Engine with Compose v2, `make`, OpenSSL 1.1.1 or later and an internet connection for the first build. Node.js/npm are not needed on the host; they are inside the images. Images: Node 24 (bookworm-slim), Nginx 1.28 (alpine) and PostgreSQL 17 (alpine).
+
+**Step by step**, from the repository root:
+
+1. Start the application. On the first run this also creates `.env` from `.env.example` with random `JWT_SECRET` and `TWO_FACTOR_KEY`, the database password file `infra/secrets/postgres-password` and a self-signed certificate. Existing files and values are never replaced.
+
+   ```sh
+   make                 # https://<this computer's IP>:8443/, reachable from other computers
+   make HOST=10.12.3.4  # same, with the address given explicitly
+   make local           # https://localhost:8443/ on this computer only
+   ```
+
+2. Open the printed address, e.g. `https://10.12.6.8:8443/`. The browser shows a "Not secure" warning because the certificate is self-signed (see *Certificate warning* below); choose *Advanced → Proceed* once per browser.
+3. Sign up with an email and password, or use 42 login after setting up OAuth (step 5).
+4. To play a match, sign in with a second account in another browser or on another computer and start matchmaking for the same game in both.
+5. *(Optional)* 42 login: create an application at <https://profile.intra.42.fr/oauth/applications>, register the redirect URI printed by `make` (`https://<IP>:8443/oauth/42/callback`, or `https://localhost:8443/oauth/42/callback` for `make local`), put `FT_OAUTH_CLIENT_ID` and `FT_OAUTH_CLIENT_SECRET` in `.env`, and run `make` again. Without them the 42 button reports that 42 login is unavailable.
+
+| Command | Effect |
+|---|---|
+| `make down` | Stop the containers; the database and avatar volumes are kept |
+| `make logs` / `make ps` | Follow the logs / show container status |
+| `make prepare` | Only create the missing `.env`, password file and certificate |
+
+| URL (default ports) | Expected result |
+|---|---|
+| `https://<address>:8443/` | Web application |
+| `https://<address>:8443/api/health` | API liveness, 200 |
+| `https://<address>:8443/api/health/db` | Database readiness, 200 (503 when not ready) |
+| `https://<address>:8443/docs/` | Swagger UI (`/docs/json` for OpenAPI JSON) |
+| `http://<address>:8080/` | Redirects to HTTPS on 8443 |
+
+**How it starts:** the `db` health check passes → `migrate` applies pending Drizzle migrations and exits 0 → `api` checks the database and starts → `web` (Nginx) starts and publishes ports 8080/8443. Only Nginx publishes host ports; the API and database talk over internal Docker networks, and real-time traffic uses WSS on `/api/ws`. `db`, `api` and `web` restart after a crash or a Docker restart; `make down` stops them.
+
+**Two computers:** `make` binds `0.0.0.0` and uses a certificate in `infra/certs/lan` whose SAN includes this computer's IPv4 address (`ipconfig getifaddr en0`/`en1` on macOS, the first `hostname -I` address on Linux); it is recreated when the address changes. Every browser, including the server computer's, should use the printed `https://<IP>:8443/` address, because 42 accepts only the registered redirect URI. Open `https://<IP>:8443/api/health` from the other computer first: a timeout means the network or a firewall blocks the port (for example, some Wi-Fi networks cannot reach wired cluster computers).
+
+**Certificate warning:** public certificate authorities do not issue certificates for private IP addresses, so the generated certificate is self-signed and browsers warn once per browser. To remove the warning, create a local CA with `mkcert`, issue `server.crt`/`server.key` for `localhost 127.0.0.1 ::1 <IP>` into `infra/certs/lan` (`infra/certs` for `make local`), and trust that CA's `rootCA.pem` on each client device. Never copy the server or CA private key to clients.
+
+**Configuration:** `make` and local development share one `.env`. `make` passes the binding, certificate directory and 42 redirect URI for each run only; `.env` itself is not changed. The full application always uses the database `cafe_full` (user `cafe`) with the password file, `TRUST_PROXY=uniquelocal` and avatars in the `avatars` volume at `/data/avatars`; the database values and `TRUST_PROXY` in `.env` are for local development. An older `.env.full` is renamed to `.env` on the next `make`; if both files exist, `make` stops and asks to merge them.
+
+**Troubleshooting:** if `make` stops with `service "migrate" didn't complete successfully: exit 1` and `make logs` shows `password authentication failed`, a database volume from an earlier run uses another password. Restore that password file, or, if its data is not needed, remove only the database volume (this deletes accounts and matches):
+
+```sh
+make down
+docker volume rm cyber-board-cafe-full_postgres_data
+make
+```
+
+To reset all data, also remove `cyber-board-cafe-full_avatars`. Server errors (500, 503, lost database connection) appear in `make logs`.
 
 ### Local development
 
@@ -225,7 +276,7 @@ npm run dev
 
 The API checks the database before listening and marks unfinished matches void on startup. Development servers default to `127.0.0.1`; `API_HOST` overrides the API address. Vite proxies `/api` HTTP and WS traffic; Swagger UI is available on the API port. Restart `npm run dev` after server changes.
 
-`infra/compose.yaml` starts **only PostgreSQL**, bound to `127.0.0.1:5432` by default. A named volume preserves data; `npm run db:stop` stops the database without deleting it. Initialization credentials apply to a new volume; editing `.env` does not change existing database credentials. Full application containers use the separate `infra/compose.full.yaml` workflow below; the database-only development workflow does not enable HTTPS.
+`infra/compose.yaml` starts **only PostgreSQL**, bound to `127.0.0.1:5432` by default. A named volume preserves data; `npm run db:stop` stops the database without deleting it. Initialization credentials apply to a new volume; editing `.env` does not change existing database credentials. Full application containers use the separate `infra/compose.full.yaml` workflow above; the database-only development workflow does not enable HTTPS.
 
 Sign up through the web page, then sign in and open your profile or leaderboard. The APIs can also be explored through Swagger UI. To prepare test accounts through the real API, set a private `QA_PASSWORD` and run `npm run qa:accounts` while the API is running. It creates `qa-p1`–`qa-p4` and `qa-outsider` with `@qa.example.com` addresses; it does not reset existing passwords.
 
@@ -234,41 +285,6 @@ npm run build       # Type-check and build apps/web/dist
 npm run dev:server  # API only
 npm run preview     # Production web build; run the API separately
 ```
-
-### Full application containers
-
-Requirements: Docker Engine with Compose v2, `make`, and OpenSSL. From the repository root:
-
-```sh
-make                 # https://<this computer's IP>:8443/, reachable from another computer
-make HOST=10.12.3.4  # same, with the address given explicitly
-make local           # https://localhost:8443/ on this computer only
-```
-
-Each target runs `infra/prepare-full.sh`, which creates only what is missing: `.env` from `.env.example` with random `JWT_SECRET` and `TWO_FACTOR_KEY`, the PostgreSQL password file `infra/secrets/postgres-password`, and a self-signed localhost certificate in `infra/certs`. Existing values and files are never replaced. `infra/start-full.sh` then runs `docker compose --env-file .env --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`.
-
-- `make` finds this computer's IPv4 address (`ipconfig getifaddr en0`/`en1` on macOS, the first `hostname -I` address on Linux), binds ports to `0.0.0.0`, and uses a certificate in `infra/certs/lan` whose SAN includes that address. The certificate is recreated when the address changes. If no address is found, it stops and asks for `make HOST=<IP>`.
-- `make local` binds ports to `127.0.0.1` and uses the localhost certificate in `infra/certs`.
-- The binding, certificate directory and 42 redirect URI are passed for that run only; `.env` is not changed.
-- With two computers, every browser (including the server computer's) uses the printed `https://<IP>:8443/` address. Check `https://<IP>:8443/api/health` from the other computer first, then accept the self-signed certificate warning once per browser.
-
-`make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID` and `FT_OAUTH_CLIENT_SECRET` are set in `.env`. `make` then uses `https://<IP>:8443/oauth/42/callback` and `make local` uses `https://localhost:8443/oauth/42/callback` as the redirect URI; `FT_OAUTH_REDIRECT_URI` in `.env` is only for local development. The URI in use is printed and must be registered in the 42 intra application. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
-
-The `db`, `api` and `web` containers restart after a crash or a Docker restart; `make down` stops them. Server errors (500, 503, lost database connection) appear in `make logs`.
-
-If `make` stops with `service "migrate" didn't complete successfully: exit 1` and `make logs` shows `password authentication failed`, this computer still has a database volume created with an earlier password (for example from a previous clone). Restore that earlier password file (`POSTGRES_PASSWORD_FILE`) and run `make` again. If the database data is not needed, remove only the database volume instead; this deletes the stored accounts and matches:
-
-```sh
-make down
-docker volume rm cyber-board-cafe-full_postgres_data
-make
-```
-
-Uploaded avatars are in a separate volume and do not affect the database password. To reset all data, also remove `cyber-board-cafe-full_avatars` in the same step.
-
-Default HTTPS URLs are `https://localhost:8443/`, `/api/health`, `/api/health/db`, `/docs/`, and `/docs/json`. HTTP port 8080 redirects to HTTPS port 8443. Only Nginx publishes host ports. Full-app API and DB communicate internally; this workflow does not require host Node/npm.
-
-The full app has a separate project/DB volume from local development. Startup, HTTPS with an explicit CA, migration failure, DB recovery and persistence after down/up have passed local validation. Windows browser trust setup and non-author reproduction remain pending. Nginx forwards `/api/ws` to the real-time API. See the [isolated browser checks](Document/runtime.md#격리된-수용-기준-검증) for running the Omok smoke test through HTTPS.
 
 ## Environment variables
 
@@ -317,7 +333,7 @@ The two-session Gomoku and Othello scenarios are `tests/gomoku.spec.ts` and `tes
 | sipyeon (D) | WebSocket transport, matchmaking, subscriptions and reconnection |
 | dong-hki (E) | Development/deployment environment and social contracts/implementation |
 
-Commits and PRs record individual contributions. The [roadmap](Document/roadmap.md) preserves the original role/schedule plan; the SDS records implementation references. Work uses issues, feature branches and reviewed PRs under [CONTRIBUTING.md](CONTRIBUTING.md). Team communication used Discord and KakaoTalk alongside GitHub issues, PRs and reviews.
+Commits and PRs record individual contributions. The SDS records implementation references. Work uses issues, feature branches and reviewed PRs under [CONTRIBUTING.md](CONTRIBUTING.md). Team communication used Discord and KakaoTalk alongside GitHub issues, PRs and reviews.
 
 ### Individual Contributions
 
@@ -336,7 +352,7 @@ Implementation challenges and how they were addressed:
 2. **Recovering control after another tab takes over a match.** Reconnection alone could leave the old tab locked, while ordinary updates from the controlling tab must keep that lock. #144 releases it only after an authenticated connection resubscribes and receives `match.snapshot`. Regression tests were shown to fail before the fix, and the recovery was exercised with two tabs and two users against the actual API/DB for both games.
 3. **Keeping navigation consistent with matchmaking and authentication.** Back/Forward, legal-page navigation and late queue events could leave stale matching state; OAuth failures and busy dialogs also needed explicit recovery. #144 coordinates queue cancellation with navigation, ignores canceled queue responses, restores a valid session after callback failure, and adds dialog/menu keyboard and focus handling. Its validation record distinguishes mocked browser scenarios from actual HTTPS/WSS gameplay.
 
-Suggested evaluation walkthrough: trace a board click from the React board through the command's `stateVersion` to the server snapshot, then demonstrate two-tab takeover and recovery. The source and executed checks are documented in [the #136 validation record](https://github.com/EscapeFromGyeongsan/ft_transcendence/blob/c4ef0e4968b06cbe3f7d60db8e75b65f48bdf34f/Document/evaluation-136-validation.md); this is supporting evidence, and each member must still explain their own implementation during evaluation.
+Suggested evaluation walkthrough: trace a board click from the React board through the command's `stateVersion` to the server snapshot, then demonstrate two-tab takeover and recovery. Each member explains their own implementation during evaluation.
 
 #### yunhpark (B, nini4746) - Technical lead
 
@@ -397,7 +413,7 @@ Challenges and how they were addressed:
 
 ### Modules (18 points)
 
-Major modules are worth 2 points and minor modules 1 point. Details and evidence owners are in the [module matrix](Document/evaluation/module-matrix.md).
+Major modules are worth 2 points and minor modules 1 point.
 
 | Module (subject) | Type | Points | How it is implemented | Owner |
 |---|---|---:|---|---|
@@ -443,17 +459,16 @@ config/             Drizzle, Vitest and Playwright configuration
 infra/              Local DB and full-app Compose, Dockerfile and HTTPS proxy
 tests/              Playwright browser scenarios
 scripts/            Development, DB checks and QA accounts
-Document/           Design, contracts and evaluation plans
+Document/           SRS, SDS, test plan and game rules
 ```
 
 ## Documentation and resources
 
-- [Full application execution](Document/runtime.md), [runtime validation](Document/runtime-validation.md) and [pinned WSS validation](Document/runtime-wss-validation.md).
+- [SRS](Document/SRS.md): requirements, decisions and acceptance criteria.
 - [SDS](Document/SDS.md): architecture, data model, contracts and requirement traceability.
 - [Test plan](Document/TEST_PLAN.md): T00–T10 scenarios, coordinates, ranking and automation scope.
-- [Contracts](Document/contracts.md), [game engine documentation](packages/game-engine/README.md) and [shared contract types](packages/game-contracts/src/).
-- [Roadmap](Document/roadmap.md), [module matrix](Document/evaluation/module-matrix.md), [mandatory checklist](Document/evaluation/mandatory-checklist.md).
-- [Documentation specification](Document/cyber_boardgame_documentation_spec.md), [contribution rules](CONTRIBUTING.md), [TSDoc conventions](Document/code-conventions.md).
+- [Game rules](Document/GAME_RULES.md), [game engine documentation](packages/game-engine/README.md) and [shared contract types](packages/game-contracts/src/).
+- [Contribution rules](CONTRIBUTING.md).
 - Dependencies and versions: [package.json](package.json), [package-lock.json](package-lock.json). Package license notices accompany dependencies: React/Fastify/Vite/Vitest/pg use MIT; Drizzle ORM and Playwright use Apache-2.0. No root project license currently exists; dependency licenses do not license this project's code. Asset/font attribution review remains required before submission.
 
 External references (official documentation and standards):
@@ -472,5 +487,5 @@ Codex has assisted with implementation, tests, code review and documentation. Th
 
 - Friend game invitations, rematch and Advanced chat features (blocking, game invites from chat, typing indicators) are not implemented.
 - The final acceptance run (#161) passed on master at 1440×900 and 768×1024 ([record](Document/TEST_PLAN.md)); two-PC play (#163) is still required.
-- NFR-PERF-01 was measured on master `531f8a1` ([record](Document/perf/README.md)), not on the current master.
+- NFR-PERF-01 was measured on master `531f8a1`, not on the current master.
 - Asset/font attribution review and independent README reproduction remain required before submission.
