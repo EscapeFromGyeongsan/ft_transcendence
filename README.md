@@ -6,26 +6,24 @@
 
 A Korean-language, two-player board game platform for freestyle Gomoku (Omok, 15 × 15) and standard Othello (8 × 8). Accounts, matchmaking, real-time transport and persistence are separated from each game's rules and board UI.
 
-This README was updated on **2026-11-14 (KST)**. It describes master after #147 was merged (`54fa651`). Evaluation readiness is tracked in the [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md).
+The [SRS](Document/SRS.md) defines the requirements, the [SDS](Document/SDS.md) describes the design and requirement traceability, and the [test plan](Document/TEST_PLAN.md) lists the test scenarios.
 
-## Features and integration status
+## Features
 
-| Area | Owners | Implemented scope | Remaining work |
-|---|---|---|---|
-| Accounts | B (server, #11), A (web, #55) | Registration, email/password login, rotating refresh tokens and session revocation | Final acceptance run (#88) |
-| OAuth and 2FA | B (server, #11), A (web, #72) | 42 login/link API and UI; TOTP setup, verification, recovery codes and disable flow | Final acceptance run (#88) |
-| Profiles | B (server, #11, #15), A (web, #57) | Public profiles, nickname changes, PNG/JPEG avatar upload/delete and default avatars | Final acceptance run (#88) |
-| Records | B (server, #11), A (web, #57) | Per-game statistics, history, first-win achievement, ten-game progress and leaderboard | Final acceptance run (#88); demo data via `npm run demo:seed` (#120) |
-| Matchmaking | D (server, #49), A (web, #63) | Game selection, queue join/cancel/matched flow and waiting UI | Final acceptance run (#88) |
-| Gomoku | E (engine), C (snapshot board, #45), D (WebSocket), A (web, #56) | Rules engine, board UI and WS client | Final acceptance run (#88) |
-| Othello | C (engine, #58), A (web, #73) | Engine #58, UI #73, server registration and two-session browser E2E #77 | Final acceptance run (#88) |
-| Legal pages | A (web, #71), B (notice text, #117, #127) | `/terms`, `/privacy`, links and modal Escape handling (#71), with notice text matching sign-up, session expiry and deletion | Final acceptance run (#88) |
-| Friends and invitations | E (REST, #95), D (presence, #98), A (web, #90) | Friend UI #90, REST #95, presence and relationship notifications #98 wired to the authenticated connection registry (#82) | Invitations are out of scope for this submission (#81, #83) |
-| Friend chat | E (#165) | 1:1 chat between accepted friends in the lobby and during matches, stored in PostgreSQL, `chat.changed` over the authenticated WebSocket | Final acceptance run (#88) |
-| Privacy and deletion | A (records privacy, #79), B (account deletion, #84, #85) | Records privacy API/DB/UI/E2E (#79); account deletion API/DB/UI (#84, #85) | Final acceptance run (#88) |
-| Deployment | E (containers and HTTPS, #10), B (one-command `make`, #123, #131) | Full application containers, HTTPS/WSS, persistent DB/avatar volumes (#10) and one-command `make` (#123, #131) | Two-PC acceptance in the final run (#88) |
-
-Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. #147 merged these feature PRs into master; migrations run in order `0000`–`0009`.
+| Area | Owners | Implemented scope |
+|---|---|---|
+| Accounts | B (server, #11), A (web, #55) | Registration, email/password login, rotating refresh tokens and session revocation |
+| OAuth and 2FA | B (server, #11), A (web, #72) | 42 login/link API and UI; TOTP setup, verification, recovery codes and disable flow |
+| Profiles | B (server, #11, #15), A (web, #57) | Public profiles, nickname changes, PNG/JPEG avatar upload/delete and default avatars |
+| Records | B (server, #11), A (web, #57) | Per-game statistics, history, first-win achievement, ten-game progress and leaderboard |
+| Matchmaking | D (server, #49), A (web, #63) | Game selection, queue join/cancel/matched flow and waiting UI |
+| Gomoku | E (engine), C (snapshot board, #45), D (WebSocket), A (web, #56) | Rules engine, board UI and WS client |
+| Othello | C (engine, #58), A (web, #73) | Engine #58, UI #73, server registration and two-session browser E2E #77 |
+| Legal pages | A (web, #71), B (notice text, #117, #127) | `/terms`, `/privacy`, links and modal Escape handling (#71), with notice text matching sign-up, session expiry and deletion |
+| Friends | E (REST, #95), D (presence, #98), A (web, #90) | Friend UI #90, REST #95, presence and relationship notifications #98 wired to the authenticated connection registry (#82) |
+| Friend chat | E (#165) | 1:1 chat between accepted friends in the lobby and during matches, stored in PostgreSQL, `chat.changed` over the authenticated WebSocket |
+| Privacy and deletion | A (records privacy, #79), B (account deletion, #84, #85) | Records privacy API/DB/UI/E2E (#79); account deletion API/DB/UI (#84, #85) |
+| Deployment | E (containers and HTTPS, #10), B (one-command `make`, #123, #131) | Full application containers, HTTPS/WSS, persistent DB/avatar volumes (#10) and one-command `make` (#123, #131) |
 
 ## Game rules
 
@@ -35,7 +33,7 @@ Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. #147 merge
 - Statistics are per game. Void matches are excluded; draws count as completed matches. Win rate is `wins / completed matches`. Leaderboards order by **wins descending, win rate descending, user ID ascending** (DEC-08), with distinct sequential ranks.
 - The real-time design pauses play during disconnection and gives each player a cumulative 60-second absence budget per match (DEC-03). Returning does not reset it. Verification requires the integrated runtime.
 
-The [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md) contain current conventions. [GAME_RULES.md](Document/GAME_RULES.md) still needs C's pending #36 update for Othello and DEC-03/08; its older tie-break and one-based display wording are not the current contract.
+The [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md) contain current conventions. [GAME_RULES.md](Document/GAME_RULES.md) gives the full rules, including the disconnection, statistics and leaderboard policies.
 
 ## Technical stack and architecture
 
@@ -433,8 +431,6 @@ Major modules are worth 2 points and minor modules 1 point.
 User interaction and Standard user management share the profile and friend features; each module's conditions are demonstrated separately. The Advanced chat minor is not claimed.
 
 ## Structure
-
-The web layout below describes `feat/web-othello`; this documentation checkout currently has only `App.tsx` and `main.tsx` under `apps/web/src`.
 
 ```text
 apps/server/src/
