@@ -21,10 +21,11 @@ This README was updated on **2026-11-13 (KST)**. It describes the #147 integrati
 | Othello | C (engine, #58), A (web, #73) | Engine #58, UI #73, server registration and two-session browser E2E #77 | Final acceptance run (#88) |
 | Legal pages | A (web, #71), B (notice text, #117, #127) | `/terms`, `/privacy`, links and modal Escape handling (#71), with notice text matching sign-up, session expiry and deletion | Final acceptance run (#88) |
 | Friends and invitations | E (REST, #95), D (presence, #98), A (web, #90) | Friend UI #90, REST #95, presence and relationship notifications #98 wired to the authenticated connection registry (#82) | Invitations remain planned |
+| Friend chat | E (#165) | 1:1 chat between accepted friends in the lobby and during matches, stored in PostgreSQL, `chat.changed` over the authenticated WebSocket | Final acceptance run (#88) |
 | Privacy and deletion | A (records privacy, #79), B (account deletion, #84, #85) | Records privacy API/DB/UI/E2E (#79); account deletion API/DB/UI (#84, #85) | Final acceptance run (#88) |
 | Deployment | E (containers and HTTPS, #10), B (one-command `make`, #123, #131) | Full application containers, HTTPS/WSS, persistent DB/avatar volumes (#10) and one-command `make` (#123, #131) | Two-PC acceptance in the final run (#88) |
 
-Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. The #147 candidate merges these feature PRs into one branch; migrations run in order `0000`–`0008`.
+Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. The #147 candidate merges these feature PRs into one branch; migrations run in order `0000`–`0009`.
 
 ## Game rules
 
@@ -69,6 +70,8 @@ erDiagram
   games ||--o{ game_commands : "deduplicates"
   users |o--o{ games : "wins"
   users ||--o{ friendships : "low, high, requester"
+  friendships ||--o{ chat_messages : "holds"
+  users ||--o{ chat_messages : "sends"
 
   users {
     bigint id PK
@@ -160,6 +163,15 @@ erDiagram
     bigint requested_by_id FK
     text status "pending, accepted, declined"
   }
+
+  chat_messages {
+    bigint id PK
+    bigint friendship_id FK
+    bigint sender_id FK
+    uuid client_id
+    text text "1..1000 chars"
+    timestamptz created_at
+  }
 ```
 
 | Table | Purpose | Key constraints |
@@ -177,6 +189,7 @@ erDiagram
 | `moves` | Confirmed moves; the board is rebuilt from them | Unique `(game_id, turn_number)` and `(game_id, row_idx, col_idx)`; coordinates `0..14` |
 | `game_commands` | One row per processed command | Unique `(game_id, command_id)`, so a resent command is not applied twice |
 | `friendships` | One row per user pair | Unique `(user_low_id, user_high_id)` with `user_low_id < user_high_id`; CHECK on status and timestamps |
+| `chat_messages` | Messages between accepted friends | Unique `(friendship_id, sender_id, client_id)`, so a resent message is stored once; CHECK on text length 1..1000; deleted with the friendship |
 | `connection_probe` | Infrastructure check only | No account or game data |
 
 - Enumerated values use `text` + CHECK instead of PostgreSQL enums, so adding a value only needs a simple migration.
@@ -388,7 +401,7 @@ Challenges and how they were addressed:
 2. **Avatars had to survive replacing the API container, and the API runs as a non-root user that needs write access.** Mounted a Docker named volume at `/data/avatars`, set the directory ownership in the image, and confirmed the same avatar file could be read before and after recreating the container ([#40](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/40), [#67](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/67)).
 3. **Two users sending each other a friend request at the same time had to end up with one relationship.** Added a uniqueness constraint on the user pair; when the insert conflicts, the transaction re-reads the relationship and accepts the opposite request. Verified concurrent requests and lock waits on a real PostgreSQL ([#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/95)).
 
-### Modules (16 points)
+### Modules (18 points)
 
 Major modules are worth 2 points and minor modules 1 point. Details and evidence owners are in the [module matrix](Document/evaluation/module-matrix.md).
 
@@ -396,6 +409,7 @@ Major modules are worth 2 points and minor modules 1 point. Details and evidence
 |---|---|---:|---|---|
 | Use a framework for both the frontend and backend | Major | 2 | React 19 + Vite web app, Fastify 5 API | yunhpark (B) |
 | Real-time features using WebSockets | Major | 2 | `/api/ws`: matchmaking, server-confirmed `game.updated` broadcasts, reconnection, friend `presence` | sipyeon (D) |
+| Allow users to interact with other users | Major | 2 | Friend 1:1 chat in the lobby and during matches with stored history, profile pages, friend search, requests, removal and list | dong-hki (E) |
 | Standard user management and authentication | Major | 2 | Profile update, avatar upload with default avatar, friends with online status, profile page | yunhpark (B) |
 | Complete web-based game | Major | 2 | 15×15 Gomoku with server-side rules and win/loss conditions | yoshin (C) |
 | Remote players | Major | 2 | Two browsers on separate computers; pause on disconnect, 60-second cumulative reconnection window, snapshot restore | sipyeon (D) |
@@ -404,9 +418,9 @@ Major modules are worth 2 points and minor modules 1 point. Details and evidence
 | Game statistics and match history | Minor | 1 | Wins, losses, win rate, match history (date, opponent, result), first-win achievement, 10-game progression, leaderboard | yunhpark (B) |
 | Remote authentication with OAuth 2.0 | Minor | 1 | 42 Intra OAuth login, first sign-up and account linking | yunhpark (B) |
 | Complete 2FA system | Minor | 1 | TOTP setup, enable and disable, single-use recovery codes, second login step | yunhpark (B) |
-| **Total** | 6 Major + 4 Minor | **16** | 14 required points + 2 bonus candidate points | |
+| **Total** | 7 Major + 4 Minor | **18** | 14 required points + 4 bonus candidate points | |
 
-The User Interaction major is not claimed: its basic chat requirement is not implemented. Profiles and friends are covered by Standard user management.
+User interaction and Standard user management share the profile and friend features; each module's conditions are demonstrated separately. The Advanced chat minor is not claimed.
 
 ## Structure
 
@@ -462,7 +476,7 @@ Codex has assisted with implementation, tests, code review and documentation. Th
 
 ## Known limitations
 
-- Friend invitations and chat are not implemented (chat major MOD-03 is not claimed).
+- Friend game invitations, rematch and Advanced chat features (blocking, game invites from chat, typing indicators) are not implemented.
 - The final acceptance run (#88) on the submission SHA, including two-PC play, is still required.
 - NFR-PERF-01 was measured on master `531f8a1` ([record](Document/perf/README.md)), not on the #147 candidate.
 - Asset/font attribution review and independent README reproduction remain required before submission.

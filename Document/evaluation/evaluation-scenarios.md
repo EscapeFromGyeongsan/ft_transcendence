@@ -473,7 +473,7 @@ DB 테이블과 관계([C] `apps/server/src/db/schema/`):
 
 ### 4.12 전원 Git 기여·역할 (II, III.2)
 
-- `git shortlog -sne`로 전원 커밋을 보여 줍니다. 역할(PO, PM, Tech Lead, Developers)과 담당 모듈은 `module-matrix.md` 책임자 열(B: MOD-01·04·07·08·10·11, C: MOD-05·09, D: MOD-02·06, E: MOD-03 제외)과 README Team 섹션으로 설명합니다.
+- `git shortlog -sne`로 전원 커밋을 보여 줍니다. 역할(PO, PM, Tech Lead, Developers)과 담당 모듈은 `module-matrix.md` 책임자 열(B: MOD-01·04·07·08·10·11, C: MOD-05·09, D: MOD-02·06, E: MOD-03)과 README Team 섹션으로 설명합니다.
 - 과목: 평가에서 역할 분배, 작업 조직, 소통, 각자 기여를 설명해야 하고 전원이 프로젝트와 자기 기여를 설명할 수 있어야 합니다.
 
 ### 4.13 영어 README·AI 사용 공개·기여 설명 (VI)
@@ -485,12 +485,13 @@ DB 테이블과 관계([C] `apps/server/src/db/schema/`):
 
 ## 5. 모듈별 시연 시나리오
 
-선택 16점: Major 6개(MOD-01, 02, 04, 05, 06, 09) + Minor 4개(MOD-07, 08, 10, 11). 최소 14점 + 보너스 후보 2점이며 인정 점수는 평가에서 확정됩니다. 과목: "Only fully functional and properly implemented modules will be counted ... Non-functional or incomplete modules = 0 points."
+선택 18점: Major 7개(MOD-01, 02, 03, 04, 05, 06, 09) + Minor 4개(MOD-07, 08, 10, 11). 최소 14점 + 보너스 후보 4점이며 인정 점수는 평가에서 확정됩니다. 과목: "Only fully functional and properly implemented modules will be counted ... Non-functional or incomplete modules = 0 points."
 
 | ID | 모듈 | 점수 | 담당 |
 |---|---|---:|---|
 | MOD-01 | 프런트·백 프레임워크 (Major) | 2 | B |
 | MOD-02 | 실시간 기능 (Major) | 2 | D |
+| MOD-03 | 사용자 교류 (Major) | 2 | E |
 | MOD-04 | 표준 사용자 관리 (Major) | 2 | B |
 | MOD-05 | 완전한 웹 게임 (Major) | 2 | C |
 | MOD-06 | 원격 플레이 (Major) | 2 | D |
@@ -593,11 +594,13 @@ DB 테이블과 관계([C] `apps/server/src/db/schema/`):
 - 근거: 6.3절.
 - 알려진 빈 곳: QR 이미지 없음. 2FA 로그인 단계에 형식 검증·`autoComplete="one-time-code"` 없음.
 
-### 5.11 MOD-03 사용자 교류를 주장하지 않는 이유
+### 5.11 MOD-03 사용자 교류
 
 - 과목 Major "Allow users to interact with other users"의 최소 조건은 기본 채팅(메시지 송수신), 프로필 보기, 친구(추가·삭제·목록)입니다.
-- 기본 채팅이 구현되지 않아 주장하지 않습니다(#128). 프로필·친구는 MOD-04의 조건(Friend Management, Friend Online Status, Profile Page)으로만 증명합니다.
-- 질문 대비: "친구 기능이 있는데 왜 MOD-03이 아닌가?" → MOD-03은 채팅이 필수 조건이라 미완성 모듈은 0점이고, 같은 기능을 MOD-04 조건으로 증명합니다.
+- 시연: 두 브라우저에서 친구 요청·수락 → 오른쪽 아래 채팅 패널에서 메시지를 보내면 상대 화면에 바로 표시 → 대국 중에도 패널을 열어 대화 → 새로고침 후 이력 유지 → 친구 목록에서 상대 프로필 열기 → 친구 삭제 후 그 대화는 사라지고 조회는 404.
+- 근거: `apps/server/src/api/chat-routes.ts`, `apps/server/src/services/chat-service.ts`, migration `0009_chat_messages`, `apps/web/src/chat/ChatDock.tsx`(#165). 상태 코드는 `contracts.md` 11장, `chat.changed`는 12.9절.
+- 프로필·친구는 MOD-04와 공유합니다. MOD-04는 아바타·온라인 상태·프로필 수정, MOD-03은 채팅·프로필 보기·친구 추가/삭제/목록으로 각각 시연합니다.
+- 주장하지 않는 것: Advanced chat Minor(차단, 채팅에서 게임 초대, 입력 중 표시·읽음 확인).
 - 그 밖에 주장하지 않는 것: 업적 한 개로 Gamification, 아바타만으로 File upload, 게임별 폴더로 Microservices.
 
 ---
@@ -1944,8 +1947,8 @@ Rate limit (IP 기준, route별 별도 카운터 - 실행 확인: login이 막�
 61. **Q. 반응형·키보드 접근성은?**
     A. 640/768/1024px 브레이크포인트로 단일 열에서 2단까지 바뀌고(9.2절), 대국판은 방향키·Home/End로 이동하고 Enter/Space로 둡니다. 탈퇴·친구 대화상자는 focus trap이 있지만 로그아웃·기권·2FA 해제 모달에는 없고 `prefers-reduced-motion`도 없습니다. WCAG Major는 주장하지 않습니다.
 
-62. **Q. 왜 MOD-03(User Interaction)은 없나요?**
-    A. 최소 조건인 기본 채팅이 없어 주장하지 않았습니다. 프로필·친구 기능은 MOD-04(표준 사용자 관리)의 조건으로 증명합니다(5.11절).
+62. **Q. MOD-03(User Interaction)의 채팅은 어떻게 동작하나요?**
+    A. 수락된 친구끼리만 1:1 메시지를 조회·전송합니다. 메시지는 PostgreSQL에 저장하고, 저장 뒤 인증된 WebSocket으로 `chat.changed`를 보내 상대 화면이 이력을 다시 읽습니다. 친구 관계를 지우거나 탈퇴하면 그 대화도 삭제됩니다(5.11절).
 
 63. **Q. 시연 데이터는 어디서 왔나요? DB에 직접 넣었나요?**
     A. `npm run demo:seed`(#120)가 실제 API로 가입·로그인하고 실제 `/api/ws`로 15판을 둬서 만든 데이터입니다. 통계·기록·업적·리더보드가 저장된 경기 결과에서 나옵니다(`scripts/seed-demo.mjs`).

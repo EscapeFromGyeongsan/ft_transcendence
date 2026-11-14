@@ -87,7 +87,7 @@
 
 ### 기본 14점과 증빙 책임
 
-> 원래 계획 기록이다. 현재 주장하는 모듈(채팅 미구현 MOD-03 제외, 오델로·42 OAuth·2FA 추가, 16점)은 [module-matrix.md](evaluation/module-matrix.md)를 따른다(#128).
+> 원래 계획 기록이다. 현재 주장하는 모듈(MOD-03 채팅 포함, 오델로·42 OAuth·2FA 추가, 18점)은 [module-matrix.md](evaluation/module-matrix.md)를 따른다(#128).
 
 | ID | 모듈 | 점수 | 책임자 | 실제 서버 시나리오 | 내부 평가 목표 |
 |---|---|---:|---|---|---|
