@@ -1,6 +1,6 @@
 # B 평가 설명 (인증·DB·통계)
 
-코드 위치는 master 기준(`apps/server/src/` 생략 표기). `#115`, `D`(feat/account-deletion)는 아직 merge 전.
+코드 위치는 master 기준(`apps/server/src/` 생략 표기). `#115`, `D`(feat/account-deletion)도 #147로 master에 병합됨.
 
 ## 1. 비밀번호 해싱
 - 질문 예: "비밀번호 어떻게 저장하나요? salt는?"
@@ -21,7 +21,7 @@
 - refresh할 때마다 새 토큰 발급, 이전 토큰은 `used_at` 기록. 7일(`auth-service.ts:84`).
 - 이미 쓴 토큰이 다시 오면 탈취로 보고 그 session 전체 revoke + 해당 session의 WebSocket 연결 종료.
 - 같은 토큰으로 refresh 두 개가 동시에 오면 토큰 행 잠금(`SELECT ... FOR UPDATE`, `auth-service.ts:259`)으로 하나씩 처리. 먼저 온 쪽이 회전하고, 뒤에 온 쪽은 이미 쓴 토큰(`:264`)이라 재사용으로 보고 세션을 폐기함. 둘 다 회전하는 일은 없지만 결과는 로그아웃(실행 확인).
-  - 질문 "탭 두 개가 동시에 갱신하면?": 웹은 Web Locks `cbc.auth.refresh`로 탭 사이 refresh를 한 번에 하나만 보냄(#115 `apps/web/src/api/auth-client.ts:554`). 서버는 같은 토큰의 두 번째 사용을 탈취와 구분할 수 없어 안전한 쪽(폐기)을 택함.
+  - 질문 "탭 두 개가 동시에 갱신하면?": 웹은 Web Locks `cbc.auth.refresh`로 탭 사이 refresh를 한 번에 하나만 보냄(`apps/web/src/api/auth-client.ts:556`). 서버는 같은 토큰의 두 번째 사용을 탈취와 구분할 수 없어 안전한 쪽(폐기)을 택함.
 - 위치: `auth-service.ts:244-275`, `repositories/auth-repository.ts:116-135`, `app.ts:127-135`(WS close), route `auth-routes.ts:192-227`
 
 ## 4. 2FA (TOTP)
@@ -39,8 +39,8 @@
 - 비밀값 `FT_OAUTH_*`는 env, 전부 있거나 전부 없어야 시작(`index.ts:24-38`).
 
 ## 6. DB와 ORM
-- PostgreSQL 17 + Drizzle ORM. 스키마 `db/schema/users.ts`, `external-auth.ts`, `games.ts`. ER 다이어그램은 README `Database schema`(#118).
-- 마이그레이션 `apps/server/drizzle/0000~0003`, 명령 `npm run db:generate`, `npm run db:migrate`(`package.json:15-16`, `config/drizzle.config.ts`). 컨테이너 기동 시 migrate 컨테이너가 먼저 실행.
+- PostgreSQL 17 + Drizzle ORM. 스키마 `db/schema/users.ts`, `external-auth.ts`, `games.ts`, `friendships.ts`, `chat-messages.ts`. ER 다이어그램은 README `Database schema`(#118).
+- 마이그레이션 `apps/server/drizzle/0000~0009`, 명령 `npm run db:generate`, `npm run db:migrate`(`package.json:15-16`, `config/drizzle.config.ts`). 컨테이너 기동 시 migrate 컨테이너가 먼저 실행.
 - 상태값은 text + CHECK 제약(예: `oauth_states.mode`). 핵심 unique: `refresh_tokens.token_hash`, `oauth_accounts`(provider+providerUserId, user+provider).
 - DB 연결 안 되면 서버 시작 시 `/api/health/db` 확인 후 안내(`index.ts:52-61`).
 
@@ -69,8 +69,8 @@
 - 인증 관련 route에 IP당 1분 10회(`auth-routes.ts:75-76`): 가입, 로그인, refresh, 2FA verify/enable/disable, OAuth login/callback. 초과 → 429(`app.ts:212-216`). 프록시 뒤라 `TRUST_PROXY`로 실제 IP 사용.
 - 모든 route가 상태 코드별 `schema.response` 선언 → Swagger `/docs`(`app.ts:256-266`), `Document/contracts.md`에도 기록.
 
-## 11. 계정 삭제 (D 브랜치, merge 전)
+## 11. 계정 삭제
 - `DELETE /api/users/me` → 204. 비밀번호, 또는 2FA 코드, 또는 10분 내 로그인 필요(403 `RECENT_LOGIN_REQUIRED`). 진행 중 경기 있으면 409 `ACTIVE_MATCH`.
 - 행은 지우지 않고 익명화: email/nickname `deleted:<id>`, 비밀번호·아바타 null, refresh token·OAuth·2FA 행 삭제, session revoke. 경기 기록 참조는 유지.
-- 위치(D): `services/account-service.ts:48-100`, `repositories/account-repository.ts:33-92`
-- 공개 프로필은 `id`, `nickname`, `avatarUrl`만, email 비노출(`api/user-routes.ts:17-25`).
+- 위치: `services/account-service.ts:51-105`, `repositories/account-repository.ts:34-105`
+- 공개 프로필은 `id`, `nickname`, `avatarUrl`만, email 비노출(`api/user-routes.ts:21-29`).

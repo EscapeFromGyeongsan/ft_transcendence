@@ -25,7 +25,7 @@ flowchart LR
 
 기존 개발용 진입점은 `infra/compose.yaml`이며 프로젝트 이름은 `cyber-board-cafe`다. 전체 앱 실행은 `infra/compose.full.yaml`과 `cyber-board-cafe-full` 프로젝트를 사용하고, 별도의 기본 named volume에 데이터를 저장한다. 검증에는 이름이 다른 추가 프로젝트를 사용한다. 개발 환경과 공유하는 외부 볼륨이나 고정 볼륨 이름을 지정하지 않는다.
 
-인증·아바타 API는 별도 PR #11·#15가 제공한다. 이 문서의 연결 설정을 사용하려면 해당 서버 코드가 작업 사본에 함께 있어야 한다. 실행 환경 보완에서는 도메인 스키마, 게임·인증·소셜 코드, 실제 WebSocket endpoint를 추가하지 않는다.
+인증·아바타 API는 별도 PR #11·#15가 제공했고 master에 병합되어 있다. 실행 환경 보완(PR #10·#28) 자체에서는 도메인 스키마, 게임·인증·소셜 코드, 실제 WebSocket endpoint를 추가하지 않는다.
 
 ## 실행 전 준비
 

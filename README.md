@@ -6,7 +6,7 @@
 
 A Korean-language, two-player board game platform for freestyle Gomoku (Omok, 15 × 15) and standard Othello (8 × 8). Accounts, matchmaking, real-time transport and persistence are separated from each game's rules and board UI.
 
-This README was updated on **2026-11-13 (KST)**. It describes the #147 integration candidate chosen in #96. Evaluation readiness is tracked in the [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md).
+This README was updated on **2026-11-14 (KST)**. It describes master after #147 was merged (`54fa651`). Evaluation readiness is tracked in the [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md).
 
 ## Features and integration status
 
@@ -20,11 +20,12 @@ This README was updated on **2026-11-13 (KST)**. It describes the #147 integrati
 | Gomoku | E (engine), C (snapshot board, #45), D (WebSocket), A (web, #56) | Rules engine, board UI and WS client | Final acceptance run (#88) |
 | Othello | C (engine, #58), A (web, #73) | Engine #58, UI #73, server registration and two-session browser E2E #77 | Final acceptance run (#88) |
 | Legal pages | A (web, #71), B (notice text, #117, #127) | `/terms`, `/privacy`, links and modal Escape handling (#71), with notice text matching sign-up, session expiry and deletion | Final acceptance run (#88) |
-| Friends and invitations | E (REST, #95), D (presence, #98), A (web, #90) | Friend UI #90, REST #95, presence and relationship notifications #98 wired to the authenticated connection registry (#82) | Invitations remain planned |
+| Friends and invitations | E (REST, #95), D (presence, #98), A (web, #90) | Friend UI #90, REST #95, presence and relationship notifications #98 wired to the authenticated connection registry (#82) | Invitations are out of scope for this submission (#81, #83) |
+| Friend chat | E (#165) | 1:1 chat between accepted friends in the lobby and during matches, stored in PostgreSQL, `chat.changed` over the authenticated WebSocket | Final acceptance run (#88) |
 | Privacy and deletion | A (records privacy, #79), B (account deletion, #84, #85) | Records privacy API/DB/UI/E2E (#79); account deletion API/DB/UI (#84, #85) | Final acceptance run (#88) |
 | Deployment | E (containers and HTTPS, #10), B (one-command `make`, #123, #131) | Full application containers, HTTPS/WSS, persistent DB/avatar volumes (#10) and one-command `make` (#123, #131) | Two-PC acceptance in the final run (#88) |
 
-Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. The #147 candidate merges these feature PRs into one branch; migrations run in order `0000`–`0008`.
+Issues #23, #64, #65 and #66 correspond to PRs #63, #71, #72 and #73. #147 merged these feature PRs into master; migrations run in order `0000`–`0009`.
 
 ## Game rules
 
@@ -47,11 +48,11 @@ The [SDS](Document/SDS.md) and [test plan](Document/TEST_PLAN.md) contain curren
 
 The browser calls `/api/*` through Vite's development/preview proxy. Fastify routes call services and repositories backed by PostgreSQL. `@cafe/game-contracts` holds shared messages/types; `@cafe/game-engine` implements rules independently of transport. The integrated runtime adds authenticated WebSocket matchmaking, subscriptions and commands. It validates and persists commands before publishing authoritative state; `commandId` and `stateVersion` support deduplication and stale-state detection.
 
-Committed migrations `0000`–`0003` include `users`, `sessions`, `refresh_tokens`, OAuth/2FA tables, `games`, `game_players`, `moves`, `game_commands` and the connection probe. Statistics are queried from stored results. `friendships`, privacy and account-deletion migrations exist in open #95, #79 and #89. Each currently starts at `0004`; regenerate the later unmerged migration against the agreed integration order (#96), without rewriting shared/applied migrations. Relationships and constraints are documented in the [SDS](Document/SDS.md).
+Migrations `0000`–`0003` create `users`, `sessions`, `refresh_tokens`, OAuth/2FA tables, `games`, `game_players`, `moves`, `game_commands` and the connection probe. `0004`–`0009` add records privacy, account deletion, `friendships`, nickname uniqueness changes and `chat_messages`. Statistics are queried from stored results. Relationships and constraints are documented in the [SDS](Document/SDS.md).
 
 ## Database schema
 
-PostgreSQL 17 with Drizzle ORM. Table definitions live in `apps/server/src/db/schema/` and SQL migrations in `apps/server/drizzle/`. The diagram shows the schema after the open #89 (account deletion), #95 (friends) and #79 (records privacy) migrations are applied in the order planned in #96 (`0004`, `0005`, `0006`).
+PostgreSQL 17 with Drizzle ORM. Table definitions live in `apps/server/src/db/schema/` and SQL migrations in `apps/server/drizzle/`. The diagram shows the schema after migrations `0000`–`0009` in master.
 
 ```mermaid
 erDiagram
@@ -69,6 +70,8 @@ erDiagram
   games ||--o{ game_commands : "deduplicates"
   users |o--o{ games : "wins"
   users ||--o{ friendships : "low, high, requester"
+  friendships ||--o{ chat_messages : "holds"
+  users ||--o{ chat_messages : "sends"
 
   users {
     bigint id PK
@@ -160,6 +163,15 @@ erDiagram
     bigint requested_by_id FK
     text status "pending, accepted, declined"
   }
+
+  chat_messages {
+    bigint id PK
+    bigint friendship_id FK
+    bigint sender_id FK
+    uuid client_id
+    text text "1..1000 chars"
+    timestamptz created_at
+  }
 ```
 
 | Table | Purpose | Key constraints |
@@ -177,6 +189,7 @@ erDiagram
 | `moves` | Confirmed moves; the board is rebuilt from them | Unique `(game_id, turn_number)` and `(game_id, row_idx, col_idx)`; coordinates `0..14` |
 | `game_commands` | One row per processed command | Unique `(game_id, command_id)`, so a resent command is not applied twice |
 | `friendships` | One row per user pair | Unique `(user_low_id, user_high_id)` with `user_low_id < user_high_id`; CHECK on status and timestamps |
+| `chat_messages` | Messages between accepted friends | Unique `(friendship_id, sender_id, client_id)`, so a resent message is stored once; CHECK on text length 1..1000; deleted with the friendship |
 | `connection_probe` | Infrastructure check only | No account or game data |
 
 - Enumerated values use `text` + CHECK instead of PostgreSQL enums, so adding a value only needs a simple migration.
@@ -294,11 +307,11 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm test` runs the engine and server tests in this checkout. The referenced web feature branch also includes web unit tests and adds them to the Vitest configuration. DB tests skip when `TEST_DATABASE_URL` is absent: green results with skips do not demonstrate database integration. When configured, the helper checks the **connected** database name ends in `_test`, applies migrations and truncates domain tables between tests. Create this disposable database separately (for example, `CREATE DATABASE cafe_test;` through a PostgreSQL administrator connection). Never use the development/shared database. Keeping the example URL configured without creating the test database causes failures.
+`npm test` runs the engine, server and web unit tests (`config/vitest.config.ts`). DB tests skip when `TEST_DATABASE_URL` is absent: green results with skips do not demonstrate database integration. When configured, the helper checks the **connected** database name ends in `_test`, applies migrations and truncates domain tables between tests. Create this disposable database separately (for example, `CREATE DATABASE cafe_test;` through a PostgreSQL administrator connection). Never use the development/shared database. Keeping the example URL configured without creating the test database causes failures.
 
-`npm run test:e2e` starts the API and Vite unless an existing server is reused. Prepare the development DB using `db:up` and `db:migrate`. This checkout's `tests/app.spec.ts` checks the home page only.
+`npm run test:e2e` starts the API and Vite unless an existing server is reused. Prepare the development DB using `db:up` and `db:migrate`. `config/playwright.config.ts` runs the browser tests in `tests/` and ignores `*acceptance-88.spec.ts`; those use `config/playwright.acceptance.config.ts` with an HTTPS `E2E_BASE_URL` and `E2E_TLS_SPKI`.
 
-The actual two-session Gomoku scenario is `tests/gomoku.spec.ts` on `codex/gomoku-integration` at `b24ea10` (#27). That branch supports `E2E_BASE_URL` for a deployed target; this checkout's configuration does not. Use a checkout containing that integration to run it. Othello, legal-page and profile browser E2E are implemented in open #77 (`05eaede`); privacy coverage is in #79 (`8b93fb5`). Those tests require their integrated checkout and are not present here. #90 friend UI tests replace API/WS responses and therefore do not demonstrate real friend CRUD or presence integration. The published #55 (`b431f05`) authentication suite also verifies refresh-only storage and multi-tab restoration against the real API/DB. The #71 (`011b5a8`) legal/history suite replaces HTTP/WS responses, including its different-match Back/Forward regression, so it does not prove actual game-server integration. These files are on their feature branches. Record commands, commit, environment, skips and results using the [test plan](Document/TEST_PLAN.md).
+The two-session Gomoku and Othello scenarios are `tests/gomoku.spec.ts` and `tests/othello.spec.ts`; set `E2E_BASE_URL` to run against a deployed target instead of the local dev server. Legal-page and profile/records-privacy browser E2E are `tests/legal.spec.ts` and `tests/profile.spec.ts`. `tests/friends-integration.spec.ts` and `tests/account-deletion.spec.ts` skip unless `E2E_FRIENDS_INTEGRATION` or `E2E_ACCOUNT_DELETION_INTEGRATION=1` is set with a dedicated DB. `tests/friends-ui.spec.ts` (#90) replaces REST/auth/WS responses and therefore does not demonstrate real friend CRUD or presence integration. The `tests/auth.spec.ts` (#55) suite also verifies refresh-only storage and multi-tab restoration against the real API/DB. The `tests/legal-routing-regression.spec.ts` (#71) legal/history suite replaces HTTP/WS responses, including its different-match Back/Forward regression, so it does not prove actual game-server integration. Record commands, commit, environment, skips and results using the [test plan](Document/TEST_PLAN.md).
 
 ## Team, modules and project management
 
@@ -314,7 +327,7 @@ Commits and PRs record individual contributions. The [roadmap](Document/roadmap.
 
 ### Individual Contributions
 
-Each entry below is based on the member's own write-up in [#125](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/125). The referenced feature and integration PRs remain separate from the code in this documentation checkout.
+Each entry below is based on the member's own write-up in [#125](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/125).
 
 #### jyoo (A) — Frontend developer, UI/UX and documentation
 
@@ -325,7 +338,7 @@ Each entry below is based on the member's own write-up in [#125](https://github.
 
 Implementation challenges and how they were addressed:
 
-1. **Adding Tailwind without disrupting existing boards.** The UI already depended on custom board geometry and CSS rules. The #116 candidate introduces Tailwind v4 without its reset stylesheet, moves shared controls to `@apply`/utilities, and preserves board-specific CSS. The #143 record separates desktop/tablet/mobile screen checks from unresolved full-acceptance and container checks.
+1. **Adding Tailwind without disrupting existing boards.** The UI already depended on custom board geometry and CSS rules. #116 introduces Tailwind v4 without its reset stylesheet, moves shared controls to `@apply`/utilities, and preserves board-specific CSS. The #143 record separates desktop/tablet/mobile screen checks from unresolved full-acceptance and container checks.
 2. **Recovering control after another tab takes over a match.** Reconnection alone could leave the old tab locked, while ordinary updates from the controlling tab must keep that lock. #144 releases it only after an authenticated connection resubscribes and receives `match.snapshot`. Regression tests were shown to fail before the fix, and the recovery was exercised with two tabs and two users against the actual API/DB for both games.
 3. **Keeping navigation consistent with matchmaking and authentication.** Back/Forward, legal-page navigation and late queue events could leave stale matching state; OAuth failures and busy dialogs also needed explicit recovery. #144 coordinates queue cancellation with navigation, ignores canceled queue responses, restores a valid session after callback failure, and adds dialog/menu keyboard and focus handling. Its validation record distinguishes mocked browser scenarios from actual HTTPS/WSS gameplay.
 
@@ -388,7 +401,7 @@ Challenges and how they were addressed:
 2. **Avatars had to survive replacing the API container, and the API runs as a non-root user that needs write access.** Mounted a Docker named volume at `/data/avatars`, set the directory ownership in the image, and confirmed the same avatar file could be read before and after recreating the container ([#40](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/40), [#67](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/67)).
 3. **Two users sending each other a friend request at the same time had to end up with one relationship.** Added a uniqueness constraint on the user pair; when the insert conflicts, the transaction re-reads the relationship and accepts the opposite request. Verified concurrent requests and lock waits on a real PostgreSQL ([#95](https://github.com/EscapeFromGyeongsan/ft_transcendence/issues/95)).
 
-### Modules (16 points)
+### Modules (18 points)
 
 Major modules are worth 2 points and minor modules 1 point. Details and evidence owners are in the [module matrix](Document/evaluation/module-matrix.md).
 
@@ -396,6 +409,7 @@ Major modules are worth 2 points and minor modules 1 point. Details and evidence
 |---|---|---:|---|---|
 | Use a framework for both the frontend and backend | Major | 2 | React 19 + Vite web app, Fastify 5 API | yunhpark (B) |
 | Real-time features using WebSockets | Major | 2 | `/api/ws`: matchmaking, server-confirmed `game.updated` broadcasts, reconnection, friend `presence` | sipyeon (D) |
+| Allow users to interact with other users | Major | 2 | Friend 1:1 chat in the lobby and during matches with stored history, profile pages, friend search, requests, removal and list | dong-hki (E) |
 | Standard user management and authentication | Major | 2 | Profile update, avatar upload with default avatar, friends with online status, profile page | yunhpark (B) |
 | Complete web-based game | Major | 2 | 15×15 Gomoku with server-side rules and win/loss conditions | yoshin (C) |
 | Remote players | Major | 2 | Two browsers on separate computers; pause on disconnect, 60-second cumulative reconnection window, snapshot restore | sipyeon (D) |
@@ -404,9 +418,9 @@ Major modules are worth 2 points and minor modules 1 point. Details and evidence
 | Game statistics and match history | Minor | 1 | Wins, losses, win rate, match history (date, opponent, result), first-win achievement, 10-game progression, leaderboard | yunhpark (B) |
 | Remote authentication with OAuth 2.0 | Minor | 1 | 42 Intra OAuth login, first sign-up and account linking | yunhpark (B) |
 | Complete 2FA system | Minor | 1 | TOTP setup, enable and disable, single-use recovery codes, second login step | yunhpark (B) |
-| **Total** | 6 Major + 4 Minor | **16** | 14 required points + 2 bonus candidate points | |
+| **Total** | 7 Major + 4 Minor | **18** | 14 required points + 4 bonus candidate points | |
 
-The User Interaction major is not claimed: its basic chat requirement is not implemented. Profiles and friends are covered by Standard user management.
+User interaction and Standard user management share the profile and friend features; each module's conditions are demonstrated separately. The Advanced chat minor is not claimed.
 
 ## Structure
 
@@ -462,7 +476,7 @@ Codex has assisted with implementation, tests, code review and documentation. Th
 
 ## Known limitations
 
-- Friend invitations and chat are not implemented (chat major MOD-03 is not claimed).
+- Friend game invitations, rematch and Advanced chat features (blocking, game invites from chat, typing indicators) are not implemented.
 - The final acceptance run (#88) on the submission SHA, including two-PC play, is still required.
 - NFR-PERF-01 was measured on master `531f8a1` ([record](Document/perf/README.md)), not on the #147 candidate.
 - Asset/font attribution review and independent README reproduction remain required before submission.
