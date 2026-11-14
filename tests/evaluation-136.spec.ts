@@ -112,7 +112,10 @@ test.describe("#136 UI regressions — synthetic HTTP/WS contracts", () => {
     await expect(page.getByRole("alert")).toHaveCount(1);
   });
 
-  test("오델로 game.error도 로비에서 한 번 표시한다", async ({ page }) => {
+  // #162: a board error belongs to its match and is cleared on leaving it.
+  test("오델로 game.error는 대국에서 한 번 표시하고 로비에는 남기지 않는다", async ({
+    page,
+  }) => {
     const fixture = await installEvaluationFixture(page, {
       gameType: "othello",
     });
@@ -124,10 +127,13 @@ test.describe("#136 UI regressions — synthetic HTTP/WS contracts", () => {
       code: "NOT_YOUR_TURN",
       message: "Not your turn.",
     });
+    await expect(page.getByTestId("game-error-banner")).toHaveCount(1);
+    await expect(page.getByTestId("game-error-banner")).toContainText(
+      "NOT_YOUR_TURN",
+    );
     await page.locator(".cbc-brand").click();
     await expect(page.getByTestId("lobby-view")).toBeVisible();
-    await expect(page.getByRole("alert")).toHaveCount(1);
-    await expect(page.getByRole("alert")).toContainText("NOT_YOUR_TURN");
+    await expect(page.getByRole("alert")).toHaveCount(0);
   });
 
   test("대기 중 뒤로가기는 queue.leave를 보내며 늦은 joined가 화면을 되돌리지 않는다", async ({
