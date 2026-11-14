@@ -9,6 +9,9 @@ const viteRoot = dirname(
   ),
 );
 const viteBin = join(viteRoot, "bin/vite.js");
+// The container started by `make dev` sets DEV_HOST=0.0.0.0 so the published
+// port reaches Vite; on the host it stays on 127.0.0.1.
+const host = process.env.DEV_HOST ?? "127.0.0.1";
 
 const children = [];
 function run(command, args, options = {}) {
@@ -34,6 +37,6 @@ run(process.execPath, [
 ]);
 run(
   process.execPath,
-  [viteBin, "--host", "127.0.0.1", ...process.argv.slice(2)],
+  [viteBin, "--host", host, ...process.argv.slice(2)],
   { cwd: "apps/web" },
 );
