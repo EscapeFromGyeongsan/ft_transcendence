@@ -301,6 +301,7 @@ export function App() {
     logoutDialogRef,
     "#cancelLogoutBtn",
     submitting,
+    lastLogoutTriggerRef,
   );
 
   // 프로필 화면에서 조회 중인 사용자 (본인 또는 다른 사용자)

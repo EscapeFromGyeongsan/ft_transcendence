@@ -3,12 +3,16 @@ import { useEffect, type RefObject } from "react";
 const FOCUSABLE =
   'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
-/** Keeps keyboard focus inside an open modal and restores its connected opener. */
+/**
+ * Keeps keyboard focus inside an open modal and restores its connected opener.
+ * `returnFocusRef` replaces the opener when it closes with the modal, such as a menu item (#170).
+ */
 export function useDialogFocus(
   open: boolean,
   dialogRef: RefObject<HTMLElement | null>,
   initialSelector: string,
   busy = false,
+  returnFocusRef?: RefObject<HTMLElement | null>,
 ) {
   useEffect(() => {
     if (!open) return;
@@ -54,9 +58,10 @@ export function useDialogFocus(
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("focusin", onFocus);
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      const target = returnFocusRef?.current ?? opener;
+      if (target instanceof HTMLElement && target.isConnected) target.focus();
     };
-  }, [open, dialogRef, initialSelector]);
+  }, [open, dialogRef, initialSelector, returnFocusRef]);
 
   useEffect(() => {
     if (!open) return;
