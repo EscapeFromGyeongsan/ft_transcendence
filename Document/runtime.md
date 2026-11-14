@@ -38,14 +38,14 @@ flowchart LR
 - 아래 검증 명령에는 `curl`이 필요하다.
 - 이미지 태그는 Node 24/bookworm-slim, Nginx 1.28/alpine, PostgreSQL 17/alpine을 사용한다. digest로 고정하지 않았으므로 검증할 때 실제 이미지 ID·digest와 Docker engine·Compose 버전을 기록한다.
 
-`.env.full`이 없으면 `.env.full.example`을 복사한다. 기존 파일이 있으면 보존한다.
+로컬 개발과 전체 앱은 루트 `.env` 하나를 함께 쓴다. `.env`가 없으면 `.env.example`을 복사한다. 기존 파일이 있으면 보존한다. 예전 `.env.full`만 있으면 `make`가 `.env`로 이름을 바꾸고, 두 파일이 모두 있으면 값을 `.env`로 옮기라고 안내하고 멈춘다.
 
 ~~~sh
-cp -n .env.full.example .env.full
-chmod 600 .env.full
+cp -n .env.example .env
+chmod 600 .env
 ~~~
 
-`.env.full`의 `JWT_SECRET`에는 `openssl rand -hex 32` 등으로 생성한 32자 이상의 개인 값을 설정한다. 빈 값이면 Compose가 기동 전에 오류를 반환한다. 값을 교체하면 기존 access token 검증에 영향을 주므로 매번 새로 생성하지 않는다.
+`.env`의 `JWT_SECRET`에는 `openssl rand -hex 32` 등으로 생성한 32자 이상의 개인 값을 설정한다. 빈 값이면 Compose가 기동 전에 오류를 반환한다. 값을 교체하면 기존 access token 검증에 영향을 주므로 매번 새로 생성하지 않는다.
 
 `TWO_FACTOR_KEY`는 선택 사항이다. 빈 값이면 컨테이너 시작 스크립트가 미설정으로 처리하고, 서버의 2FA 기능만 비활성화한다. 설정할 때는 32자 이상이어야 하며 기존 키를 바꾸면 저장된 2FA 설정을 복호화할 수 없다. `FT_OAUTH_CLIENT_ID`, `FT_OAUTH_CLIENT_SECRET`, `FT_OAUTH_REDIRECT_URI`는 세 값을 모두 설정하거나 모두 비워 둔다. 이 설정도 호스트 파일·로그·검증 증거에서 비공개로 관리한다.
 
@@ -97,15 +97,15 @@ LAN 접속에서는 다른 컴퓨터가 실제로 사용하는 IP·DNS 이름이
 
 ## 단일 명령 기동
 
-저장소 루트에서 `make` 하나로 준비와 기동을 함께 실행한다(#130). `make`는 다른 컴퓨터도 접속할 수 있게 이 컴퓨터의 IP로 열고, `make HOST=<IP>`는 주소를 직접 정하며, `make local`은 `https://localhost`에서만 연다. 세 target 모두 먼저 `infra/prepare-full.sh`로 없는 것만 만든다. `.env.full`이 없으면 `.env.full.example`을 복사하고, 비어 있는 `JWT_SECRET`·`TWO_FACTOR_KEY`를 `openssl rand -hex 32`로 채운다. DB 비밀번호 파일이 없으면 만들고, `server.crt`·`server.key`가 둘 다 없으면 `infra/generate-local-cert.sh`를 실행한다. 이미 있는 값·파일은 바꾸지 않는다. 비밀번호 파일은 API·migration 컨테이너가 non-root `node` 사용자로 읽으므로, 스크립트가 그룹·다른 사용자 모두 들어갈 수 없는 디렉터리에 새로 만든 경우에만 `0444`로 둔다. 기존 파일은 권한을 바꾸지 않고, 그 밖의 디렉터리(권한을 확인할 수 없는 경우 포함)의 새 파일은 `0600`으로 두며, 두 경우 모두 안내를 출력한다. 키를 바꾸면 발급된 토큰·저장된 2FA 설정·기존 DB 접속이 깨지기 때문이다. 인증서·개인키 중 하나만 있으면 멈춘다.
+저장소 루트에서 `make` 하나로 준비와 기동을 함께 실행한다(#130). `make`는 다른 컴퓨터도 접속할 수 있게 이 컴퓨터의 IP로 열고, `make HOST=<IP>`는 주소를 직접 정하며, `make local`은 `https://localhost`에서만 연다. 세 target 모두 먼저 `infra/prepare-full.sh`로 없는 것만 만든다. `.env`가 없으면 `.env.example`을 복사하고, 비어 있는 `JWT_SECRET`·`TWO_FACTOR_KEY`를 `openssl rand -hex 32`로 채운다. DB 비밀번호 파일이 없으면 만들고, `server.crt`·`server.key`가 둘 다 없으면 `infra/generate-local-cert.sh`를 실행한다. 이미 있는 값·파일은 바꾸지 않는다. 비밀번호 파일은 API·migration 컨테이너가 non-root `node` 사용자로 읽으므로, 스크립트가 그룹·다른 사용자 모두 들어갈 수 없는 디렉터리에 새로 만든 경우에만 `0444`로 둔다. 기존 파일은 권한을 바꾸지 않고, 그 밖의 디렉터리(권한을 확인할 수 없는 경우 포함)의 새 파일은 `0600`으로 두며, 두 경우 모두 안내를 출력한다. 키를 바꾸면 발급된 토큰·저장된 2FA 설정·기존 DB 접속이 깨지기 때문이다. 인증서·개인키 중 하나만 있으면 멈춘다.
 
-`infra/start-full.sh`가 준비 뒤 실행 값을 정해 compose에 넘긴다. `.env.full`은 바꾸지 않으므로 다음 실행은 다시 정한다.
+`infra/start-full.sh`가 준비 뒤 실행 값을 정해 compose에 넘긴다. `.env`는 바꾸지 않으므로 다음 실행은 다시 정한다.
 
 | target | 바인딩 | 인증서 | 접속 주소 | 42 redirect URI (`FT_OAUTH_CLIENT_ID`가 있을 때) |
 |---|---|---|---|---|
 | `make` | `0.0.0.0` | `infra/certs/lan`, SAN에 IP 포함. 주소가 바뀌면 다시 생성 | `https://<IP>:8443/` | `https://<IP>:8443/oauth/42/callback` |
 | `make HOST=<IP>` | `0.0.0.0` | 위와 같음 | `https://<IP>:8443/` | 위와 같음 |
-| `make local` | `127.0.0.1` | `infra/certs` (localhost) | `https://localhost:8443/` | `.env.full` 값, 비어 있으면 `https://localhost:8443/oauth/42/callback` |
+| `make local` | `127.0.0.1` | `infra/certs` (localhost) | `https://localhost:8443/` | `https://localhost:8443/oauth/42/callback`. `.env`의 `FT_OAUTH_REDIRECT_URI`는 로컬 개발용이라 쓰지 않음 |
 
 IP는 macOS에서 `ipconfig getifaddr en0`·`en1`, Linux에서 `hostname -I`의 첫 값으로 찾는다. 찾지 못하면 `make HOST=<IP>`를 쓰라고 안내하고 멈춘다. 두 컴퓨터로 시연할 때는 서버 컴퓨터를 포함한 모든 브라우저가 출력된 IP 주소를 쓴다. 42 redirect URI가 한 origin에만 맞기 때문이다. 다른 컴퓨터에서 먼저 `https://<IP>:8443/api/health`로 방화벽을 확인하고, 각 브라우저에서 자체 서명 인증서 경고를 한 번 수락한다.
 
@@ -132,7 +132,7 @@ make
 위 "실행 전 준비"와 "인증서와 신뢰 설정"을 직접 마쳤다면 `make`는 그 값을 그대로 쓴다. `make` 없이 실행할 때는 사전 준비를 마친 뒤 다음 명령을 쓴다.
 
 ~~~sh
-docker compose --env-file .env.full --project-directory . \
+docker compose --env-file .env --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait
 ~~~
 
@@ -176,9 +176,9 @@ workspace 이미지는 커밋된 루트 잠금 파일을 기준으로 `npm ci`�
 이전에 수동 생성해 권한이 다른 volume을 연결했다면 기존 파일을 지우지 말고 디렉터리 권한을 확인한다. 같은 프로젝트·환경 파일을 선택해 API를 중지한 뒤 다음과 같이 디렉터리 소유권만 바로잡을 수 있다.
 
 ~~~sh
-docker compose --env-file .env.full --project-directory . \
+docker compose --env-file .env --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml stop api
-docker compose --env-file .env.full --project-directory . \
+docker compose --env-file .env --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml run --rm --no-deps \
   --user root --entrypoint sh api -c 'chown node:node /data/avatars'
 ~~~
@@ -193,22 +193,22 @@ docker compose --env-file .env.full --project-directory . \
 
 | 설정 | 입력 위치·동작 |
 |---|---|
-| `POSTGRES_USER` / `POSTGRES_DB` | 필수. 셸 환경 변수가 Compose `--env-file`의 값보다 우선함 |
+| `POSTGRES_USER` / `POSTGRES_DB` | `cafe` / `cafe_full`로 고정. `.env`의 같은 이름 값은 로컬 개발 DB용이라 쓰지 않음 |
 | `POSTGRES_PASSWORD_FILE` | Compose secret에 사용할 호스트 파일 경로. 컨테이너에는 `/run/secrets/postgres_password`로 전달 |
 | `CERT_DIR` | Nginx에 읽기 전용으로 연결할 호스트 디렉터리 |
 | `BIND_ADDRESS` / `HTTP_PORT` / `HTTPS_PORT` | Compose 변수 치환에 사용. 기본값은 `127.0.0.1` / `8080` / `8443` |
 | 전체 앱 API의 `API_HOST` / `PORT` | 서비스 설정에서 `0.0.0.0` / `3001`로 명시 |
 | 전체 앱 API·migration의 `DATABASE_URL` | 비밀번호 파일과 DB 초기 설정으로 생성. 주소는 항상 `db:5432` |
-| 전체 앱 API의 `JWT_SECRET` | 필수. `.env.full`·셸에서 Compose의 api 환경으로 전달. 32자 이상 |
+| 전체 앱 API의 `JWT_SECRET` | 필수. `.env`·셸에서 Compose의 api 환경으로 전달. 32자 이상 |
 | `TWO_FACTOR_KEY` / `FT_OAUTH_*` | 선택. 2FA 키의 빈 값은 컨테이너에서 미설정으로 정규화. OAuth 세 값은 모두 설정하거나 모두 비움 |
-| 전체 앱 API의 `TRUST_PROXY` | 기본 `uniquelocal`. Nginx가 클라이언트의 `X-Forwarded-For`를 버리고 직접 연결된 주소로 덮어쓴 뒤 전달 |
+| 전체 앱 API의 `TRUST_PROXY` | `uniquelocal`로 고정. `.env` 값은 로컬 개발용. Nginx가 클라이언트의 `X-Forwarded-For`를 버리고 직접 연결된 주소로 덮어쓴 뒤 전달 |
 | 전체 앱 API의 `AVATAR_DIR` | `/data/avatars`로 고정. `avatars` volume의 target과 함께 관리 |
 | 로컬 개발의 `API_HOST` | 선택 사항. 기본값은 `127.0.0.1` |
 | 로컬 개발·preview의 `PORT` | 기존 루트 `.env`·프로세스 환경과 Vite 프록시 동작을 유지 |
 
 문서의 기동·종료 명령은 `-p cyber-board-cafe-full`을 명시한다. 셸에서 상속된 `COMPOSE_PROJECT_NAME` 때문에 개발용 프로젝트가 선택되는 일을 방지하기 위해서다. 검증 명령에서는 별도 폐기 가능한 프로젝트를 명시적으로 선택한다.
 
-Compose의 `--env-file`은 설정값을 치환하는 입력이다. 모든 변수를 모든 컨테이너에 자동으로 전달하는 기능이 아니다. 각 서비스의 `environment` 설정에서 전달할 값을 명시한다. 전체 앱 Compose 명령은 개발용 루트 `.env`를 읽지 않으며, 해당 파일은 이미지에서도 제외한다. `.env.full`을 셸 스크립트처럼 `source`하지 않는다.
+Compose의 `--env-file`은 설정값을 치환하는 입력이다. 모든 변수를 모든 컨테이너에 자동으로 전달하는 기능이 아니다. 각 서비스의 `environment` 설정에서 전달할 값을 명시한다. 전체 앱 Compose 명령도 루트 `.env`를 읽지만 위 표에서 고정한 값은 쓰지 않으며, `.env`는 이미지에서 제외한다. `.env`를 셸 스크립트처럼 `source`하지 않는다.
 
 내부 `DATABASE_URL`을 생성하기 전에 사용자명·비밀번호·DB 이름을 URI 인코딩한다. 브라우저는 같은 origin의 `/api` 경로로 요청한다. 내부 서비스 이름인 `api`·`db`를 브라우저에서 조회하려고 하면 안 된다. 컨테이너 내부에서 `0.0.0.0`에 listen하는 것 자체가 호스트 포트를 공개하는 것은 아니다.
 
@@ -223,10 +223,10 @@ DB 준비 상태는 `pg_isready`로 확인한다. migration은 기존 설정과 
 migration·DB 실패 시 새 API가 정상 준비 상태가 되지 않아야 한다. `up --wait`가 0이 아닌 종료 코드를 반환하면 성공으로 취급하지 않는다. health 의존 조건은 기동 시점에 적용된다. 실행 중 DB 장애는 준비 상태를 비정상으로 표시하지만, 자동으로 전체 복구를 조율하거나 다른 모든 컨테이너를 멈추지는 않는다.
 
 ~~~sh
-docker compose --env-file .env.full --project-directory . \
+docker compose --env-file .env --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml ps -a
 
-docker compose --env-file .env.full --project-directory . \
+docker compose --env-file .env --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml logs --tail=100 db migrate api web
 ~~~
 
@@ -235,7 +235,7 @@ docker compose --env-file .env.full --project-directory . \
 정상 종료 명령은 다음과 같다.
 
 ~~~sh
-docker compose --env-file .env.full --project-directory . \
+docker compose --env-file .env --project-directory . \
   -p cyber-board-cafe-full -f infra/compose.full.yaml stop
 ~~~
 
@@ -259,7 +259,7 @@ export HTTPS_PORT=18443
 export BIND_ADDRESS=127.0.0.1
 VERIFY_PROJECT="cafe-env-check-$(date +%s)"
 dc() {
-  docker compose --env-file .env.full --project-directory . \
+  docker compose --env-file .env --project-directory . \
     -p "$VERIFY_PROJECT" -f infra/compose.full.yaml "$@"
 }
 dc config --quiet
@@ -307,7 +307,7 @@ migration 실패는 별도의 빈 프로젝트에서 충돌하는 view를 만들
 ~~~sh
 FAILURE_PROJECT="$VERIFY_PROJECT-migration-failure"
 failure_dc() {
-  docker compose --env-file .env.full --project-directory . \
+  docker compose --env-file .env --project-directory . \
     -p "$FAILURE_PROJECT" -f infra/compose.full.yaml "$@"
 }
 failure_dc up -d --wait db

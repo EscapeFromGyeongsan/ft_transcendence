@@ -6,8 +6,8 @@ x-server-build: &server-build
   target: server
 
 x-database-environment: &database-environment
-  POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.full}
-  POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.full}
+  POSTGRES_USER: cafe
+  POSTGRES_DB: cafe_full
   POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
 
 services:
@@ -53,12 +53,12 @@ services:
       <<: *database-environment
       API_HOST: 0.0.0.0
       PORT: "3001"
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.full (32+ characters)}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (32+ characters)}
       TWO_FACTOR_KEY: ${TWO_FACTOR_KEY:-}
       FT_OAUTH_CLIENT_ID: ${FT_OAUTH_CLIENT_ID:-}
       FT_OAUTH_CLIENT_SECRET: ${FT_OAUTH_CLIENT_SECRET:-}
       FT_OAUTH_REDIRECT_URI: ${FT_OAUTH_REDIRECT_URI:-}
-      TRUST_PROXY: ${TRUST_PROXY:-uniquelocal}
+      TRUST_PROXY: uniquelocal
       AVATAR_DIR: /data/avatars
     secrets:
       - postgres_password
@@ -96,7 +96,7 @@ services:
       - "${BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
     volumes:
       - type: bind
-        source: ${CERT_DIR:?Set CERT_DIR in .env.full}
+        source: ${CERT_DIR:?Set CERT_DIR in .env}
         target: /etc/nginx/tls
         read_only: true
         bind:
@@ -117,7 +117,7 @@ services:
 
 secrets:
   postgres_password:
-    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE in .env.full}
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE in .env}
 
 volumes:
   postgres_data:

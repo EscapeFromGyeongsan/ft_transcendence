@@ -4,12 +4,12 @@
 #                             computer's IP), as `make` / `make HOST=<IP>`
 #   start-full.sh local       keep it on https://localhost, as `make local`
 # The binding, certificate directory and 42 redirect URI are passed to Compose
-# for this run only; .env.full is not changed, so the next run picks again.
+# for this run only; .env is not changed, so the next run picks again.
 set -eu
 
 mode="${1:-lan}"
 host="${2:-}"
-env_file=.env.full
+env_file=.env
 
 sh infra/prepare-full.sh
 
@@ -104,12 +104,11 @@ esac
 export BIND_ADDRESS
 
 # 42 accepts only a registered redirect URI, so it must match the address the
-# browsers use. The API needs all three OAuth values or none.
+# browsers use. The API needs all three OAuth values or none. The value in
+# .env belongs to local development, so it is replaced in both modes.
 if [ -n "$oauth_client" ]; then
-  if [ "$mode" = lan ] || [ -z "$(value_of FT_OAUTH_REDIRECT_URI)" ]; then
-    FT_OAUTH_REDIRECT_URI="https://$address:$https_port/oauth/42/callback"
-    export FT_OAUTH_REDIRECT_URI
-  fi
+  FT_OAUTH_REDIRECT_URI="https://$address:$https_port/oauth/42/callback"
+  export FT_OAUTH_REDIRECT_URI
 fi
 
 compose up --build -d --wait
@@ -121,5 +120,5 @@ if [ "$mode" = lan ]; then
 fi
 if [ -n "$oauth_client" ]; then
   echo "42 OAuth redirect URI (register it in the 42 intra application):"
-  echo "  ${FT_OAUTH_REDIRECT_URI:-$(value_of FT_OAUTH_REDIRECT_URI)}"
+  echo "  $FT_OAUTH_REDIRECT_URI"
 fi

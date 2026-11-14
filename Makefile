@@ -2,7 +2,7 @@
 # `make` prepares missing secrets and certificates, then starts it on this
 # computer's IP so another computer can join (HOST=<IP> picks the address).
 # `make local` starts it on https://localhost only.
-COMPOSE = docker compose --env-file .env.full --project-directory . \
+COMPOSE = docker compose --env-file .env --project-directory . \
 	-p cyber-board-cafe-full -f infra/compose.full.yaml
 
 .PHONY: all up local prepare down logs ps

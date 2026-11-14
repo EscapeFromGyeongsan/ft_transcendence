@@ -11,8 +11,7 @@ data/
 .DS_Store
 CLAUDE.md
 
-# Full-app examples are public; generated material is local only.
-!.env.full.example
+# Generated certificates and secrets are local only.
 infra/certs/
 infra/secrets/
 *.key
