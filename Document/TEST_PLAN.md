@@ -148,3 +148,22 @@ T03의 준비 단계 없는 시작은 현재 구현 검증이다. 기준 SRS의 
 ### 2026-11-13 후속: T08 통계 경계·AT-09 혼합 경기
 
 제품 `0c1892b`에서 새 실제 계정의 10경기6승4패·첫 승·4/10→10/10, 11경기 진행도 상한과 cursor 전적, 승률/ID 동률 정렬을 확인했다. 통계 21경기의 참가자 결과 42건·상대·종료 시간은 실제 DB와 일치했다. Chrome 새로고침 뒤 업적·집계 유지와 오목/오델로 동시 경기의 메시지·명령 격리도 확인했다. 두 배치 모두 실패·skip·retry 0이다. [후속 검증](acceptance-88-stats-validation.md)·[JSON 증거](acceptance-88-stats-evidence.json)를 참고한다. 무승부·재시작 무효와 최종 통합 SHA 인수는 남아 있다.
+
+## 7. #161 최종 인수 실행 (2026-11-14, master)
+
+결과: **desktop·tablet 전체 통과**. 제출 기준 코드는 master `2c4b7d4`(#147 `54fa651` + #171 포커스 수정)이며, 실행 빌드 `3f47f35`와 코드가 같다. 이후 master의 #168은 문서만 바꿨다.
+
+- 환경: macOS, Docker `make local`(새 DB·볼륨, migration 10개 적용), HTTPS `https://localhost:8443`, Google Chrome 157.0.8103.51.
+- 명령: `config/playwright.acceptance.config.ts`(실제 Chrome, 인증서 SPKI pin), `NODE_EXTRA_CA_CERTS=infra/certs/server.crt`, 통합 테스트는 `E2E_ACCOUNT_DELETION_INTEGRATION=1`, `E2E_FRIENDS_INTEGRATION=1`.
+- 1440×900(desktop): 18개 spec 파일 69개 통과, 실패 0.
+- 768×1024(tablet): 59개 통과, 10개는 한 프로젝트에서만 실행하는 실제 대기열 테스트라 설계상 건너뜀, 실패 0.
+- 브라우저 콘솔: `acceptance-88.spec.ts`의 콘솔 warning/error·pageerror·실패 요청 0 검사가 두 뷰포트에서 통과했다.
+- 키보드: 계정 메뉴·로그아웃 확인창 Escape 포커스 복원 포함(`acceptance-88.spec.ts`, `legal.spec.ts`).
+
+실행 중 발견·처리:
+
+- #170 로그아웃 확인창을 Escape·취소로 닫으면 포커스가 사라지는 결함을 재현하고 #171로 수정했다. `acceptance-88.spec.ts`의 계정 메뉴 단계는 #136 이후 동작에 맞췄다.
+- 인증 API rate limit(IP당 1분 10회, `auth-routes.ts:84`)은 그대로 두었다. 전체를 한 번에 실행하면 가입 429로 실패하므로 spec 파일·뷰포트마다 API를 재시작했고, 한 파일에서 10명 넘게 가입하는 `realtime-acceptance-88.spec.ts`는 테스트마다, `account-deletion.spec.ts:466`은 단독으로 다시 실행해 통과했다.
+- 360×800(mobile)은 이번 인수 대상에서 제외했다. 참고 실행에서 `account-deletion.spec.ts:241`(탈퇴 응답 대기 중 뒤로가기) 1건이 실패했고 재실행하지 않았다.
+
+남은 항목: 다른 PC 2대 원격 대전(#163).
