@@ -201,16 +201,13 @@ Choose local development below or the [full application HTTPS workflow](Document
 
 ### Local development
 
-Run commands from the repository root. Install Node.js/npm and start Docker Desktop or a compatible Docker engine. Local development and `make` share one `.env`. Create it with `make prepare`, which copies `.env.example` and fills the empty `JWT_SECRET` and `TWO_FACTOR_KEY`; an existing `.env` is kept. Without `make`, copy `.env.example` to `.env` **only if `.env` does not already exist** (`cp .env.example .env`, or `Copy-Item .env.example .env` in PowerShell) and set `JWT_SECRET` and `TWO_FACTOR_KEY` to separate random values of at least 32 characters, e.g. `openssl rand -hex 32`. Use `npm.cmd`/`npx.cmd` if PowerShell blocks the `.ps1` launchers.
+Run commands from the repository root. Only Docker (Docker Desktop or a compatible engine with Compose v2), `make` and OpenSSL are needed: the targets below run npm inside a Node.js 24 container (`node` service of `infra/compose.yaml`, image `mcr.microsoft.com/playwright`, through `infra/dev.sh`), so the host's Node.js version does not matter. Dependencies are installed with `npm ci` into a Docker volume on first use and again whenever `package-lock.json` changes.
 
-Check the PostgreSQL credentials and the matching `DATABASE_URL` in the local development section of `.env`.
+Local development and `make` share one `.env`. The targets create it when missing, like `make prepare`: `.env.example` is copied and the empty `JWT_SECRET` and `TWO_FACTOR_KEY` are filled; an existing `.env` is kept. Check the PostgreSQL credentials in its local development section.
 
 ```sh
-npm ci
-npm run db:up
-npm run db:migrate
-npm run db:check
-npm run dev
+make dev           # migrate, then the API and Vite; Ctrl+C stops them
+make dev-down      # stop the development containers; the DB and dependencies are kept
 ```
 
 | Service | Local URL |
@@ -221,17 +218,20 @@ npm run dev
 | Liveness | http://127.0.0.1:3001/api/health |
 | Database readiness | http://127.0.0.1:3001/api/health/db |
 
-The API checks the database before listening and marks unfinished matches void on startup. Development servers default to `127.0.0.1`; `API_HOST` overrides the API address. Vite proxies `/api` HTTP and WS traffic; Swagger UI is available on the API port. Restart `npm run dev` after server changes.
+The API checks the database before listening and marks unfinished matches void on startup. The ports are published on `127.0.0.1` only (`PORT` changes the API port, `DEV_WEB_PORT` the web port). Vite proxies `/api` HTTP and WS traffic; Swagger UI is available on the API port. Restart `make dev` after server changes.
 
-`infra/compose.yaml` starts **only PostgreSQL**, bound to `127.0.0.1:5432` by default. A named volume preserves data; `npm run db:stop` stops the database without deleting it. Initialization credentials apply to a new volume; editing `.env` does not change existing database credentials. Full application containers use the separate `infra/compose.full.yaml` workflow below; the database-only development workflow does not enable HTTPS.
+`infra/compose.yaml` starts the development PostgreSQL, bound to `127.0.0.1:5432` by default, and the `node` container reaches it as `db` (the container overrides `DATABASE_URL` and `TEST_DATABASE_URL`). A named volume preserves data. Initialization credentials apply to a new volume; editing `.env` does not change existing database credentials. This database is separate from the full application below, and the development workflow does not enable HTTPS.
 
-Sign up through the web page, then sign in and open your profile or leaderboard. The APIs can also be explored through Swagger UI. To prepare test accounts through the real API, set a private `QA_PASSWORD` and run `npm run qa:accounts` while the API is running. It creates `qa-p1`–`qa-p4` and `qa-outsider` with `@qa.example.com` addresses; it does not reset existing passwords.
+Sign up through the web page, then sign in and open your profile or leaderboard. The APIs can also be explored through Swagger UI. To prepare test accounts through the real API, set a private `QA_PASSWORD` and run `make qa-accounts` while `make dev` is running. It creates `qa-p1`–`qa-p4` and `qa-outsider` with `@qa.example.com` addresses; it does not reset existing passwords.
 
 ```sh
-npm run build       # Type-check and build apps/web/dist
-npm run dev:server  # API only
-npm run preview     # Production web build; run the API separately
+make build                       # type-check and build apps/web/dist
+make db-migrate                  # apply migrations to the development DB
+make db-generate NAME=<change>   # create a migration from schema changes
+make dev-shell                   # shell in the container for any other npm/npx command
 ```
+
+With Node.js 22.12 or later on the host, the same npm scripts also work directly (`npm ci`, `npm run db:up`, `npm run db:migrate`, `npm run dev`); they use the `127.0.0.1` URLs in `.env`.
 
 ### Full application containers
 
@@ -288,20 +288,22 @@ The API, Vite configuration, migration configuration and DB check load the root 
 | `QA_PASSWORD`, `QA_API_URL` | Test-account password (8+ characters) and optional API URL for `qa:accounts` |
 | `E2E_PORT` | Local Playwright web-server port, default `5173` |
 
-After schema changes, run `npm run db:generate -- --name=<change>`, review the SQL and run `npm run db:migrate`. Do not rewrite shared/applied migrations.
+After schema changes, run `make db-generate NAME=<change>`, review the SQL and run `make db-migrate`. Do not rewrite shared/applied migrations.
 
 ## Testing
 
 ```sh
-npm test
-npm run test:watch
-npx playwright install chromium
-npm run test:e2e
+make test                              # engine, server and web unit + DB integration tests
+make test ARGS=apps/server             # only files under a path
+make e2e                               # Playwright browser tests (Chromium in the container)
+make e2e ARGS=tests/gomoku.spec.ts     # one browser test file
 ```
 
-`npm test` runs the engine, server and web unit tests (`config/vitest.config.ts`). DB tests skip when `TEST_DATABASE_URL` is absent: green results with skips do not demonstrate database integration. When configured, the helper checks the **connected** database name ends in `_test`, applies migrations and truncates domain tables between tests. Create this disposable database separately (for example, `CREATE DATABASE cafe_test;` through a PostgreSQL administrator connection). Never use the development/shared database. Keeping the example URL configured without creating the test database causes failures.
+`make test` runs `npm test` (`config/vitest.config.ts`) in the container. It creates the disposable `cafe_test` database in the development PostgreSQL when missing and points `TEST_DATABASE_URL` at it, so the DB integration tests run instead of skipping. The helper checks the **connected** database name ends in `_test`, applies migrations and truncates domain tables between tests. Never point `TEST_DATABASE_URL` at the development/shared database.
 
-`npm run test:e2e` starts the API and Vite unless an existing server is reused. Prepare the development DB using `db:up` and `db:migrate`. `config/playwright.config.ts` runs the browser tests in `tests/` and ignores `*acceptance-88.spec.ts`; those use `config/playwright.acceptance.config.ts` with an HTTPS `E2E_BASE_URL` and `E2E_TLS_SPKI`.
+`make e2e` applies the development migrations and runs `npm run test:e2e`, which starts its own API and Vite inside the container; it does not need `make dev`. `config/playwright.config.ts` runs the browser tests in `tests/` and ignores `*acceptance-88.spec.ts`; those use `config/playwright.acceptance.config.ts` with an HTTPS `E2E_BASE_URL` and `E2E_TLS_SPKI`.
+
+With Node.js 22.12 or later on the host, `npm test` and `npm run test:e2e` (after `npx playwright install chromium`) also work; DB tests then skip unless `TEST_DATABASE_URL` points at an existing `_test` database, and green results with skips do not demonstrate database integration.
 
 The two-session Gomoku and Othello scenarios are `tests/gomoku.spec.ts` and `tests/othello.spec.ts`; set `E2E_BASE_URL` to run against a deployed target instead of the local dev server. Legal-page and profile/records-privacy browser E2E are `tests/legal.spec.ts` and `tests/profile.spec.ts`. `tests/friends-integration.spec.ts` and `tests/account-deletion.spec.ts` skip unless `E2E_FRIENDS_INTEGRATION` or `E2E_ACCOUNT_DELETION_INTEGRATION=1` is set with a dedicated DB. `tests/friends-ui.spec.ts` (#90) replaces REST/auth/WS responses and therefore does not demonstrate real friend CRUD or presence integration. The `tests/auth.spec.ts` (#55) suite also verifies refresh-only storage and multi-tab restoration against the real API/DB. The `tests/legal-routing-regression.spec.ts` (#71) legal/history suite replaces HTTP/WS responses, including its different-match Back/Forward regression, so it does not prove actual game-server integration. Record commands, commit, environment, skips and results using the [test plan](Document/TEST_PLAN.md).
 
