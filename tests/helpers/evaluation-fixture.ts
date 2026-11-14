@@ -127,7 +127,10 @@ export async function installEvaluationFixture(
         send(socket, "queue.left", {}, message.requestId);
     });
   });
-  await page.route("**/api/**", async (route) => {
+  // Match the path prefix only: under the Vite dev server, "**/api/**" would
+  // also catch source modules such as /src/api/auth-client.ts.
+  const isApiRequest = (url: URL) => url.pathname.startsWith("/api/");
+  await page.route(isApiRequest, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
