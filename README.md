@@ -203,15 +203,9 @@ Choose local development below or the [full application HTTPS workflow](Document
 
 ### Local development
 
-Run commands from the repository root. Install Node.js/npm and start Docker Desktop or a compatible Docker engine. Copy `.env.example` to `.env` **only if `.env` does not already exist**:
+Run commands from the repository root. Install Node.js/npm and start Docker Desktop or a compatible Docker engine. Local development and `make` share one `.env`. Create it with `make prepare`, which copies `.env.example` and fills the empty `JWT_SECRET` and `TWO_FACTOR_KEY`; an existing `.env` is kept. Without `make`, copy `.env.example` to `.env` **only if `.env` does not already exist** (`cp .env.example .env`, or `Copy-Item .env.example .env` in PowerShell) and set `JWT_SECRET` and `TWO_FACTOR_KEY` to separate random values of at least 32 characters, e.g. `openssl rand -hex 32`. Use `npm.cmd`/`npx.cmd` if PowerShell blocks the `.ps1` launchers.
 
-```sh
-cp .env.example .env
-```
-
-In PowerShell use `Copy-Item .env.example .env`; use `npm.cmd`/`npx.cmd` if PowerShell blocks the `.ps1` launchers. Preserve existing credentials.
-
-Set PostgreSQL credentials and the matching `DATABASE_URL`. Replace `JWT_SECRET` with a random value of at least 32 characters. Set a separate random `TWO_FACTOR_KEY` of at least 32 characters to enable 2FA. For example, generate each value separately using `openssl rand -base64 48`.
+Check the PostgreSQL credentials and the matching `DATABASE_URL` in the local development section of `.env`.
 
 ```sh
 npm ci
@@ -251,14 +245,14 @@ make HOST=10.12.3.4  # same, with the address given explicitly
 make local           # https://localhost:8443/ on this computer only
 ```
 
-Each target runs `infra/prepare-full.sh`, which creates only what is missing: `.env.full` from `.env.full.example` with random `JWT_SECRET` and `TWO_FACTOR_KEY`, the PostgreSQL password file `infra/secrets/postgres-password`, and a self-signed localhost certificate in `infra/certs`. Existing values and files are never replaced. `infra/start-full.sh` then runs `docker compose --env-file .env.full --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`.
+Each target runs `infra/prepare-full.sh`, which creates only what is missing: `.env` from `.env.example` with random `JWT_SECRET` and `TWO_FACTOR_KEY`, the PostgreSQL password file `infra/secrets/postgres-password`, and a self-signed localhost certificate in `infra/certs`. Existing values and files are never replaced. `infra/start-full.sh` then runs `docker compose --env-file .env --project-directory . -p cyber-board-cafe-full -f infra/compose.full.yaml up --build -d --wait`.
 
 - `make` finds this computer's IPv4 address (`ipconfig getifaddr en0`/`en1` on macOS, the first `hostname -I` address on Linux), binds ports to `0.0.0.0`, and uses a certificate in `infra/certs/lan` whose SAN includes that address. The certificate is recreated when the address changes. If no address is found, it stops and asks for `make HOST=<IP>`.
 - `make local` binds ports to `127.0.0.1` and uses the localhost certificate in `infra/certs`.
-- The binding, certificate directory and 42 redirect URI are passed for that run only; `.env.full` is not changed.
+- The binding, certificate directory and 42 redirect URI are passed for that run only; `.env` is not changed.
 - With two computers, every browser (including the server computer's) uses the printed `https://<IP>:8443/` address. Check `https://<IP>:8443/api/health` from the other computer first, then accept the self-signed certificate warning once per browser.
 
-`make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID` and `FT_OAUTH_CLIENT_SECRET` are set in `.env.full`. `make` then uses `https://<IP>:8443/oauth/42/callback` as the redirect URI; `make local` uses `FT_OAUTH_REDIRECT_URI`, or `https://localhost:8443/oauth/42/callback` when it is empty. The URI in use is printed and must be registered in the 42 intra application. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
+`make down` stops the containers and keeps the database and avatar volumes; `make logs` and `make ps` show logs and status. 42 OAuth stays disabled until `FT_OAUTH_CLIENT_ID` and `FT_OAUTH_CLIENT_SECRET` are set in `.env`. `make` then uses `https://<IP>:8443/oauth/42/callback` and `make local` uses `https://localhost:8443/oauth/42/callback` as the redirect URI; `FT_OAUTH_REDIRECT_URI` in `.env` is only for local development. The URI in use is printed and must be registered in the 42 intra application. Compose mounts a separate `avatars` volume at `/data/avatars`, writable by the API's `node` user. Manual preparation and browser certificate trust are described in [the full execution guide](Document/runtime.md).
 
 The `db`, `api` and `web` containers restart after a crash or a Docker restart; `make down` stops them. Server errors (500, 503, lost database connection) appear in `make logs`.
 
@@ -284,13 +278,13 @@ The API, Vite configuration, migration configuration and DB check load the root 
 |---|---|
 | `API_HOST` | API listen address, default `127.0.0.1`; full-app Compose sets `0.0.0.0` |
 | `PORT` | API port, integer `1..65535`, default `3001`; Vite uses the same proxy target |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Local database initialization |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Local database initialization; the full app uses `cafe`/`cafe_full` and a password file |
 | `POSTGRES_PORT` | Host database port, default `5432` |
 | `DATABASE_URL` | API/migration PostgreSQL URL; percent-encode special characters in credentials |
 | `JWT_SECRET` | Required signing secret, at least 32 characters |
 | `TWO_FACTOR_KEY` | Separate encryption key, at least 32 characters; absent means 2FA returns 503; changing it invalidates encrypted setups |
 | `FT_OAUTH_CLIENT_ID`, `FT_OAUTH_CLIENT_SECRET`, `FT_OAUTH_REDIRECT_URI` | Set all three or leave all empty; redirect URI must match the 42 app and web `/oauth/42/callback` |
-| `TRUST_PROXY` | Trusted proxies for rate-limit client IP; local default `loopback` |
+| `TRUST_PROXY` | Trusted proxies for rate-limit client IP; local default `loopback`, the full app fixes `uniquelocal` |
 | `AVATAR_DIR` | Avatar directory, default `data/avatars`; relative paths start at repository root |
 | `TEST_DATABASE_URL` | Disposable integration-test database; actual database name must end in `_test` |
 | `QA_PASSWORD`, `QA_API_URL` | Test-account password (8+ characters) and optional API URL for `qa:accounts` |
